@@ -137,8 +137,10 @@ An identity resolves through `git rev-list -n 1 <tag>`, which yields the **commi
 
 This mistake has now been made twice independently: the Phase 0 inventory recorded tag-object SHAs
 throughout, and the lineage review found the same thing from the other direction. Two independent
-discoveries is enough to promote it from corrected evidence to an executable invariant, and
-`test/identity.test.mjs` now holds it:
+discoveries is enough to promote it from corrected evidence to an executable invariant.
+`test/identity-tags.test.mjs` holds it — one file, because two files locking one behaviour is how
+they come to disagree about it, and `test/identity-provenance.test.mjs` covers the surrounding
+refusals and the chain ordering instead:
 
 ```text
 configured SHA == commit obtained by dereferencing the configured tag

@@ -104,7 +104,7 @@ mathematics      v1.0.1  f21ea832907f0f5ae70f30076c06084eb3bf8237  contract pres
 
 Each of these three is `(repository, tag, commit SHA)` with the contract inside the tagged tree. The
 SHAs are the commits `git rev-list -n 1 <tag>` yields, not the annotated tag objects — see
-[the identity correction](2026-08-09-interface-inventory.md) and `test/identity.test.mjs`.
+[the identity correction](2026-08-09-interface-inventory.md) and `test/identity-tags.test.mjs`.
 
 ## Standing
 
