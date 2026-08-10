@@ -67,9 +67,9 @@ export function verifyTagResolvesTo(repo, tag, sha) {
         ok: false,
         resolved: resolved.out,
         why:
-          `the declared identity ${sha} is the annotated tag object for ${tag}, not the commit it points at. ` +
-          `${tag} points at ${resolved.out}; use that. The tag object records who tagged and when, and is not ` +
-          "the identity of the implementation being executed",
+          `tag ${tag} resolves to ${resolved.out}, and the declared identity ${sha} is that tag's annotated tag ` +
+          "object rather than the commit it points at. The tag object records who tagged and when; it is not the " +
+          `identity of the implementation being executed. Use ${resolved.out}`,
       };
     }
     return {
