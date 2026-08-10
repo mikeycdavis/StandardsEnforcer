@@ -39,7 +39,11 @@
           "type": "array",
           "minItems": 1,
           "items": { "type": "string" },
-          "contains": { "const": "{target}" }
+          "contains": {
+            "description": "At least one argument must carry the {target} placeholder, so a contract cannot declare an invocation that never says what to evaluate. Matched as a SUBSTRING, not as a whole argument: Betting passes the target positionally as `{target}` while MachineLearning, Mathematics and Innovation embed it as `--dir={target}`. This was written as `const` until 2026-08-10, which admitted only the positional form — a constraint that excluded three of the four released contracts and went unnoticed for as long as nothing executed the schema. See artifacts/evidence/2026-08-10-conformance-boundary-built.md.",
+            "type": "string",
+            "pattern": "\\{target\\}"
+          }
         }
       }
     },

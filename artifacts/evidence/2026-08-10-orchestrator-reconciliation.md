@@ -208,11 +208,11 @@ enforcer currently absorbs silently. Logged for M2 close.
 
 ### NOT YET EARNED — interesting, no evidence yet requires it
 
-**N1. Per-pack declared evidence gates.** The positive half of A2. Requires either a declarative
-expression of "meaningfully evaluated" — which the orchestrator argues cannot exist generically, and
-its argument is not obviously wrong — or per-pack code, which is R2. Revisit when a pack is observed
-returning a *passing* status on a run that evaluated nothing. Mathematics returns `NOT_EVALUATED`
-honestly, so the case is not yet in hand.
+**N1. Per-pack declared evidence gates.** ~~The positive half of A2.~~ **PROMOTED — see [The green
+from nothing](#the-green-from-nothing) below.** This was written as NOT YET EARNED, on the grounds
+that no pack had been observed returning a *passing* status on a run that evaluated nothing. The
+cross-checkout fidelity run produced that observation an hour later, and the classification did not
+survive contact with it.
 
 **N2. `capabilities` declared per adapter.** `machineReadableVerdict`, `coverage`,
 `separateEvidenceCommand`. Nothing in the enforcer's design needs to ask a pack what it can do; a pack
@@ -232,9 +232,70 @@ because it is good and would be expensive to re-derive.
 GitHub's protection configuration to detect a repository quietly leaving. Adjacent to this
 repository's M4 and beyond M2. Recorded, not adopted.
 
-## Closed
+## The green from nothing
 
-Every materially different proposition above is classified. The comparison is finished and
-StandardsOrchestrator is frozen. What it contributes to Phase 3 is two things: the strictness
-constraint in A1, which determines how the conformance boundary is built, and the read-nothing-but-
-status invariant in A2, which Phase 3 must assert rather than merely satisfy.
+**Phase 3 as designed would issue a false pass, and the case is in hand rather than hypothetical.**
+
+MachineLearningStandards `v1.4.1`, invoked through its own released contract against a target
+directory containing a README, a docs note, and policy files created by *BettingStandards'* `init`:
+
+```text
+"status": "COMPLIANT"                       ← and COMPLIANT is in its declared passing set
+"score": null
+"summary":     { "passed": 0, "failed": 0, "warnings": 0, "skipped": 46 }
+"denominator": { "total": 46, "applicable": 46, "scored": 0 }
+"assurance":   { "automated": 0, "manualReview": 0, "notEvaluated": 46 }
+exit 0
+```
+
+Forty-six rules applicable. Zero scored. Status `COMPLIANT`. Exit `0`.
+
+Phase 3's acceptance chain is *spawn completed → stdout parseable → declared status exists → status ∈
+`result.statuses`*, with passing decided by membership of `result.passing`. Every link holds here.
+The enforcer would report this repository as **passing MachineLearningStandards**, on a run that
+evaluated nothing at all.
+
+This is precisely the shape A2 was adopted against, and it is why N1 is promoted. Note that adoption
+A2 — read the status and nothing else — does not save us. A2 stops the enforcer being *misled* by
+`score: 97` sitting beside `NOT_EVALUATED`; it does nothing when the status itself is `COMPLIANT`.
+
+**Betting and Mathematics do not have this defect, and their contrast is the useful part.** Betting
+exits `2` on `NOT_EVALUATED` specifically so a directory it could not assess never reports success;
+Mathematics returns `NOT_EVALUATED`, which is outside its passing set. Both pack authors reasoned
+about this and closed it. MachineLearning reports `COMPLIANT` with `scored: 0` instead, and it is the
+only one of the three that does.
+
+That contrast matters because it locates the defect. Two remedies are available and they place
+authority in different repositories:
+
+```text
+(a) the pack is wrong        ML should return NOT_EVALUATED when scored == 0, as its two
+                             siblings already do. Costs a real ML release. Keeps the enforcer
+                             reading nothing but the status, which is ADR 0001 intact.
+
+(b) the enforcer needs a     the contract declares what counts as meaningful evaluation, and the
+    declared evidence gate   enforcer checks it. Costs a schemaVersion bump and therefore a
+                             release of every pack. Puts the enforcer in the business of
+                             second-guessing a pack's own verdict.
+```
+
+**(a) is the better answer and the enforcer cannot compel it.** Whether a run evaluated meaningfully
+is a judgement about that pack's own rules, which is the pack's to make — and two of three packs
+already make it correctly. But until ML ships that fix, an enforcer built to (a) issues false greens,
+and "the upstream pack should fix this" is not a property a gate can rely on.
+
+**This is not mine to decide, and Phase 3 does not proceed past it.** The standing instruction is to
+leave the settled Phase 3 architecture alone unless steps 2, 6 or 7 produce evidence that actually
+falsifies it. Step 6 has. The decision required is (a), (b), or (a)-with-(b)-as-interim.
+
+## Closed, with one item open
+
+Every materially different proposition above is classified, and the comparison with
+StandardsOrchestrator is finished — it stays frozen either way. What it contributes to Phase 3 is
+three things: the strictness constraint in **A1**, which determined how the conformance boundary was
+built; the read-nothing-but-status invariant in **A2**, which Phase 3 must assert rather than merely
+satisfy; and **N1**, which its Betting interpreter had already solved with `denominator.scored > 0`
+and which this repository must now answer in its own terms.
+
+The orchestrator was right about this a milestone before we were. That is the clearest argument
+available that freezing it and reconciling it was worth doing before Phase 3 rather than after.
