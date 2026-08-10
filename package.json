@@ -1,0 +1,17 @@
+{
+  "name": "standards-enforcer",
+  "version": "0.1.0",
+  "description": "Determine which independent standards releases govern a repository, pin them by immutable identity, run their official evaluators, and prevent a required standard from being silently absent or bypassed.",
+  "type": "module",
+  "bin": {
+    "standards-enforce": "scripts/enforce.mjs"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}
