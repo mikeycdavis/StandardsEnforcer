@@ -22,7 +22,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { enforce, runOfficialEvaluator } from "../scripts/enforce.mjs";
-import { STATE, PASSING, VERDICT_STATES, REACHABLE_IN_M1, exitFor, EXIT } from "../scripts/states.mjs";
+import { STATE, PASSING, VERDICT_STATES, REACHABLE, exitFor, EXIT } from "../scripts/states.mjs";
 import { verifyTagResolvesTo, resolveIdentity } from "../scripts/identity.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -81,9 +81,9 @@ test("verdict states carry the standards system's own exit codes, unaltered", ()
   assert.equal(exitFor(STATE.STANDARDS_IDENTITY_MISMATCH), 4);
 });
 
-test("the states M1 cannot reach are declared, not faked", () => {
-  const unreachable = Object.values(STATE).filter((s) => !REACHABLE_IN_M1.has(s));
-  assert.deepEqual(unreachable.sort(), ["GATE_MISSING", "SCOPE_REVIEW_REQUIRED"],
+test("the states the implementation cannot reach are declared, not faked", () => {
+  const unreachable = Object.values(STATE).filter((s) => !REACHABLE.has(s));
+  assert.deepEqual(unreachable.sort(), ["BYPASS_USED", "SCOPE_REVIEW_REQUIRED"],
     "the vocabulary is the contract; the implementation is not, and the gap is data rather than a comment");
 });
 

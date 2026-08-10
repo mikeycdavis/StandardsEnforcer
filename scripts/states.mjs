@@ -25,9 +25,13 @@ export const STATE = {
   BLOCKED_BY_INVARIANT: "BLOCKED_BY_INVARIANT",
 
   // States about enforcement, which no standards system produces.
+  // GATE_CONFIG_INVALID is distinct from GATE_MISSING on purpose: "nobody requires this" and
+  // "something requires it in a way a pull request can satisfy for itself" need different fixes.
   NOT_ADOPTED: "NOT_ADOPTED",
   SCOPE_REVIEW_REQUIRED: "SCOPE_REVIEW_REQUIRED",
   GATE_MISSING: "GATE_MISSING",
+  GATE_CONFIG_INVALID: "GATE_CONFIG_INVALID",
+  BYPASS_USED: "BYPASS_USED",
   STANDARDS_IDENTITY_MISMATCH: "STANDARDS_IDENTITY_MISMATCH",
   ENFORCEMENT_ERROR: "ENFORCEMENT_ERROR",
 };
@@ -76,6 +80,8 @@ export function exitFor(state) {
     case STATE.NOT_ADOPTED:
     case STATE.SCOPE_REVIEW_REQUIRED:
     case STATE.GATE_MISSING:
+    case STATE.GATE_CONFIG_INVALID:
+    case STATE.BYPASS_USED:
     case STATE.STANDARDS_IDENTITY_MISMATCH:
       return EXIT.NOT_ENFORCEABLE;
     default:
@@ -85,20 +91,28 @@ export function exitFor(state) {
 }
 
 /**
- * States M1 can actually reach.
+ * States the implementation can actually reach.
  *
  * The vocabulary is the contract and is complete; the implementation is not. Recording the gap as
  * data, with a test asserting it, is the difference between a declared limitation and a comment
- * nobody checks. `SCOPE_REVIEW_REQUIRED` needs a scope registry and applicability detection;
- * `GATE_MISSING` needs the GitHub adapter. Neither exists yet, and neither is faked.
+ * nobody checks.
+ *
+ * `SCOPE_REVIEW_REQUIRED` needs a scope registry and applicability detection, which is M3.
+ * `BYPASS_USED` needs a source for bypass events; GitHub exposes them through audit-log endpoints
+ * this enforcer cannot assume are available, so the semantic is settled in ADR 0003 — a bypass is
+ * an event and never a verdict — and the state is not produced until the data can be read.
+ *
+ * Neither is faked.
  */
-export const REACHABLE_IN_M1 = new Set([
+export const REACHABLE = new Set([
   STATE.COMPLIANT,
   STATE.COMPLIANT_WITH_EXCEPTIONS,
   STATE.NON_COMPLIANT,
   STATE.NOT_EVALUATED,
   STATE.BLOCKED_BY_INVARIANT,
   STATE.NOT_ADOPTED,
+  STATE.GATE_MISSING,
+  STATE.GATE_CONFIG_INVALID,
   STATE.STANDARDS_IDENTITY_MISMATCH,
   STATE.ENFORCEMENT_ERROR,
 ]);

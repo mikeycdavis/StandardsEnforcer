@@ -1,0 +1,113 @@
+# The trusted enforcement workflow.
+#
+# THIS FILE IS NOT MEANT TO LIVE IN A GOVERNED REPOSITORY. Host it in a repository the governed
+# projects cannot write to, and have the organisation ruleset require the check it produces. A
+# governed project then references it — pinned to a commit SHA, never a branch or a tag:
+#
+#   jobs:
+#     standards:
+#       uses: acme/standards-ci/.github/workflows/standards-gate.yml@<40-hex-sha>
+#
+# Three properties make this a root of trust rather than a convenience, and all three are checked
+# by StandardsEnforcer rather than assumed:
+#
+#   the ORGANISATION requires the check, so a pull request cannot remove the requirement;
+#   the requirement is BOUND TO AN APP, so a pull request cannot satisfy it with its own workflow
+#     emitting a check of the same name;
+#   this workflow is PINNED, so whoever can push to its default branch cannot silently change what
+#     every governed repository runs.
+#
+# A governed repository can delete its own copy of this call. The requirement remains, the check
+# never reports, and the merge stays blocked — which is the intended behaviour and is asserted in
+# test/gate.test.mjs.
+
+name: Standards gate
+
+on:
+  workflow_call:
+    inputs:
+      standards-repo:
+        description: The standards repository, as owner/name.
+        required: true
+        type: string
+      standards-tag:
+        description: The release tag being enforced.
+        required: true
+        type: string
+      standards-sha:
+        description: The 40-character commit that tag must resolve to.
+        required: true
+        type: string
+      enforcer-sha:
+        description: The StandardsEnforcer commit to run. Pinned for the same reason as everything else.
+        required: true
+        type: string
+      gate-check:
+        description: The check context the organisation ruleset requires.
+        required: true
+        type: string
+      require-organisation-root:
+        description: Refuse a repository-level rule as the enforcement root.
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  # Reading the ruleset that requires this check. The enforcer verifies its own gate, which is the
+  # only way a removed requirement becomes visible from inside the run it was supposed to require.
+  administration: read
+
+jobs:
+  enforce:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the governed repository
+        uses: actions/checkout@v4
+        with:
+          path: target
+
+      - name: Check out the standards release
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.standards-repo }}
+          ref: ${{ inputs.standards-sha }}
+          path: standards
+          fetch-depth: 0
+
+      - name: Check out StandardsEnforcer at a pinned commit
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/StandardsEnforcer
+          ref: ${{ inputs.enforcer-sha }}
+          path: enforcer
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # No install step, for either repository. An install is a second thing that can differ
+      # between the machine that reviewed a release and the machine that enforces it.
+      - name: Enforce
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node enforcer/scripts/enforce.mjs \
+            --target=target \
+            --standards=standards \
+            --tag='${{ inputs.standards-tag }}' \
+            --sha='${{ inputs.standards-sha }}' \
+            --platform=github \
+            --gate-repo='${{ github.repository }}' \
+            --gate-branch='${{ github.event.repository.default_branch }}' \
+            --gate-check='${{ inputs.gate-check }}' \
+            --trusted-workflow='${{ github.workflow_ref }}' \
+            ${{ inputs.require-organisation-root && '--require-organisation-root' || '' }}
+
+      # Exit codes, and why none of them may be waved through:
+      #   0  the standards accepted it, and the enforcement root verified
+      #   1  the standards rejected it
+      #   2  no verdict could be reached
+      #   3  BLOCKED_BY_INVARIANT — the standards system called itself untrustworthy here
+      #   4  enforcement could not be established: not adopted, gate missing or misconfigured,
+      #      or the declared standards release did not resolve to the declared commit

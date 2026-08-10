@@ -2,11 +2,15 @@
 /**
  * StandardsEnforcer — run the official standards implementation and report what it said.
  *
- * THE M1 CLAIM, and nothing wider:
+ * THE CLAIM, and nothing wider:
  *
- *     Given a repository and an immutable (standards repository, release tag, commit SHA) identity,
- *     StandardsEnforcer executes the official standards implementation and reports its result
- *     without independently recreating or reinterpreting the standards.
+ *   M1  Given a repository and an immutable (standards repository, release tag, commit SHA)
+ *       identity, StandardsEnforcer executes the official standards implementation and reports its
+ *       result without independently recreating or reinterpreting the standards.
+ *
+ *   M2  For a repository already adopted, it determines whether enforcement of that release is
+ *       rooted outside changes the governed pull request controls, and produces no verdict where it
+ *       is not.
  *
  * The second half is the constraint that shapes every line below. This program contains no rule, no
  * detector, no applicability logic and no scoring. It verifies an identity, decides whether the
@@ -30,11 +34,15 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { resolveIdentity } from "./identity.mjs";
+import { assessGate } from "./gate.mjs";
+import { githubPlatform } from "./platform/github.mjs";
 import { STATE, VERDICT_STATES, PASSING, exitFor } from "./states.mjs";
+
+const PLATFORMS = { github: githubPlatform };
 
 const HERE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_CACHE = path.join(tmpdir(), "standards-enforcer-cache");
-export const SCHEMA_VERSION = "0.1.0";
+export const SCHEMA_VERSION = "0.2.0";
 
 /** The file whose presence is adoption. Absence is not non-compliance; it is a different state. */
 const POLICY_FILE = "project-policy.yml";
@@ -86,6 +94,10 @@ function result(state, detail, extra = {}) {
     isStandardsVerdict: VERDICT_STATES.has(state),
     detail,
     ...extra,
+    // Authoritative only when the enforcement root verified. A passing verdict from an advisory run
+    // says the standards accepted the repository; it does not say the repository could not have
+    // avoided being asked.
+    authoritative: extra.gate?.rooted === true,
   };
 }
 
@@ -99,7 +111,13 @@ function result(state, detail, extra = {}) {
  * Identity comes first because running an unverified implementation and then discovering it was
  * the wrong one would mean a verdict already exists, and a verdict that exists gets quoted.
  */
-export async function enforce({ target, standardsRepo, tag, sha, cacheRoot = DEFAULT_CACHE }) {
+export async function enforce({
+  target, standardsRepo, tag, sha, cacheRoot = DEFAULT_CACHE,
+  // Enforcement root. When `gate` is supplied the run is authoritative only if the root verifies;
+  // without it the run is advisory and says so, because an enforcer that stayed silent about not
+  // having checked would let an advisory invocation be mistaken for a gate.
+  gate = null, platform = null,
+}) {
   if (!target || !existsSync(target)) {
     return result(STATE.ENFORCEMENT_ERROR, `the target ${target ?? "(none given)"} does not exist`);
   }
@@ -122,17 +140,39 @@ export async function enforce({ target, standardsRepo, tag, sha, cacheRoot = DEF
     fromCache: identity.cached ?? false,
   };
 
+  // The enforcement root, before the verdict.
+  //
+  // Order matters and this is the whole point of M2. A verdict produced by a run nobody required
+  // is a verdict the governed pull request could have avoided, and once a verdict exists it gets
+  // quoted. Establish that the check is required from outside the PR's reach, or report that it is
+  // not and produce no verdict at all.
+  let gateReport = { checked: false, rooted: false, note: "No enforcement root was checked. This run is advisory: a merge must not be gated on it." };
+  if (gate) {
+    const impl = platform ?? (PLATFORMS[gate.platform] ? PLATFORMS[gate.platform]() : null);
+    if (!impl) {
+      return result(STATE.ENFORCEMENT_ERROR, `no adapter for platform "${gate.platform}"`, { standards });
+    }
+    const assessed = assessGate(impl, gate);
+    if (assessed.verdict === "missing") {
+      return result(STATE.GATE_MISSING, assessed.why, { standards, gate: { checked: true, rooted: false, ...assessed.detail } });
+    }
+    if (assessed.verdict === "invalid") {
+      return result(STATE.GATE_CONFIG_INVALID, assessed.why, { standards, gate: { checked: true, rooted: false, ...assessed.detail } });
+    }
+    gateReport = { checked: true, rooted: true, ...assessed.detail };
+  }
+
   const policyPath = path.join(target, POLICY_FILE);
   if (!existsSync(policyPath)) {
     // Adoption is observable; whether this repository OUGHT to have adopted is not, and answering
     // it needs applicability detection and a scope registry that do not exist yet. Reporting
     // NOT_ADOPTED rather than guessing keeps the two apart — see ADR 0002.
-    return result(STATE.NOT_ADOPTED, `${target} contains no ${POLICY_FILE}, so no standards version governs it`, { standards });
+    return result(STATE.NOT_ADOPTED, `${target} contains no ${POLICY_FILE}, so no standards version governs it`, { standards, gate: gateReport });
   }
 
   const run = runOfficialEvaluator(identity.dir, target);
   if (!run.ok) {
-    return result(STATE.ENFORCEMENT_ERROR, run.why, { standards });
+    return result(STATE.ENFORCEMENT_ERROR, run.why, { standards, gate: gateReport });
   }
 
   const verdict = run.report.status;
@@ -141,11 +181,12 @@ export async function enforce({ target, standardsRepo, tag, sha, cacheRoot = DEF
     // says an unknown is not a pass — even when the unknown looks reassuring.
     return result(STATE.ENFORCEMENT_ERROR,
       `the standards release returned the status "${verdict}", which this enforcer does not recognise`,
-      { standards, standardsExitCode: run.exitCode, report: run.report });
+      { standards, gate: gateReport, standardsExitCode: run.exitCode, report: run.report });
   }
 
   return result(verdict, describe(run.report), {
     standards,
+    gate: gateReport,
     standardsExitCode: run.exitCode,
     // Verbatim. The enforcer reports what the standards said; it does not summarise it into a
     // shape of its own, because a summary is a second definition.
@@ -174,7 +215,8 @@ function describe(report) {
 // ---------------------------------------------------------------------------
 
 function parseArgs(argv) {
-  const args = { target: null, standardsRepo: null, tag: null, sha: null, json: false, cacheRoot: DEFAULT_CACHE };
+  const args = { target: null, standardsRepo: null, tag: null, sha: null, json: false, cacheRoot: DEFAULT_CACHE, gate: null };
+  const g = {};
   for (const a of argv) {
     if (a === "--json") args.json = true;
     else if (a.startsWith("--target=")) args.target = path.resolve(a.slice(9));
@@ -182,6 +224,12 @@ function parseArgs(argv) {
     else if (a.startsWith("--tag=")) args.tag = a.slice(6);
     else if (a.startsWith("--sha=")) args.sha = a.slice(6);
     else if (a.startsWith("--cache=")) args.cacheRoot = path.resolve(a.slice(8));
+    else if (a.startsWith("--platform=")) g.platform = a.slice(11);
+    else if (a.startsWith("--gate-repo=")) g.repo = a.slice(12);
+    else if (a.startsWith("--gate-branch=")) g.branch = a.slice(14);
+    else if (a.startsWith("--gate-check=")) g.expectedCheck = a.slice(13);
+    else if (a.startsWith("--trusted-workflow=")) g.trustedWorkflowRef = a.slice(19);
+    else if (a === "--require-organisation-root") g.requireOrganisationRoot = true;
     else if (!a.startsWith("--") && !args.target) args.target = path.resolve(a);
     else return { error: `unrecognised argument: ${a}` };
   }
@@ -189,6 +237,12 @@ function parseArgs(argv) {
     if (!args[k]) return { error: `${flag} is required; an identity is a repository, a tag and a commit SHA` };
   }
   if (!args.target) return { error: "a target repository is required" };
+  if (Object.keys(g).length > 0) {
+    for (const [k, flag] of [["platform", "--platform"], ["repo", "--gate-repo"], ["branch", "--gate-branch"], ["expectedCheck", "--gate-check"]]) {
+      if (!g[k]) return { error: `${flag} is required once any gate option is given; a half-configured gate is not a gate` };
+    }
+    args.gate = g;
+  }
   return { args };
 }
 
@@ -200,10 +254,21 @@ function render(r) {
       (r.standards.verified ? "  (identity verified)" : "  (identity NOT verified)"));
     out.push(`             ${r.standards.repo}`);
   }
+  if (r.gate) {
+    out.push("");
+    out.push(r.gate.checked
+      ? `  Enforcement root: ${r.gate.rooted ? `verified (${(r.gate.rootedAt ?? []).join(", ") || "unknown"})` : "NOT verified"}`
+      : "  Enforcement root: not checked");
+    if (r.gate.note) out.push(`                    ${r.gate.note}`);
+  }
   out.push("");
   out.push(r.passing
     ? "  The standards accepted this repository. That is what the standards examined, not everything."
     : "  Not a passing state. A merge gated on this enforcer must not proceed.");
+  if (r.passing && r.authoritative === false) {
+    out.push("  ADVISORY: no enforcement root was verified, so this result does not establish that");
+    out.push("  the repository could not have avoided being asked.");
+  }
   if (!r.isStandardsVerdict && r.state !== STATE.ENFORCEMENT_ERROR) {
     out.push("  This is an enforcement state, not a verdict: the standards reached no conclusion here.");
   }

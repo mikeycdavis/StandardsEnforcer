@@ -1,0 +1,301 @@
+/**
+ * M2: can the governed project avoid the verdict?
+ *
+ * Tested almost entirely through negative and adversarial cases, because the positive case proves
+ * very little. A gate that works when everything is configured correctly is not the claim; the
+ * claim is that a pull request with every plausible repository-local modification available to it
+ * cannot change whether the check is required.
+ *
+ * The platform is injected, so these run against recorded response shapes with no network. That is
+ * a deliberate boundary: everything asserted here is enforcement semantics, and the Azure DevOps
+ * adapter later must change none of it.
+ */
+
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { enforce } from "../scripts/enforce.mjs";
+import { assessGate, isPinnedWorkflowRef } from "../scripts/gate.mjs";
+import { STATE, exitFor, EXIT } from "../scripts/states.mjs";
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const MLS = "F:/Repos/MachineLearningStandards";
+const TAG = "v1.4.0";
+const CACHE = path.join(tmpdir(), "standards-enforcer-test-cache");
+const CHECK = "standards / machine-learning";
+const PINNED_WF = "acme/standards-ci/.github/workflows/standards.yml@1111111111111111111111111111111111111111";
+
+const git = (args, cwd) => spawnSync("git", args, { encoding: "utf8", cwd, windowsHide: true });
+const MLS_AVAILABLE = existsSync(path.join(MLS, ".git")) && git(["rev-list", "-n", "1", TAG], MLS).status === 0;
+const SHA = MLS_AVAILABLE ? git(["rev-list", "-n", "1", TAG], MLS).stdout.trim() : null;
+
+/**
+ * A platform whose answers come from somewhere the governed repository's files cannot reach.
+ *
+ * That is the point of the fake, not a convenience: the required-check configuration is held here,
+ * outside the target directory, so every adversarial mutation below can rewrite the repository
+ * freely and demonstrably not touch it.
+ */
+function externalPlatform(checks, { ok = true, why = null } = {}) {
+  let calls = 0;
+  return {
+    name: "fake",
+    get calls() { return calls; },
+    requiredChecks() {
+      calls++;
+      return ok ? { ok: true, checks } : { ok: false, why };
+    },
+  };
+}
+
+const ROOTED = [{ context: CHECK, appId: 15368, source: "organization", enforcement: "active" }];
+
+const gateArgs = (over = {}) => ({
+  platform: "fake", repo: "acme/moneyball", branch: "main",
+  expectedCheck: CHECK, trustedWorkflowRef: PINNED_WF, ...over,
+});
+
+async function scratch(fn) {
+  const dir = await mkdtemp(path.join(tmpdir(), "enforcer-gate-"));
+  try {
+    return await fn(dir);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+/** An adopted, compliant-enough ML project. */
+async function adoptedProject(dir) {
+  await mkdir(path.join(dir, ".github/workflows"), { recursive: true });
+  await mkdir(path.join(dir, "src"), { recursive: true });
+  await writeFile(path.join(dir, "src/train.py"), "import sklearn\nSEED = 1\n");
+  await writeFile(path.join(dir, "requirements.txt"), "scikit-learn==1.5.1\n");
+  await writeFile(path.join(dir, "project-policy.yml"), 'standardVersion: "1.0.0"\nproject: "t"\nexceptions: []\n');
+  await writeFile(path.join(dir, ".github/workflows/standards.yml"), "name: standards\non: [pull_request]\n");
+}
+
+// ===========================================================================
+// A gate is a required check, not a workflow file
+// ===========================================================================
+
+test("gate · nothing required on the branch is GATE_MISSING", () => {
+  const g = assessGate(externalPlatform([]), gateArgs());
+  assert.equal(g.verdict, "missing");
+  assert.match(g.why, /Nothing is required/);
+});
+
+test("gate · a workflow that exists but is required by nobody is still missing", { skip: !MLS_AVAILABLE && "MachineLearningStandards not on disk" }, async () => {
+  // The whole reason a gate is not a file. The repository below has a perfectly good workflow in
+  // its own tree, and the branch requires nothing.
+  await scratch(async (dir) => {
+    await adoptedProject(dir);
+    assert.ok(existsSync(path.join(dir, ".github/workflows/standards.yml")));
+
+    const r = await enforce({
+      target: dir, standardsRepo: MLS, tag: TAG, sha: SHA, cacheRoot: CACHE,
+      gate: gateArgs(), platform: externalPlatform([]),
+    });
+    assert.equal(r.state, STATE.GATE_MISSING);
+    assert.equal(r.report, undefined, "no verdict is produced when nobody required one");
+    assert.equal(exitFor(r.state), EXIT.NOT_ENFORCEABLE);
+  });
+});
+
+test("gate · a differently named required check does not satisfy this one", () => {
+  const g = assessGate(externalPlatform([{ context: "build", appId: 1, source: "organization", enforcement: "active" }]), gateArgs());
+  assert.equal(g.verdict, "missing");
+  assert.match(g.why, /Required there: build/);
+});
+
+test("gate · a rule in evaluate mode is configured and blocks nothing", () => {
+  const g = assessGate(externalPlatform([{ context: CHECK, appId: 1, source: "organization", enforcement: "evaluate" }]), gateArgs());
+  assert.equal(g.verdict, "missing");
+  assert.match(g.why, /not active/);
+});
+
+// ===========================================================================
+// A name-only requirement is spoofable by the pull request itself
+// ===========================================================================
+
+test("gate · a required check bound to no app is a configuration defect, not a gate", () => {
+  // GitHub matches required checks by context string. A pull request can add its own workflow
+  // emitting a check of the same name and satisfy the requirement with its own green tick.
+  const g = assessGate(externalPlatform([{ context: CHECK, appId: null, source: "organization", enforcement: "active" }]), gateArgs());
+  assert.equal(g.verdict, "invalid");
+  assert.match(g.why, /not bound to an app/);
+  assert.equal(g.detail.spoofable, true);
+});
+
+test("gate · GATE_CONFIG_INVALID is a different state from GATE_MISSING", () => {
+  // "Nobody requires this" and "something requires it in a way the PR can satisfy for itself" need
+  // different fixes, and collapsing them would send an operator to the wrong one.
+  assert.notEqual(STATE.GATE_MISSING, STATE.GATE_CONFIG_INVALID);
+  assert.equal(exitFor(STATE.GATE_CONFIG_INVALID), EXIT.NOT_ENFORCEABLE);
+});
+
+// ===========================================================================
+// The trusted implementation must itself be pinned
+// ===========================================================================
+
+test("gate · an unpinned trusted workflow moves the mutable root one repository outward", () => {
+  for (const ref of [
+    "acme/standards-ci/.github/workflows/standards.yml@main",
+    "acme/standards-ci/.github/workflows/standards.yml@v1",
+    "acme/standards-ci/.github/workflows/standards.yml",
+    "acme/standards-ci/.github/workflows/standards.yml@1111111",
+  ]) {
+    assert.equal(isPinnedWorkflowRef(ref), false, `${ref} must not count as pinned`);
+    const g = assessGate(externalPlatform(ROOTED), gateArgs({ trustedWorkflowRef: ref }));
+    assert.equal(g.verdict, "invalid", `${ref} should invalidate the gate`);
+    assert.match(g.why, /not pinned to a commit/);
+  }
+  assert.equal(isPinnedWorkflowRef(PINNED_WF), true);
+});
+
+test("gate · the trusted workflow is checked before the platform is even asked", () => {
+  // An unpinned root is not a question about what the platform says. Asking first would make a
+  // correctly-configured requirement look like it rescued an untrustworthy implementation.
+  const platform = externalPlatform(ROOTED);
+  assessGate(platform, gateArgs({ trustedWorkflowRef: "acme/x/.github/workflows/y.yml@main" }));
+  assert.equal(platform.calls, 0);
+});
+
+// ===========================================================================
+// The platform failing to answer is an unknown, never an absence
+// ===========================================================================
+
+test("gate · a platform that cannot answer does not report the gate as missing", () => {
+  const g = assessGate(externalPlatform([], { ok: false, why: "gh: not authenticated" }), gateArgs());
+  assert.equal(g.verdict, "invalid", "an unknown resolved as 'missing' would be a guess; as a pass it would be worse");
+  assert.match(g.why, /not authenticated/);
+});
+
+test("gate · no expected check name configured is invalid, not satisfied", () => {
+  const g = assessGate(externalPlatform(ROOTED), gateArgs({ expectedCheck: undefined }));
+  assert.equal(g.verdict, "invalid");
+});
+
+// ===========================================================================
+// Rooting, and what a repository-level rule does and does not establish
+// ===========================================================================
+
+test("gate · an organisation-rooted requirement verifies, and says where it is rooted", () => {
+  const g = assessGate(externalPlatform(ROOTED), gateArgs());
+  assert.equal(g.verdict, "rooted");
+  assert.deepEqual(g.detail.rootedAt, ["organization"]);
+  assert.match(g.detail.note, /cannot reach it/);
+});
+
+test("gate · a repository-level rule is accepted and its weaker rooting is stated", () => {
+  const g = assessGate(externalPlatform([{ context: CHECK, appId: 7, source: "repository", enforcement: "active" }]), gateArgs());
+  assert.equal(g.verdict, "rooted");
+  assert.match(g.detail.note, /repository admin can change it/,
+    "outside the pull request is not the same as outside the repository, and the report must not blur them");
+});
+
+test("gate · organisation rooting can be required, and then a repository rule is not enough", () => {
+  const g = assessGate(
+    externalPlatform([{ context: CHECK, appId: 7, source: "repository", enforcement: "active" }]),
+    gateArgs({ requireOrganisationRoot: true }),
+  );
+  assert.equal(g.verdict, "invalid");
+});
+
+// ===========================================================================
+// THE ADVERSARIAL CASE
+// ===========================================================================
+
+test("adversarial · no repository-local change a pull request can make alters the requirement", { skip: !MLS_AVAILABLE && "MachineLearningStandards not on disk" }, async () => {
+  // Every plausible escape available to a pull request, applied one after another to the same
+  // working tree, with the external requirement held constant outside it. The assertion is not
+  // that the verdict stays the same — deleting the policy legitimately changes it — but that the
+  // gate stays rooted and no mutation produces a passing state it should not.
+  await scratch(async (dir) => {
+    const platform = externalPlatform(ROOTED);
+    const run = () => enforce({
+      target: dir, standardsRepo: MLS, tag: TAG, sha: SHA, cacheRoot: CACHE,
+      gate: gateArgs(), platform,
+    });
+
+    await adoptedProject(dir);
+    const baseline = await run();
+    assert.equal(baseline.gate.rooted, true);
+    assert.equal(baseline.authoritative, true);
+
+    const escapes = [
+      ["delete the local workflow", async () => rm(path.join(dir, ".github/workflows/standards.yml"), { force: true })],
+      ["delete the whole workflows directory", async () => rm(path.join(dir, ".github"), { recursive: true, force: true })],
+      ["add a workflow emitting a check of the required name", async () => {
+        await mkdir(path.join(dir, ".github/workflows"), { recursive: true });
+        await writeFile(path.join(dir, ".github/workflows/impostor.yml"),
+          `name: ${CHECK}\non: [pull_request]\njobs:\n  x:\n    runs-on: ubuntu-latest\n    steps: [{run: 'exit 0'}]\n`);
+      }],
+      ["claim a different standards version in the policy", async () =>
+        writeFile(path.join(dir, "project-policy.yml"), 'standardVersion: "9.9.9"\nproject: "t"\nexceptions: []\n')],
+      ["add a CODEOWNERS file granting itself review", async () => {
+        await mkdir(path.join(dir, ".github"), { recursive: true });
+        await writeFile(path.join(dir, ".github/CODEOWNERS"), "* @attacker\n");
+      }],
+      ["add a file named like the enforcer's own config", async () =>
+        writeFile(path.join(dir, "standards-enforcer.json"), '{"gate":{"rooted":true}}\n')],
+      ["remove the policy entirely", async () => rm(path.join(dir, "project-policy.yml"), { force: true })],
+    ];
+
+    for (const [name, mutate] of escapes) {
+      await mutate();
+      const r = await run();
+      assert.equal(r.gate.rooted, true, `${name}: the requirement moved, which means it was reachable from the repository`);
+      assert.deepEqual(r.gate.rootedAt, ["organization"], `${name}: rooting changed`);
+      if (r.passing) {
+        assert.equal(r.state, STATE.COMPLIANT, `${name}: produced a passing state it should not have`);
+        assert.equal(r.authoritative, true);
+      }
+    }
+
+    // Deleting the policy is the one mutation that must change the outcome, and it must change it
+    // in the safe direction: no adoption, no verdict, no merge.
+    const final = await run();
+    assert.equal(final.state, STATE.NOT_ADOPTED);
+    assert.equal(final.passing, false,
+      "removing the standards is not a route to a green check");
+  });
+});
+
+// ===========================================================================
+// Advisory versus authoritative
+// ===========================================================================
+
+test("advisory · a run with no gate checked is stamped non-authoritative and says so", { skip: !MLS_AVAILABLE && "MachineLearningStandards not on disk" }, async () => {
+  await scratch(async (dir) => {
+    await adoptedProject(dir);
+    const r = await enforce({ target: dir, standardsRepo: MLS, tag: TAG, sha: SHA, cacheRoot: CACHE });
+    assert.equal(r.authoritative, false);
+    assert.equal(r.gate.checked, false);
+    assert.match(r.gate.note, /advisory/i);
+  });
+});
+
+test("advisory · the rendered output warns when a pass came from an unrooted run", { skip: !MLS_AVAILABLE && "MachineLearningStandards not on disk" }, () => {
+  const r = spawnSync(process.execPath, [
+    path.join(ROOT, "scripts/enforce.mjs"),
+    `--target=${MLS}`, `--standards=${MLS}`, `--tag=${TAG}`, `--sha=${SHA}`,
+  ], { encoding: "utf8" });
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /ADVISORY/);
+  assert.match(r.stdout, /does not establish that/);
+});
+
+test("a half-configured gate is refused rather than half-checked", () => {
+  const r = spawnSync(process.execPath, [
+    path.join(ROOT, "scripts/enforce.mjs"),
+    "--target=.", "--standards=.", "--tag=v1", `--sha=${"0".repeat(40)}`, "--platform=github",
+  ], { encoding: "utf8" });
+  assert.equal(r.status, EXIT.NO_VERDICT);
+  assert.match(r.stderr, /half-configured gate is not a gate/);
+});
