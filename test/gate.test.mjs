@@ -21,7 +21,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { enforce } from "../scripts/enforce.mjs";
-import { assessGate, isPinnedWorkflowRef } from "../scripts/gate.mjs";
+import { assessGate, isPinnedWorkflowRef, GITHUB_ACTIONS_APP_ID } from "../scripts/gate.mjs";
 import { STATE, exitFor, EXIT } from "../scripts/states.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -42,19 +42,22 @@ const SHA = MLS_AVAILABLE ? git(["rev-list", "-n", "1", TAG], MLS).stdout.trim()
  * outside the target directory, so every adversarial mutation below can rewrite the repository
  * freely and demonstrably not touch it.
  */
-function externalPlatform(checks, { ok = true, why = null } = {}) {
+function externalPlatform(checks, { ok = true, why = null, workflows = [] } = {}) {
   let calls = 0;
   return {
     name: "fake",
     get calls() { return calls; },
     requiredChecks() {
       calls++;
-      return ok ? { ok: true, checks } : { ok: false, why };
+      return ok ? { ok: true, checks, workflows } : { ok: false, why };
     },
   };
 }
 
-const ROOTED = [{ context: CHECK, appId: 15368, source: "organization", enforcement: "active" }];
+// A DEDICATED app, not GitHub Actions. M4 established live that a requirement bound to the Actions
+// app (15368) is satisfiable by the pull request's own workflow, so the fixture that stands for "a
+// correctly rooted requirement" must name an app the pull request cannot act as.
+const ROOTED = [{ context: CHECK, appId: 99001, source: "organization", enforcement: "active" }];
 
 const gateArgs = (over = {}) => ({
   platform: "fake", repo: "acme/moneyball", branch: "main",
@@ -190,6 +193,44 @@ test("gate · an organisation-rooted requirement verifies, and says where it is 
   assert.equal(g.verdict, "rooted");
   assert.deepEqual(g.detail.rootedAt, ["organization"]);
   assert.match(g.detail.note, /cannot reach it/);
+});
+
+test("gate · a requirement bound to GitHub Actions is satisfiable by the pull request itself", () => {
+  // THE M4 FINDING, observed against a live repository before it was written here. Every workflow in
+  // a repository runs as the Actions app, so a requirement bound to it is satisfied by a workflow the
+  // pull request adds. Observed: mergeable MERGEABLE, mergeStateStatus CLEAN, on a pull request that
+  // had deleted the enforcement and replaced it with `run: echo`.
+  const g = assessGate(
+    externalPlatform([{ context: CHECK, appId: GITHUB_ACTIONS_APP_ID, source: "organization", enforcement: "active" }]),
+    gateArgs(),
+  );
+  assert.equal(g.verdict, "invalid", "app binding to Actions is not a root; M2 believed it was");
+  assert.equal(g.detail.boundToActions, true);
+  assert.match(g.why, /every workflow in the repository runs as/);
+});
+
+test("gate · a pinned required-workflows rule is what roots an Actions-produced check", () => {
+  // The remedy, and the reason it is a different rule rather than a stronger binding: this names a
+  // repository, a path and a commit, none of which the governed pull request controls.
+  const sha = "34db273f5f1fa8ebcc1a9dc1fa6fd58c40cc2ae2";
+  const g = assessGate(
+    externalPlatform([{ context: CHECK, appId: GITHUB_ACTIONS_APP_ID, source: "organization", enforcement: "active" }], {
+      workflows: [{ repositoryId: 1, path: ".github/workflows/standards-gate.yml", sha, source: "organization" }],
+    }),
+    gateArgs({ trustedWorkflowRef: `acme/ci/.github/workflows/standards-gate.yml@${sha}` }),
+  );
+  assert.equal(g.verdict, "rooted");
+  assert.match(g.detail.note, /pinned-workflow rule is what makes this a root/);
+});
+
+test("gate · a required-workflows rule pinning a DIFFERENT commit does not root this check", () => {
+  const g = assessGate(
+    externalPlatform([{ context: CHECK, appId: GITHUB_ACTIONS_APP_ID, source: "organization", enforcement: "active" }], {
+      workflows: [{ repositoryId: 1, path: ".github/workflows/standards-gate.yml", sha: "b".repeat(40), source: "organization" }],
+    }),
+    gateArgs(),
+  );
+  assert.equal(g.verdict, "invalid");
 });
 
 test("gate · a repository-level rule is accepted and its weaker rooting is stated", () => {

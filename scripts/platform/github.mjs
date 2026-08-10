@@ -38,9 +38,19 @@ function fromRulesets(repo, branch) {
   if (!list.ok) return list;
 
   const checks = [];
+  // Required-workflow rules, read alongside the required checks because M4 established that on
+  // GitHub these are what actually pin the implementation. A required check bound to the Actions app
+  // is satisfiable by the pull request; a rule naming a repository, a path and a commit is not.
+  const workflows = [];
   for (const rule of list.data ?? []) {
-    if (rule.type !== "required_status_checks") continue;
     const source = (rule.ruleset_source_type ?? "").toLowerCase() === "organization" ? "organization" : "repository";
+    if (rule.type === "workflows") {
+      for (const w of rule.parameters?.workflows ?? []) {
+        workflows.push({ repositoryId: w.repository_id ?? null, path: w.path ?? null, ref: w.ref ?? null, sha: w.sha ?? null, source });
+      }
+      continue;
+    }
+    if (rule.type !== "required_status_checks") continue;
     for (const c of rule.parameters?.required_status_checks ?? []) {
       checks.push({
         context: c.context,
@@ -54,7 +64,7 @@ function fromRulesets(repo, branch) {
       });
     }
   }
-  return { ok: true, checks };
+  return { ok: true, checks, workflows };
 }
 
 /** Classic branch protection, for repositories not yet on rulesets. */
@@ -85,7 +95,10 @@ export function githubPlatform() {
       if (!rulesets.ok) return { ok: false, why: `rulesets: ${rulesets.why}` };
       if (!classic.ok) return { ok: false, why: `branch protection: ${classic.why}` };
 
-      return { ok: true, checks: [...rulesets.checks, ...classic.checks] };
+      // Classic branch protection has no equivalent of a required-workflows rule, so it contributes
+      // no workflows. A repository on classic protection alone therefore cannot root an
+      // Actions-produced check — which is a true statement about GitHub, not a gap in this adapter.
+      return { ok: true, checks: [...rulesets.checks, ...classic.checks], workflows: rulesets.workflows };
     },
   };
 }

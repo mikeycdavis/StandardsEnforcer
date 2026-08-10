@@ -33,6 +33,21 @@
 
 const FULL_SHA = /^[0-9a-f]{40}$/;
 
+/**
+ * The GitHub Actions app.
+ *
+ * Binding a required check to this app was M2's mitigation for name-spoofing, and M4 established
+ * against a live repository that it does not work. Every workflow in a repository runs as this app —
+ * including one a pull request adds — so a requirement bound to it is satisfied by the pull request's
+ * own green tick, exactly as though it had been bound to nothing. The observed result was
+ * `mergeable: MERGEABLE, mergeStateStatus: CLEAN` on a pull request that had deleted the enforcement
+ * and replaced it with `run: echo`.
+ *
+ * A binding is therefore only a root when it names an app the governed pull request cannot act as.
+ * See artifacts/evidence/2026-08-10-m4-live-github.md.
+ */
+export const GITHUB_ACTIONS_APP_ID = 15368;
+
 /** A reusable-workflow reference is pinned only when it names an immutable commit. */
 export function isPinnedWorkflowRef(ref) {
   if (typeof ref !== "string") return false;
@@ -107,6 +122,44 @@ export function assessGate(platform, { repo, branch, expectedCheck, trustedWorkf
         `"${expectedCheck}" is required on ${repo}@${branch} but is not bound to an app, so any workflow ` +
         "that emits a check of that name satisfies it — including one the pull request adds",
       detail: { spoofable: true },
+    };
+  }
+
+  // Bound, but bound to the one app the pull request can also act as.
+  //
+  // This is the M4 finding, and it is a spoof the name-binding check does not catch: the requirement
+  // looks correctly configured, and a pull request satisfies it anyway. The only thing that rescues
+  // an Actions-produced check is a rule pinning WHICH workflow must run — GitHub's `workflows`
+  // ruleset rule, naming a repository, a path and a commit the pull request does not control.
+  if (bound.every((c) => c.appId === GITHUB_ACTIONS_APP_ID)) {
+    const pinned = (answer.workflows ?? []).filter((w) => FULL_SHA.test(w.sha ?? ""));
+    const matching = trustedWorkflowRef
+      ? pinned.filter((w) => trustedWorkflowRef.endsWith(`@${w.sha}`) && trustedWorkflowRef.includes(w.path))
+      : pinned;
+    if (matching.length === 0) {
+      return {
+        verdict: "invalid",
+        why:
+          `"${expectedCheck}" is required on ${repo}@${branch} and bound to the GitHub Actions app, which every ` +
+          "workflow in the repository runs as — including one the pull request adds. Binding to Actions does not " +
+          "make the requirement unspoofable. Pin the implementation with a required-workflows rule, or have the " +
+          "check produced by an app the pull request cannot act as",
+        detail: { spoofable: true, boundToActions: true, requiredWorkflows: pinned },
+      };
+    }
+    return {
+      verdict: "rooted",
+      why: null,
+      detail: {
+        rootedAt: [...new Set(bound.map((c) => c.source))],
+        appIds: [GITHUB_ACTIONS_APP_ID],
+        pinnedWorkflows: matching,
+        trustedWorkflowRef: trustedWorkflowRef ?? null,
+        note:
+          "Required by a rule that pins which workflow must run, at a commit. The check is produced by the " +
+          "GitHub Actions app, which the pull request can also act as, so the pinned-workflow rule is what makes " +
+          "this a root rather than the app binding.",
+      },
     };
   }
 

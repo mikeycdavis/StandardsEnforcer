@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "0.3.0",
+  "state": "GATE_CONFIG_INVALID",
+  "passing": false,
+  "isStandardsVerdict": false,
+  "detail": "\"standards / machine-learning\" is required on mikeycdavis/enforcer-m4-governed@main but is not bound to an app, so any workflow that emits a check of that name satisfies it — including one the pull request adds",
+  "standards": {
+    "repo": "F:\\Repos\\MachineLearningStandards",
+    "tag": "v1.4.0",
+    "sha": "6bfd0789e50196da3ff666594ff5b981b8ae5763",
+    "verified": true,
+    "materialisedAt": "C:\\Users\\Mike\\AppData\\Local\\Temp\\standards-enforcer-cache\\6bfd0789e50196da3ff666594ff5b981b8ae5763",
+    "fromCache": true
+  },
+  "gate": {
+    "checked": true,
+    "rooted": false,
+    "spoofable": true
+  },
+  "authoritative": false
+}

@@ -1,0 +1,17 @@
+{
+  "name": "m4-required-workflow",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": { "ref_name": { "include": ["~DEFAULT_BRANCH"], "exclude": [] } },
+  "rules": [
+    { "type": "workflows",
+      "parameters": {
+        "workflows": [
+          { "repository_id": 1329932965,
+            "path": ".github/workflows/standards-gate.yml",
+            "ref": "refs/heads/main",
+            "sha": "34db273f5f1fa8ebcc1a9dc1fa6fd58c40cc2ae2" }
+        ]
+      } }
+  ]
+}

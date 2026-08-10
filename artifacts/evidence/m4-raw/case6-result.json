@@ -1,0 +1,1 @@
+{"message":"Validation Failed","errors":["Invalid rule 'workflows': Invalid parameter workflows: Workflow error at index 0: "],"documentation_url":"https://docs.github.com/rest/repos/rules#create-a-repository-ruleset","status":"422"}gh: Validation Failed (HTTP 422)
