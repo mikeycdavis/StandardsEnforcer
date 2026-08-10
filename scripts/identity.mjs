@@ -56,6 +56,22 @@ export function verifyTagResolvesTo(repo, tag, sha) {
   const resolved = git(["rev-list", "-n", "1", tag], repo);
   if (!resolved.ok) return { ok: false, resolved: null, why: `tag ${tag}: ${resolved.why}` };
   if (resolved.out !== sha) {
+    // One mismatch is common enough, and diagnosable enough, to name: the declared SHA is the
+    // annotated TAG OBJECT rather than the commit. `git rev-parse v1.4.0` returns it and looks
+    // entirely like an answer, and every tagged pack in the C0 inventory was recorded that way.
+    // Saying "these do not match" is true and costs an afternoon; saying which mistake it is costs
+    // a sentence. The tag object is provenance about the tag, not the identity of what runs.
+    const tagObject = git(["rev-parse", tag], repo);
+    if (tagObject.ok && tagObject.out === sha) {
+      return {
+        ok: false,
+        resolved: resolved.out,
+        why:
+          `the declared identity ${sha} is the annotated tag object for ${tag}, not the commit it points at. ` +
+          `${tag} points at ${resolved.out}; use that. The tag object records who tagged and when, and is not ` +
+          "the identity of the implementation being executed",
+      };
+    }
     return {
       ok: false,
       resolved: resolved.out,
