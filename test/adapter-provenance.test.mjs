@@ -18,7 +18,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, writeFile, mkdir, rm, readFile, symlink } from "node:fs/promises";
+import fs from "node:fs";
+import { mkdtemp, writeFile, mkdir, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { enforce } from "../scripts/enforce.mjs";
@@ -72,6 +73,27 @@ async function governedTarget(extra = async () => {}) {
 
 const run = (pack, target, over = {}) =>
   enforce({ target, standardsRepo: pack.dir, tag: pack.tag, sha: pack.sha, cacheRoot: CACHE, ...over });
+
+/**
+ * Can this platform create a symlink at all?
+ *
+ * Probed against a throwaway file rather than inferred from `process.platform`, because the answer
+ * depends on privilege and developer mode rather than on the OS name — Windows can do it, given
+ * either. Kept separate from the fixture so that "the platform cannot" and "the fixture broke" are
+ * distinguishable, and only the first is allowed to skip.
+ */
+function symlinksAvailable() {
+  const probe = fs.mkdtempSync(path.join(tmpdir(), "symlink-probe-"));
+  try {
+    fs.writeFileSync(path.join(probe, "a"), "x");
+    fs.symlinkSync(path.join(probe, "a"), path.join(probe, "b"));
+    return true;
+  } catch {
+    return false;
+  } finally {
+    fs.rmSync(probe, { recursive: true, force: true });
+  }
+}
 
 async function withPackAndTarget(fn, targetExtra) {
   const pack = await genuinePack();
@@ -260,12 +282,18 @@ test("7b · a symlinked entrypoint pointing outside the checkout does not execut
   try {
     await writeFile(path.join(outside, "evil.mjs"), evaluator("outside", "REAL_PASS"));
     await mkdir(path.join(dir, "scripts"), { recursive: true });
-    try {
-      await symlink(path.join(outside, "evil.mjs"), path.join(dir, "scripts", "standards.mjs"));
-    } catch (e) {
-      t.skip(`symlinks unavailable here (${e.code}); case 7b was NOT exercised`);
+    // Capability is probed separately from the fixture, because only one of the two earns a skip.
+    // A platform that cannot create symlinks at all leaves this case unverified, and says so. A
+    // platform that CAN, but where this fixture then fails, is a broken test and must go red — a
+    // skip there would let a real regression hide behind a permission story.
+    if (!symlinksAvailable()) {
+      t.skip(
+        "symlinks unavailable on this platform; case 7b was NOT exercised. " +
+          "Run this suite where symlinks can be created before treating symlink escape as established.",
+      );
       return;
     }
+    await symlink(path.join(outside, "evil.mjs"), path.join(dir, "scripts", "standards.mjs"));
     await writeFile(path.join(dir, "standards-adapter.json"), JSON.stringify(contract()));
     git(["init", "-q", "-b", "main"], dir);
     git(["config", "user.email", "t@example.com"], dir);

@@ -156,17 +156,71 @@ requirements. M2 does not get to close by making other repositories convenient.
 Concrete, and it does not require anyone to remember this document: the next unmet prerequisite
 becomes the reported reason on the next run.
 
-## Standing
+## The durable final state
 
 ```text
-M2  IMPLEMENTED — PORTFOLIO_BLOCKED
+M2
+  IMPLEMENTED — PORTFOLIO_BLOCKED
 
-    architecture           accepted, three heterogeneous authorities, 163 tests
-    portfolio              blocked, five dependencies, five distinct reasons
-    ADR 0005               nine cases executable, one skipped for platform (7b)
-    open vocabulary        proven on invented and inverted vocabularies
-    anti-vacuity           the ML specimen fails without any ML knowledge in enforcer source
+Architecture:
+  contract-driven authority transport established
+  native verdict semantics absent from Enforcer
+  0/1/4 generic process projection
+  adapter provenance bound to verified release
+  scope precedes evaluator mechanics
+
+Demonstrated authorities:
+  Betting          v1.0.1  e0a9fb3
+  Mathematics      v1.0.1  f21ea83
+  MachineLearning  v1.5.0  d9cffa1
+
+Dependencies:
+  Innovation · Engineering · Health · Financial · Prediction
+
+Outstanding assurance:
+  symlink escape — NOT ESTABLISHED on current platform
+
+Suite:
+  163 tests · 162 pass · 1 skipped
 ```
+
+**`162 pass, 1 skipped` must not be compressed into "all provenance tests pass".** The qualification
+travels with the claim:
+
+> ADR 0005's provenance boundary is executable on this platform except for symlink escape, which
+> remains unverified because the platform cannot construct the adversarial fixture.
+
+That is not grounds to reopen M2. The mechanism rejects lexical escape and the resolved-path check
+runs; the untested case is explicitly visible rather than silently credited.
+
+**7b's reopening condition, so the skip cannot become folklore:**
+
+```text
+When the suite runs in an environment capable of creating the required symlink,
+the symlink-escape case MUST execute. A skip on a capable environment is a
+test failure, not a platform note.
+```
+
+The test enforces exactly that distinction: capability is probed against a throwaway file, separately
+from the fixture. Only *platform cannot create symlinks* earns a skip. A platform that can, where the
+fixture then fails, goes red — because a skip there would let a real regression hide behind a
+permission story.
+
+## Reopen M2 when
+
+```text
+a dependency publishes its next prerequisite, or
+a symlink-capable environment exercises 7b, or
+evidence falsifies an accepted M2 invariant
+```
+
+None of these is a backlog item. The five dependencies have owners who are not this repository, and
+7b needs a machine rather than a decision.
+
+## Closing note
+
+M2 did not reach eight green integrations by weakening what integration means. It ends with three
+demonstrated authorities, five truthful dependencies, and one explicitly unearned assurance claim.
 
 Implementation state and external dependency state are not the same claim, and this milestone closes
 by saying which is which.
