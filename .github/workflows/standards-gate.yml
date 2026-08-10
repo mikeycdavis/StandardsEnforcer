@@ -51,6 +51,24 @@ on:
         required: false
         default: true
         type: boolean
+      scope-registry-repo:
+        description: >-
+          The repository holding the scope registry, as owner/name. It must be one the governed
+          projects cannot write to: a repository that can edit its own scope decides whether it is
+          governed. Leave empty to run without a scope check, which is advisory about scope.
+        required: false
+        default: ''
+        type: string
+      scope-registry-sha:
+        description: The commit of the scope-registry repository to read. Pinned, like everything else.
+        required: false
+        default: ''
+        type: string
+      scope-registry-path:
+        description: Path to the registry JSON within that repository.
+        required: false
+        default: scope-registry.json
+        type: string
 
 permissions:
   contents: read
@@ -82,6 +100,17 @@ jobs:
           ref: ${{ inputs.enforcer-sha }}
           path: enforcer
 
+      # Checked out beside the target, never into it. The enforcer refuses a registry located inside
+      # the repository it governs, so this placement is not a convention it would be convenient to
+      # break — it is the difference between a decision and a request.
+      - name: Check out the scope registry
+        if: inputs.scope-registry-repo != ''
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.scope-registry-repo }}
+          ref: ${{ inputs.scope-registry-sha }}
+          path: scope
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -102,12 +131,19 @@ jobs:
             --gate-branch='${{ github.event.repository.default_branch }}' \
             --gate-check='${{ inputs.gate-check }}' \
             --trusted-workflow='${{ github.workflow_ref }}' \
-            ${{ inputs.require-organisation-root && '--require-organisation-root' || '' }}
+            ${{ inputs.require-organisation-root && '--require-organisation-root' || '' }} \
+            ${{ inputs.scope-registry-repo != '' && format('--scope-registry=scope/{0} --repo-id=github:{1} --repo-name={2}', inputs.scope-registry-path, github.repository_id, github.repository) || '' }}
+
+      # --repo-id is github.repository_id, not github.repository. The name can be renamed,
+      # transferred, or freed and claimed by somebody else; a scope decision that follows a name
+      # follows whoever holds the name today.
 
       # Exit codes, and why none of them may be waved through:
-      #   0  the standards accepted it, and the enforcement root verified
+      #   0  the standards accepted it and the enforcement root verified, OR an authorised reviewer
+      #      recorded this repository as out of scope — an exclusion, in which nothing was evaluated
       #   1  the standards rejected it
       #   2  no verdict could be reached
       #   3  BLOCKED_BY_INVARIANT — the standards system called itself untrustworthy here
-      #   4  enforcement could not be established: not adopted, gate missing or misconfigured,
-      #      or the declared standards release did not resolve to the declared commit
+      #   4  enforcement could not be established: not adopted, gate missing or misconfigured, scope
+      #      unreviewed or stale, the scope registry unusable, or the declared standards release did
+      #      not resolve to the declared commit

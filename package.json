@@ -1,6 +1,6 @@
 {
   "name": "standards-enforcer",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Determine which independent standards releases govern a repository, pin them by immutable identity, run their official evaluators, and prevent a required standard from being silently absent or bypassed.",
   "type": "module",
   "bin": {

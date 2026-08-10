@@ -10,9 +10,11 @@
  *     INV-E1 — StandardsEnforcer must never convert an unknown, missing, unverifiable, or failed
  *     enforcement condition into a successful compliance result.
  *
- * Enforced structurally: `PASSING` is an explicit two-element set, `exitFor` derives from it, and a
- * test asserts that every state outside it exits non-zero. A state added later without a decision
- * about its exit code fails that test rather than defaulting to success.
+ * Enforced structurally: `PASSING` is an explicit, closed, enumerated set, `exitFor` derives from
+ * it, and a test asserts that every state outside it exits non-zero. A state added later without a
+ * decision about its exit code fails that test rather than defaulting to success. Every member of
+ * `PASSING` is either a standards verdict or listed in `REQUIRES_RECORDED_DECISION`, which is what
+ * stops the set growing by attrition.
  */
 
 /** Every state the enforcer can ever report. Frozen surface: adding one is a MAJOR change. */
@@ -29,6 +31,8 @@ export const STATE = {
   // "something requires it in a way a pull request can satisfy for itself" need different fixes.
   NOT_ADOPTED: "NOT_ADOPTED",
   SCOPE_REVIEW_REQUIRED: "SCOPE_REVIEW_REQUIRED",
+  OUT_OF_SCOPE: "OUT_OF_SCOPE",
+  SCOPE_REGISTRY_INVALID: "SCOPE_REGISTRY_INVALID",
   GATE_MISSING: "GATE_MISSING",
   GATE_CONFIG_INVALID: "GATE_CONFIG_INVALID",
   BYPASS_USED: "BYPASS_USED",
@@ -46,12 +50,32 @@ export const VERDICT_STATES = new Set([
 ]);
 
 /**
- * The only two states a merge may proceed on.
+ * The states a merge may proceed on.
  *
  * Written as a closed set rather than as a default, because a default is how an unlisted state
  * becomes a pass.
+ *
+ * M3 widened this from two members to three, which is the only widening in the enforcer's history
+ * and is recorded rather than quietly made. `OUT_OF_SCOPE` is not a compliance result and never
+ * becomes one: it says an authorised reviewer decided these standards do not govern this repository.
+ * A governed population needs that to be a durable, mergeable state, because the alternative is a
+ * portfolio scan that either blocks every excluded repository forever or starts reading detector
+ * silence as proof a repository is not doing machine-learning work.
+ *
+ * The widening is bounded by `REQUIRES_RECORDED_DECISION` below. INV-E1 is untouched: an unknown,
+ * missing or unverifiable condition still cannot reach this set, because an exclusion nobody
+ * recorded is precisely an unknown and resolves to `SCOPE_REVIEW_REQUIRED`.
  */
-export const PASSING = new Set([STATE.COMPLIANT, STATE.COMPLIANT_WITH_EXCEPTIONS]);
+export const PASSING = new Set([STATE.COMPLIANT, STATE.COMPLIANT_WITH_EXCEPTIONS, STATE.OUT_OF_SCOPE]);
+
+/**
+ * Passing states that are not a standards verdict, and what makes them legitimate.
+ *
+ * A member here may only be produced alongside a named authorised reviewer, a review date and a
+ * reason. The enforcer asserts that at the point of production and a test asserts it of the payload,
+ * so "merge may proceed" can never be reached by an absence — only by a decision someone owns.
+ */
+export const REQUIRES_RECORDED_DECISION = new Set([STATE.OUT_OF_SCOPE]);
 
 /**
  * Exit codes.
@@ -79,6 +103,7 @@ export function exitFor(state) {
       return EXIT.BLOCKED;
     case STATE.NOT_ADOPTED:
     case STATE.SCOPE_REVIEW_REQUIRED:
+    case STATE.SCOPE_REGISTRY_INVALID:
     case STATE.GATE_MISSING:
     case STATE.GATE_CONFIG_INVALID:
     case STATE.BYPASS_USED:
@@ -97,12 +122,11 @@ export function exitFor(state) {
  * data, with a test asserting it, is the difference between a declared limitation and a comment
  * nobody checks.
  *
- * `SCOPE_REVIEW_REQUIRED` needs a scope registry and applicability detection, which is M3.
  * `BYPASS_USED` needs a source for bypass events; GitHub exposes them through audit-log endpoints
  * this enforcer cannot assume are available, so the semantic is settled in ADR 0003 — a bypass is
  * an event and never a verdict — and the state is not produced until the data can be read.
  *
- * Neither is faked.
+ * It is not faked. M3 made the three scope states reachable, leaving it as the only gap.
  */
 export const REACHABLE = new Set([
   STATE.COMPLIANT,
@@ -111,6 +135,9 @@ export const REACHABLE = new Set([
   STATE.NOT_EVALUATED,
   STATE.BLOCKED_BY_INVARIANT,
   STATE.NOT_ADOPTED,
+  STATE.SCOPE_REVIEW_REQUIRED,
+  STATE.OUT_OF_SCOPE,
+  STATE.SCOPE_REGISTRY_INVALID,
   STATE.GATE_MISSING,
   STATE.GATE_CONFIG_INVALID,
   STATE.STANDARDS_IDENTITY_MISMATCH,

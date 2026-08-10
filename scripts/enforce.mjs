@@ -12,6 +12,10 @@
  *       rooted outside changes the governed pull request controls, and produces no verdict where it
  *       is not.
  *
+ *   M3  Every repository in the governed population has an explicit scope disposition, and the
+ *       absence or staleness of that disposition is visible. Automated detection may require review;
+ *       it cannot make the disposition.
+ *
  * The second half is the constraint that shapes every line below. This program contains no rule, no
  * detector, no applicability logic and no scoring. It verifies an identity, decides whether the
  * target has adopted, invokes the official evaluator, and passes the verdict through. Where it is
@@ -35,14 +39,16 @@ import { fileURLToPath } from "node:url";
 
 import { resolveIdentity } from "./identity.mjs";
 import { assessGate } from "./gate.mjs";
+import { detectFootprint } from "./footprint.mjs";
+import { resolveScope, OUTCOME } from "./scope.mjs";
 import { githubPlatform } from "./platform/github.mjs";
-import { STATE, VERDICT_STATES, PASSING, exitFor } from "./states.mjs";
+import { STATE, VERDICT_STATES, PASSING, REQUIRES_RECORDED_DECISION, exitFor } from "./states.mjs";
 
 const PLATFORMS = { github: githubPlatform };
 
 const HERE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_CACHE = path.join(tmpdir(), "standards-enforcer-cache");
-export const SCHEMA_VERSION = "0.2.0";
+export const SCHEMA_VERSION = "0.3.0";
 
 /** The file whose presence is adoption. Absence is not non-compliance; it is a different state. */
 const POLICY_FILE = "project-policy.yml";
@@ -87,6 +93,17 @@ export function runOfficialEvaluator(standardsDir, target) {
 // ---------------------------------------------------------------------------
 
 function result(state, detail, extra = {}) {
+  // A passing state that is not a verdict is legitimate only when a named human decided it. Checked
+  // here, at the single point every result is constructed, so no future branch can reach the passing
+  // set through an absence — see REQUIRES_RECORDED_DECISION in states.mjs.
+  if (REQUIRES_RECORDED_DECISION.has(state)) {
+    const d = extra.scope?.decision;
+    if (!d?.reviewedBy || !d?.reviewedAt || !d?.reason) {
+      return result(STATE.SCOPE_REVIEW_REQUIRED,
+        `${state} was reached without a complete recorded decision, which makes it an absence rather than an exclusion`,
+        { ...extra, scope: { ...(extra.scope ?? {}), incomplete: true } });
+    }
+  }
   return {
     schemaVersion: SCHEMA_VERSION,
     state,
@@ -97,6 +114,10 @@ function result(state, detail, extra = {}) {
     // Authoritative only when the enforcement root verified. A passing verdict from an advisory run
     // says the standards accepted the repository; it does not say the repository could not have
     // avoided being asked.
+    //
+    // Scope authority is deliberately NOT folded in here. A verified enforcement root makes the
+    // check unavoidable; it says nothing about how certain a partial ML detector is, and letting
+    // scope inherit gate authority would be exactly that inference.
     authoritative: extra.gate?.rooted === true,
   };
 }
@@ -117,6 +138,10 @@ export async function enforce({
   // without it the run is advisory and says so, because an enforcer that stayed silent about not
   // having checked would let an advisory invocation be mistaken for a gate.
   gate = null, platform = null,
+  // Scope. When `scope` is supplied the repository's disposition is resolved against an externally
+  // held registry before anything is evaluated; without it scope is unchecked and NOT_ADOPTED keeps
+  // its weaker M2 meaning — "no policy here" rather than "governed, and not adopted".
+  scope = null, today = new Date().toISOString().slice(0, 10),
 }) {
   if (!target || !existsSync(target)) {
     return result(STATE.ENFORCEMENT_ERROR, `the target ${target ?? "(none given)"} does not exist`);
@@ -162,17 +187,51 @@ export async function enforce({
     gateReport = { checked: true, rooted: true, ...assessed.detail };
   }
 
+  // Scope, before adoption, because scope is what gives NOT_ADOPTED its meaning.
+  //
+  // Detection runs first and decides nothing: it exists so that a recorded decision can be shown to
+  // have gone stale. The disposition itself comes only from the registry — see scope.mjs.
+  let scopeReport = { checked: false, disposition: null, note: "No scope registry was configured. Whether these standards govern this repository is unreviewed here." };
+  if (scope) {
+    const footprint = detectFootprint(target);
+    const resolved = resolveScope({ ...scope, target, footprint, today });
+    const detection = { kinds: footprint.kinds, signals: footprint.signals, assurance: footprint.assurance, note: footprint.note };
+
+    if (resolved.outcome === OUTCOME.REGISTRY_INVALID) {
+      return result(STATE.SCOPE_REGISTRY_INVALID, resolved.why, { standards, gate: gateReport, scope: { checked: true, disposition: null, detection, ...resolved.detail } });
+    }
+    if (resolved.outcome === OUTCOME.REVIEW_REQUIRED) {
+      // Everything unresolved lands here: unreviewed, self-asserted, undated, unreasoned, expired,
+      // basis-less, and stale. All of them are questions for a human, and none of them is a pass.
+      return result(STATE.SCOPE_REVIEW_REQUIRED, resolved.why, { standards, gate: gateReport, scope: { checked: true, disposition: null, detection, ...resolved.detail } });
+    }
+
+    scopeReport = { checked: true, disposition: resolved.outcome, detection, ...resolved.detail };
+    if (resolved.outcome === OUTCOME.OUT_OF_SCOPE) {
+      return result(STATE.OUT_OF_SCOPE,
+        `an authorised reviewer recorded ${scope.repoName ?? scope.repoId} as out of scope for these standards: ${resolved.detail.decision.reason}`,
+        { standards, gate: gateReport, scope: scopeReport });
+    }
+  }
+
   const policyPath = path.join(target, POLICY_FILE);
   if (!existsSync(policyPath)) {
-    // Adoption is observable; whether this repository OUGHT to have adopted is not, and answering
-    // it needs applicability detection and a scope registry that do not exist yet. Reporting
-    // NOT_ADOPTED rather than guessing keeps the two apart — see ADR 0002.
-    return result(STATE.NOT_ADOPTED, `${target} contains no ${POLICY_FILE}, so no standards version governs it`, { standards, gate: gateReport });
+    // Before M3 this could only mean "no policy file here". With a confirmed in-scope disposition it
+    // means something stronger and blockable: the authoritative registry says this repository is
+    // governed, and adoption is absent. The two are reported differently because they are different
+    // findings with different owners — see ADR 0004.
+    const governed = scopeReport.disposition === OUTCOME.IN_SCOPE;
+    return result(STATE.NOT_ADOPTED,
+      governed
+        ? `${scope.repoName ?? scope.repoId} is recorded in scope for these standards by ${scopeReport.decision.reviewedBy} ` +
+          `on ${scopeReport.decision.reviewedAt}, and contains no ${POLICY_FILE}: it is governed and has not adopted`
+        : `${target} contains no ${POLICY_FILE}, so no standards version governs it`,
+      { standards, gate: gateReport, scope: scopeReport, governed });
   }
 
   const run = runOfficialEvaluator(identity.dir, target);
   if (!run.ok) {
-    return result(STATE.ENFORCEMENT_ERROR, run.why, { standards, gate: gateReport });
+    return result(STATE.ENFORCEMENT_ERROR, run.why, { standards, gate: gateReport, scope: scopeReport });
   }
 
   const verdict = run.report.status;
@@ -181,12 +240,13 @@ export async function enforce({
     // says an unknown is not a pass — even when the unknown looks reassuring.
     return result(STATE.ENFORCEMENT_ERROR,
       `the standards release returned the status "${verdict}", which this enforcer does not recognise`,
-      { standards, gate: gateReport, standardsExitCode: run.exitCode, report: run.report });
+      { standards, gate: gateReport, scope: scopeReport, standardsExitCode: run.exitCode, report: run.report });
   }
 
   return result(verdict, describe(run.report), {
     standards,
     gate: gateReport,
+    scope: scopeReport,
     standardsExitCode: run.exitCode,
     // Verbatim. The enforcer reports what the standards said; it does not summarise it into a
     // shape of its own, because a summary is a second definition.
@@ -215,8 +275,9 @@ function describe(report) {
 // ---------------------------------------------------------------------------
 
 function parseArgs(argv) {
-  const args = { target: null, standardsRepo: null, tag: null, sha: null, json: false, cacheRoot: DEFAULT_CACHE, gate: null };
+  const args = { target: null, standardsRepo: null, tag: null, sha: null, json: false, cacheRoot: DEFAULT_CACHE, gate: null, scope: null };
   const g = {};
+  const s = {};
   for (const a of argv) {
     if (a === "--json") args.json = true;
     else if (a.startsWith("--target=")) args.target = path.resolve(a.slice(9));
@@ -230,6 +291,9 @@ function parseArgs(argv) {
     else if (a.startsWith("--gate-check=")) g.expectedCheck = a.slice(13);
     else if (a.startsWith("--trusted-workflow=")) g.trustedWorkflowRef = a.slice(19);
     else if (a === "--require-organisation-root") g.requireOrganisationRoot = true;
+    else if (a.startsWith("--scope-registry=")) s.registryPath = path.resolve(a.slice(17));
+    else if (a.startsWith("--repo-id=")) s.repoId = a.slice(10);
+    else if (a.startsWith("--repo-name=")) s.repoName = a.slice(12);
     else if (!a.startsWith("--") && !args.target) args.target = path.resolve(a);
     else return { error: `unrecognised argument: ${a}` };
   }
@@ -242,6 +306,15 @@ function parseArgs(argv) {
       if (!g[k]) return { error: `${flag} is required once any gate option is given; a half-configured gate is not a gate` };
     }
     args.gate = g;
+  }
+  if (Object.keys(s).length > 0) {
+    // Same discipline as the gate. Scope resolved against a registry with no repository identity, or
+    // an identity with no registry, is not a scope check — it is half of one, and half of a control
+    // reads like the whole of one in a log.
+    for (const [k, flag] of [["registryPath", "--scope-registry"], ["repoId", "--repo-id"]]) {
+      if (!s[k]) return { error: `${flag} is required once any scope option is given; a half-configured scope check is not a scope check` };
+    }
+    args.scope = s;
   }
   return { args };
 }
@@ -261,15 +334,40 @@ function render(r) {
       : "  Enforcement root: not checked");
     if (r.gate.note) out.push(`                    ${r.gate.note}`);
   }
+  if (r.scope) {
+    out.push("");
+    out.push(`  Scope: ${r.scope.checked ? (r.scope.disposition ?? "unresolved — review required") : "not checked"}`);
+    if (r.scope.decision?.reviewedBy) {
+      // When the disposition did not resolve there IS a decision on file, and printing it plainly
+      // would read as though it still applied. Say which it is.
+      out.push(r.scope.disposition
+        ? `         recorded by ${r.scope.decision.reviewedBy} on ${r.scope.decision.reviewedAt}`
+        : `         the decision on file (${r.scope.decision.disposition}, ${r.scope.decision.reviewedBy}, ` +
+          `${r.scope.decision.reviewedAt}) does not currently hold`);
+    }
+    if (r.scope.note) out.push(`         ${r.scope.note}`);
+    if (r.scope.detection) {
+      out.push(`         Detected: ${r.scope.detection.kinds.length ? r.scope.detection.kinds.join(", ") : "no ML evidence"}` +
+        ` (assurance: ${r.scope.detection.assurance})`);
+    }
+  }
   out.push("");
-  out.push(r.passing
-    ? "  The standards accepted this repository. That is what the standards examined, not everything."
-    : "  Not a passing state. A merge gated on this enforcer must not proceed.");
+  if (r.state === STATE.OUT_OF_SCOPE) {
+    // The one passing state that is not a verdict. It must never read as though the standards looked
+    // at this repository and were satisfied.
+    out.push("  These standards do not govern this repository, by recorded human decision.");
+    out.push("  Nothing was evaluated. This is an exclusion, not a pass.");
+    out.push(`  It stands on ${r.scope?.standsOn ?? "a recorded review"}.`);
+  } else {
+    out.push(r.passing
+      ? "  The standards accepted this repository. That is what the standards examined, not everything."
+      : "  Not a passing state. A merge gated on this enforcer must not proceed.");
+  }
   if (r.passing && r.authoritative === false) {
     out.push("  ADVISORY: no enforcement root was verified, so this result does not establish that");
     out.push("  the repository could not have avoided being asked.");
   }
-  if (!r.isStandardsVerdict && r.state !== STATE.ENFORCEMENT_ERROR) {
+  if (!r.isStandardsVerdict && r.state !== STATE.ENFORCEMENT_ERROR && r.state !== STATE.OUT_OF_SCOPE) {
     out.push("  This is an enforcement state, not a verdict: the standards reached no conclusion here.");
   }
   return out.join("\n") + "\n";

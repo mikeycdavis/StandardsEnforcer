@@ -1,0 +1,73 @@
+{
+  "$comment": [
+    "The scope registry. This file must live where the repositories it governs cannot write to it —",
+    "a separate, restricted repository, alongside the trusted enforcement workflow. StandardsEnforcer",
+    "refuses a registry located inside the repository being assessed.",
+    "",
+    "Entries are keyed by immutable platform identity, never by name. `acme/moneyball` can be renamed,",
+    "transferred, deleted and recreated by somebody else; a decision that follows a name follows",
+    "whoever holds the name today. `name` is present for humans and is never matched on.",
+    "",
+    "`reviewedFootprint` is the evidence basis: the set of ML signal kinds observed at review time and",
+    "its digest. It is what makes a decision able to go stale, and a decision that cannot go stale",
+    "cannot be trusted to be fresh. Obtain it with `node scripts/footprint.mjs <dir>`.",
+    "",
+    "An out-of-scope entry needs exactly the same quality of record as an in-scope one. An exclusion",
+    "is a governance decision, not an absence of evidence."
+  ],
+  "schemaVersion": "1.0.0",
+
+  "authorisedReviewers": [
+    "ml-governance@acme.example",
+    "j.okafor@acme.example"
+  ],
+
+  "repositories": {
+    "github:1024871": {
+      "name": "acme/moneyball",
+      "machineLearning": {
+        "disposition": "in-scope",
+        "reviewedBy": "ml-governance@acme.example",
+        "reviewedAt": "2026-08-09",
+        "reason": "Trains and evaluates gradient-boosted models against a held-out season and ships the result to production ranking.",
+        "evidence": [
+          "src/train.py fits LightGBM against a temporal split",
+          "artifacts/eval/2026-07-report.md reports held-out metrics"
+        ],
+        "revisitWhen": [
+          "training moves out of this repository",
+          "the repository becomes a client of a hosted model rather than a trainer of its own"
+        ],
+        "reviewedFootprint": {
+          "kinds": ["dataset-artifact", "experiment-tracking", "training-call-shape", "training-framework-dependency", "training-framework-import"],
+          "digest": "REPLACE-WITH-OUTPUT-OF-footprint.mjs"
+        },
+        "expiresAt": null
+      }
+    },
+
+    "github:2048113": {
+      "name": "acme/support-triage",
+      "machineLearning": {
+        "disposition": "out-of-scope",
+        "reviewedBy": "j.okafor@acme.example",
+        "reviewedAt": "2026-08-09",
+        "reason": "Consumes a hosted inference API to classify tickets. Trains nothing, evaluates nothing, holds no dataset and selects no model, so no standard in the release has a subject here.",
+        "evidence": [
+          "src/triage.py calls a hosted completion endpoint",
+          "no training code, no evaluation harness, no committed dataset or model"
+        ],
+        "revisitWhen": [
+          "the repository begins fine-tuning or training any model",
+          "an offline evaluation harness is added",
+          "a dataset is committed for model development rather than for fixtures"
+        ],
+        "reviewedFootprint": {
+          "kinds": ["inference-client"],
+          "digest": "REPLACE-WITH-OUTPUT-OF-footprint.mjs"
+        },
+        "expiresAt": null
+      }
+    }
+  }
+}

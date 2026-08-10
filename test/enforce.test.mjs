@@ -22,7 +22,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { enforce, runOfficialEvaluator } from "../scripts/enforce.mjs";
-import { STATE, PASSING, VERDICT_STATES, REACHABLE, exitFor, EXIT } from "../scripts/states.mjs";
+import { STATE, PASSING, VERDICT_STATES, REQUIRES_RECORDED_DECISION, REACHABLE, exitFor, EXIT } from "../scripts/states.mjs";
 import { verifyTagResolvesTo, resolveIdentity } from "../scripts/identity.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -64,9 +64,18 @@ test("INV-E1 · an unrecognised state is not a pass", () => {
   assert.notEqual(exitFor(undefined), EXIT.OK);
 });
 
-test("INV-E1 · the passing set is exactly two states and both are standards verdicts", () => {
-  assert.deepEqual([...PASSING].sort(), ["COMPLIANT", "COMPLIANT_WITH_EXCEPTIONS"]);
-  for (const s of PASSING) assert.ok(VERDICT_STATES.has(s), `${s} must be something the standards said`);
+test("INV-E1 · the passing set is closed, and every member is a verdict or a recorded decision", () => {
+  // Written as "exactly two states, both standards verdicts" through M2. M3 widened it to three by
+  // adding OUT_OF_SCOPE, and this guard fired — correctly, on a real change. Relocking it rather
+  // than loosening it: the enumeration is still exact, and the second clause is now the bound. A
+  // passing state must either be something the standards said, or a decision a named human made.
+  // Nothing can join this set by being an absence, which is the whole content of INV-E1.
+  assert.deepEqual([...PASSING].sort(), ["COMPLIANT", "COMPLIANT_WITH_EXCEPTIONS", "OUT_OF_SCOPE"]);
+  for (const s of PASSING) {
+    assert.ok(VERDICT_STATES.has(s) || REQUIRES_RECORDED_DECISION.has(s),
+      `${s} must be something the standards said, or a decision someone is accountable for`);
+  }
+  assert.deepEqual([...REQUIRES_RECORDED_DECISION], ["OUT_OF_SCOPE"]);
 });
 
 test("verdict states carry the standards system's own exit codes, unaltered", () => {
@@ -83,7 +92,8 @@ test("verdict states carry the standards system's own exit codes, unaltered", ()
 
 test("the states the implementation cannot reach are declared, not faked", () => {
   const unreachable = Object.values(STATE).filter((s) => !REACHABLE.has(s));
-  assert.deepEqual(unreachable.sort(), ["BYPASS_USED", "SCOPE_REVIEW_REQUIRED"],
+  // Two entries through M2; M3 made the scope states reachable and left one.
+  assert.deepEqual(unreachable.sort(), ["BYPASS_USED"],
     "the vocabulary is the contract; the implementation is not, and the gap is data rather than a comment");
 });
 
