@@ -106,13 +106,40 @@ not-passing.
 
 ## M2's dependency list
 
-M2 cannot satisfy its acceptance condition for these four until their owners act. Each is a small,
-additive change in the pack, and none is a standards change:
+M2 cannot satisfy its acceptance condition for these four until their owners act. They are classified
+rather than listed, because "four packs weren't ready" flattens three different problems with three
+different remedies and three different owners:
 
-1. **EngineeringStandards** — tag a release. `VERSION` says `2.0.1`; no tag exists.
-2. **HealthAndFitnessAndNutritionStandards** — tag a release. `VERSION` says `1.0.0-dev`.
-3. **FinancialStandards** — fix out-of-tree target path resolution. Ships as `v1.1.1`.
-4. **PredictionStandards** — publish a top-level authoritative status in `check --json`.
+| Pack | Integration status | Remedy |
+|---|---|---|
+| EngineeringStandards | `BLOCKED_RELEASE_IDENTITY` | Tag the exact intended released commit. **No code change** merely to integrate with the enforcer. |
+| HealthAndFitnessAndNutritionStandards | `BLOCKED_RELEASE_IDENTITY` | First resolve whether `1.0.0-dev` is releasable at all. **Do not create `v1.0.0` because M2 wants a tag** — release identity must tell the truth. |
+| FinancialStandards | `BLOCKED_EVALUATOR` | Repair out-of-tree target handling, with regression tests for same-drive and cross-drive paths; run the unchanged v1.1 isolation gate; ship `v1.1.1`. |
+| PredictionStandards | `BLOCKED_RESULT_CONTRACT` | Compute and expose the authoritative top-level `status` inside the existing evaluation path, with tests proving it agrees with the existing aggregate and exit behaviour. **Do not redesign its vocabulary** for the enforcer. |
+
+These are Phase 2 dependency classifications, **not** new public `STATE` values — the enforcer's state
+vocabulary is a frozen surface and none of these is a state it reports about a repository.
+
+Each pack gets its adapter only after its prerequisite is independently satisfied. The remedies are
+deliberately the smallest possible: an evaluator that claims to accept a target must actually accept an
+out-of-tree absolute one, and a pack that knows how its counters become a process disposition must
+publish the corresponding status. Neither is compensated for in the adapter.
+
+## Milestone status
+
+**M2 is not partially complete.** Four of eight is not a weaker form of *every applicable standards
+result is produced by that pack's pinned authoritative evaluator*.
+
+```text
+M2 implementation: progressing
+contract schema:   frozen from Phase 1 evidence
+
+READY                          BLOCKED
+✓ Betting                      ○ Engineering — immutable identity
+✓ MachineLearning              ○ Health      — immutable identity
+✓ Mathematics                  ○ Financial   — evaluator defect
+✓ Innovation                   ○ Prediction  — missing authoritative status
+```
 
 Phases 2 and 3 proceed for the four READY packs. `tag: HEAD` is not introduced and
 `(repository, tag, SHA)` is not weakened to accommodate the two untagged ones.
