@@ -11,6 +11,17 @@ records why that boundary is enforced by a test rather than by intention.
 
 Zero dependencies. Node 18 or later. Nothing to install.
 
+```bash
+npm test
+```
+
+Run it that way — bare `node --test`, which discovers the suite itself. On Node 24.15.0 under
+Windows, passing the directory explicitly as `node --test test/` fails with `MODULE_NOT_FOUND`
+before any test runs, so a green suite and a broken invocation look alike to anyone who does not
+read the output. Recorded here as an observation about this environment. The directory form appears
+in other repositories' documentation; whether it fails there is a separate question that would need
+reproducing against those releases before it is a finding about them.
+
 ---
 
 ## What it claims, and nothing wider
@@ -55,6 +66,11 @@ API and was judged not worth creating for this. Its protocol is written and
 [dormant](artifacts/evidence/2026-08-10-m5-dormant.md) — untested rather than disproven, and it stays
 that way until an organisation-level environment is available. A repeat on a personal repository
 would not answer the question and will not be labelled as though it had.
+
+The enforcement track therefore has **no unblocked evidence-driven work**, and is waiting on the
+composition track rather than looking for a mechanism that returns green. Opening the next
+investigation because this one stopped would be a search for a passing result, which is the failure
+mode every record here exists to prevent.
 
 ## The invariant
 
