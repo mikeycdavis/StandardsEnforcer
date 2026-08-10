@@ -96,6 +96,68 @@ test("$absentByDesign is recognised as an annotation, not tolerated by a permiss
 });
 
 /**
+ * The {target} placeholder, from both sides.
+ *
+ * The schema carried `contains: {"const": "{target}"}` until 2026-08-10 — an argument that IS the
+ * placeholder — which admitted only Betting's positional form and mechanically rejected the three
+ * packs that embed it as `--dir={target}`. Nothing noticed for as long as nothing executed the
+ * schema.
+ *
+ * Correcting `const` to a substring `pattern` fixes that specific error and would happily be replaced
+ * by a different misreading of "contains": too loose, and `{targets}` or `{ target }` passes as a
+ * placeholder the enforcer will never substitute, reaching the pack as literal text. So both
+ * legitimate forms are pinned as fixtures, and the near-misses are pinned beside them.
+ */
+
+const LEGITIMATE_TARGET_FORMS = {
+  "positional, as Betting declares it": ["validate", "{target}", "--json"],
+  "embedded in a flag, as MachineLearning and Mathematics declare it": [
+    "evaluate",
+    "--dir={target}",
+    "--json",
+  ],
+  "embedded in a space-separated flag value": ["check", "--dir", "{target}", "--json"],
+  "embedded with a different flag name": ["validate", "--path={target}", "--json"],
+};
+
+for (const [name, args] of Object.entries(LEGITIMATE_TARGET_FORMS)) {
+  test(`{target} ${name} is accepted`, () => {
+    assert.deepEqual(validateAdapter(mutate((d) => (d.evaluation.arguments = args))), []);
+  });
+}
+
+const TARGET_NEAR_MISSES = {
+  "pluralised": ["validate", "--dir={targets}", "--json"],
+  "padded with spaces": ["validate", "--dir={ target }", "--json"],
+  "capitalised": ["validate", "--dir={Target}", "--json"],
+  "unclosed": ["validate", "--dir={target", "--json"],
+  "unopened": ["validate", "--dir=target}", "--json"],
+  "shell-style": ["validate", "--dir=$target", "--json"],
+  "doubled braces": ["validate", "--dir={{target}}", "--json"],
+  "named but not substituted": ["validate", "--dir=TARGET", "--json"],
+};
+
+for (const [name, args] of Object.entries(TARGET_NEAR_MISSES)) {
+  test(`{target} ${name} is rejected`, () => {
+    const violations = validateAdapter(mutate((d) => (d.evaluation.arguments = args)));
+    assert.ok(violations.length > 0, `${name} was accepted as a target placeholder`);
+  });
+}
+
+test("the doubled-brace near-miss is caught as an unknown placeholder, not merely as a missing one", () => {
+  // `{{target}}` contains the substring `{target}`, so `contains` alone is satisfied and a validator
+  // resting on it would pass this. What catches it is the placeholder scan: `{{target}` is not a
+  // placeholder the enforcer substitutes, so the argument would reach the pack with stray braces.
+  const violations = validateAdapter(
+    mutate((d) => (d.evaluation.arguments = ["validate", "--dir={{target}}", "--json"])),
+  );
+  assert.ok(
+    violations.some((v) => v.includes("does not substitute")),
+    `expected an unknown-placeholder violation, got:\n${violations.join("\n")}`,
+  );
+});
+
+/**
  * The hostile mutations. Each names the defect it plants and the substring the report must contain,
  * so a violation message degrading into something unactionable fails the test.
  */
