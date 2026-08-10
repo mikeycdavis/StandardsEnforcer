@@ -8,16 +8,27 @@ Nothing here is inferred from a sibling pack.
 
 ## Identities
 
-| Pack | Ref read | SHA | `VERSION` | `package.json` version |
-|---|---|---|---|---|
-| EngineeringStandards | **`HEAD` — no tag exists** | `f1a03c9` | `2.0.1` | `2.0.0` |
-| FinancialStandards | `v1.1.0` | `f0216d9` | `1.1.0` | `1.0.0` |
-| BettingStandards | `v1.0.0` | `f47bdf7` | `1.0.0` | `1.0.0` |
-| MachineLearningStandards | `v1.4.0` | `4860e34` | `1.4.0` | `1.4.0` |
-| MathematicsStandards | `v1.0.0` | `dc29992` | `1.0.0` | `1.0.0` |
-| PredictionStandards | `v1.1.0` | `72b8f43` | `1.1.0` | `1.1.0` |
-| InnovationStandards | `v1.0.1` | `4950e3f` | `1.0.1` | `1.0.0` |
-| HealthAndFitnessAndNutritionStandards | **`HEAD` — no tag exists** | `6c2f447` | `1.0.0-dev` | `1.0.0-dev` |
+**Corrected 2026-08-09.** This column originally recorded `git rev-parse <tag>` — the **annotated tag
+object's** SHA. The enforcer resolves identity with `git rev-list -n 1 <tag>`, which dereferences to
+the commit, because that is what a release identity means (`scripts/identity.mjs:54-56`). Every
+original value would have been rejected by `verifyTagResolvesTo` as a mismatch. The commit SHAs are
+below; the superseded tag-object SHAs are kept in the last column so the correction is visible rather
+than silent. See [the release record](2026-08-09-adapter-releases.md).
+
+| Pack | Ref read | Commit SHA | `VERSION` | `package.json` version | was recorded |
+|---|---|---|---|---|---|
+| EngineeringStandards | **`HEAD` — no tag exists** | `f1a03c9` | `2.0.1` | `2.0.0` | — |
+| FinancialStandards | `v1.1.0` | `0d0b271` | `1.1.0` | `1.0.0` | ~~`f0216d9`~~ |
+| BettingStandards | `v1.0.0` | `a4e7e68` | `1.0.0` | `1.0.0` | ~~`f47bdf7`~~ |
+| MachineLearningStandards | `v1.4.0` | `6bfd078` | `1.4.0` | `1.4.0` | ~~`4860e34`~~ |
+| MathematicsStandards | `v1.0.0` | `85b3a11` | `1.0.0` | `1.0.0` | ~~`dc29992`~~ |
+| PredictionStandards | `v1.1.0` | `ebe232b` | `1.1.0` | `1.1.0` | ~~`72b8f43`~~ |
+| InnovationStandards | `v1.0.1` | `b914efc` | `1.0.1` | `1.0.0` | ~~`4950e3f`~~ |
+| HealthAndFitnessAndNutritionStandards | **`HEAD` — no tag exists** | `6c2f447` | `1.0.0-dev` | `1.0.0-dev` | — |
+
+Three of these have since been superseded by releases carrying the adapter contract — Betting
+`v1.0.1`, MachineLearning `v1.4.1`, Mathematics `v1.0.1`. The rows above are left at the refs this
+inventory was taken from; the current pinned identities are in the release record.
 
 ## Invocation
 

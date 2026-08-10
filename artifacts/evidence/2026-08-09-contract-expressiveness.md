@@ -143,3 +143,16 @@ READY                          BLOCKED
 
 Phases 2 and 3 proceed for the four READY packs. `tag: HEAD` is not introduced and
 `(repository, tag, SHA)` is not weakened to accommodate the two untagged ones.
+
+### Superseded for Innovation — three READY, five blocked
+
+Publishing the contracts exposed a distinction this table missed: **a contract on `main` is not an
+integration**, because the enforcer reads the declaration from the pinned checkout. All four READY
+packs had published to `main` only, and none of their existing tags carried a contract.
+
+Betting, MachineLearning and Mathematics cut patch releases carrying theirs — `v1.0.1`, `v1.4.1`,
+`v1.0.1`. Innovation could not: `main` carries normative and emitted-output changes both beneath and
+above its adapter commit, so no tag exists that could honestly be described as interoperability-only.
+It moves to `BLOCKED_RELEASE_IDENTITY` on its own grounds; it did not replace another entry, and the
+blocked count rose from four to five. Full record in
+[the release record](2026-08-09-adapter-releases.md).
