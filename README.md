@@ -21,7 +21,7 @@ Zero dependencies. Node 18 or later. Nothing to install.
 >
 > **M2** — For a repository already adopted, it determines whether enforcement of that release is
 > rooted outside changes the governed pull request controls, and produces no verdict where it is
-> not.
+> not. **The GitHub half of this is falsified** — see below.
 >
 > **M3** — Every repository in the governed population has an explicit scope disposition, and the
 > absence or staleness of that disposition is visible. Automated detection may require review; it
@@ -34,6 +34,21 @@ node scripts/enforce.mjs \
   --tag=v1.4.0 \
   --sha=6bfd0789e50196da3ff666594ff5b981b8ae5763
 ```
+
+## The load-bearing claim is open
+
+> **StandardsEnforcer currently has no live-validated authoritative GitHub enforcement root for
+> GitHub Actions.**
+
+M4 ran the gate semantics against a real repository and found that M2's central mitigation does not
+work: a required status check bound to the GitHub Actions app is satisfiable by the governed pull
+request, because every workflow in the repository runs as that app. `integration_id` is the identity
+of the app that produced a check, not of the enforcement implementation.
+
+The gate refuses that configuration now. The candidate remedy — organisation required-workflow rules,
+which bind a repository, a path and a commit — is **not live validated**, and is not being described
+as a solution until it is. [M2 superseded](artifacts/evidence/2026-08-10-m2-superseded.md) records
+what still stands and what does not.
 
 ## The invariant
 
@@ -176,3 +191,7 @@ artifacts/evidence/     what was actually run, and what it produced
   adversarial cases, including the spoofable-check finding
 - [M3 scope registry](artifacts/evidence/2026-08-09-m3-scope-registry.md) — the detection fixtures,
   the staleness model, and a repository trying to declare itself ungoverned
+- [M4 live GitHub](artifacts/evidence/2026-08-10-m4-live-github.md) — the five cases against a real
+  repository, and the pull request that satisfied an app-bound requirement
+- [M2 superseded](artifacts/evidence/2026-08-10-m2-superseded.md) — what M4 falsified, and what
+  survives
