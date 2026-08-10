@@ -156,3 +156,9 @@ above its adapter commit, so no tag exists that could honestly be described as i
 It moves to `BLOCKED_RELEASE_IDENTITY` on its own grounds; it did not replace another entry, and the
 blocked count rose from four to five. Full record in
 [the release record](2026-08-09-adapter-releases.md).
+
+The table above is also superseded in its **remedy** column for two packs. Financial and Prediction
+were each described by the single defect that blocked expressiveness, but neither has a released
+contract either — so repairing the evaluator alone would leave both exactly where Innovation now is.
+Both need their repair **and** a release containing the contract. The release record states the five
+dependencies in the form that keeps each reason.

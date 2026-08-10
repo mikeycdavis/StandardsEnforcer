@@ -67,8 +67,20 @@ describe. Its 131 tests pass and its contract and fidelity test are committed an
 release identity, not the integration, that is outstanding.
 
 **Integration status: `BLOCKED_RELEASE_IDENTITY`** — the same classification as Engineering and
-Health, reached by a different route. Engineering has no tag, Health has no truthful version to tag,
-and Innovation has a tag whose successor cannot be described as this release would need it described.
+Health, reached by a third route:
+
+```text
+Engineering   no tag at all
+Health        no truthful version to tag
+Innovation    a tag exists, but no truthful released identity currently
+              contains the invocation contract
+```
+
+Innovation's next legitimate release can carry the contract naturally, alongside whatever those four
+post-`v1.0.1` commits actually mean. M2 waits. The alternative — cherry-picking the declaration onto
+an old tree, or manufacturing an adapter-only commit to make M2 symmetrical — would be inventing a
+release that never happened, and the adapter being non-normative does not make the commits
+surrounding it non-normative.
 
 ## Correction to the Phase 0 inventory
 
@@ -88,9 +100,36 @@ wrongness is currently load-bearing. Corrected in that document.
 betting          v1.0.1  e0a9fb358440cd10e2051fb50ddfcd178dbf67d1  contract present
 machine-learning v1.4.1  f128dac8358c7e6e0f18f6d58dbf6e91d70ae0ba  contract present
 mathematics      v1.0.1  f21ea832907f0f5ae70f30076c06084eb3bf8237  contract present
-innovation       —       —                                         BLOCKED_RELEASE_IDENTITY
 ```
 
-**M2 remains open.** Three genuinely READY integrations is not a weaker form of the acceptance
-condition, and the count of blocked packs is unchanged at four — Innovation replaced nothing, it
-joined the list on its own grounds.
+Each of these three is `(repository, tag, commit SHA)` with the contract inside the tagged tree. The
+SHAs are the commits `git rev-list -n 1 <tag>` yields, not the annotated tag objects — see
+[the identity correction](2026-08-09-interface-inventory.md) and `test/identity.test.mjs`.
+
+## Standing
+
+READY and BLOCKED flattens five different situations into one word, and the remedies are not
+interchangeable. Stated as dependencies, each keeps its reason:
+
+```text
+READY
+  Betting             v1.0.1
+  MachineLearning     v1.4.1
+  Mathematics         v1.0.1
+
+DEPENDENCIES
+  Innovation          release containing the contract
+  Engineering         immutable release identity
+  Health              truthful immutable release identity
+  Financial           evaluator repair + release containing the contract
+  Prediction          authoritative status + release containing the contract
+```
+
+Two of the five now need **two** things, which the single word hid. Financial's path-resolution
+defect and Prediction's missing top-level status were each described as the whole remedy; neither
+pack has a released contract either, so repairing the evaluator alone would leave both exactly where
+Innovation is.
+
+**M2 remains open.** Three genuinely READY integrations is not a weaker form of *every applicable
+standards result is produced by that pack's pinned authoritative evaluator*. Innovation replaced
+nothing — it joined the dependency list on its own grounds, and the list grew from four to five.
