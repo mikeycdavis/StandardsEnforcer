@@ -50,6 +50,12 @@ which bind a repository, a path and a commit — is **not live validated**, and 
 as a solution until it is. [M2 superseded](artifacts/evidence/2026-08-10-m2-superseded.md) records
 what still stands and what does not.
 
+The experiment that would settle it needs a GitHub organisation, which cannot be created through any
+API and was judged not worth creating for this. Its protocol is written and
+[dormant](artifacts/evidence/2026-08-10-m5-dormant.md) — untested rather than disproven, and it stays
+that way until an organisation-level environment is available. A repeat on a personal repository
+would not answer the question and will not be labelled as though it had.
+
 ## The invariant
 
 > **INV-E1 — StandardsEnforcer must never convert an unknown, missing, unverifiable, or failed
