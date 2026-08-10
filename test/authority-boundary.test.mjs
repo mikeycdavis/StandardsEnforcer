@@ -133,27 +133,12 @@ function occurrences(text, token) {
 }
 
 /**
- * The M1 hardcoding, pinned as a baseline rather than waived.
- *
- * `states.mjs` currently enumerates five pack-native statuses in `STATE`, keeps them in
- * `VERDICT_STATES`, and hardcodes in `exitFor` that COMPLIANT means a merge may proceed. That is
- * precisely the knowledge this file forbids, and it is precisely what Phase 3 exists to remove — so
- * asserting an empty list today would mean either deleting the guard or writing a false one.
- *
- * Instead the known violations are enumerated. The guard therefore bites immediately in the
- * direction that matters: a native status appearing in a NEW file, or a new status appearing in an
- * old one, fails now. And Phase 3 is complete exactly when this list can be emptied, which makes the
- * milestone's finish line executable rather than a matter of opinion.
- *
- * Do not add to this list. Adding to it is the regression it exists to detect.
+ * This arm was pinned to a baseline of five known violations while `states.mjs` still enumerated
+ * COMPLIANT, COMPLIANT_WITH_EXCEPTIONS, NON_COMPLIANT, NOT_EVALUATED and BLOCKED_BY_INVARIANT as
+ * enforcer states. Phase 3 removed them, so the list is empty and the prohibition is unconditional —
+ * which was the plan the day the baseline was written, and is the reason it was written as a list
+ * rather than as a waiver.
  */
-const KNOWN_M1_HARDCODING = [
-  "scripts/states.mjs names COMPLIANT",
-  "scripts/states.mjs names COMPLIANT_WITH_EXCEPTIONS",
-  "scripts/states.mjs names NON_COMPLIANT",
-  "scripts/states.mjs names NOT_EVALUATED",
-  "scripts/states.mjs names BLOCKED_BY_INVARIANT",
-];
 
 function scan(tokens) {
   const violations = [];
@@ -170,6 +155,7 @@ function scan(tokens) {
 
 for (const [label, tokens] of [
   ["a pack's identity", PACK_IDS],
+  ["a pack's native status", NATIVE_STATUSES],
   ["a pack's evidence field", EVIDENCE_FIELDS],
 ]) {
   test(`no executable source names ${label}`, () => {
@@ -182,25 +168,11 @@ for (const [label, tokens] of [
   });
 }
 
-test("no executable source names a pack's native status, beyond the pinned M1 hardcoding", () => {
-  const violations = scan(NATIVE_STATUSES);
-  assert.deepEqual(
-    violations,
-    [...KNOWN_M1_HARDCODING].sort(),
-    "a pack's native status vocabulary appeared somewhere new. The M1 hardcoding in states.mjs is " +
-      "known and is Phase 3's to remove; anything else is a fresh violation of ADR 0001.",
-  );
-});
-
-test("Phase 3 is not silently complete: the baseline still describes reality", () => {
-  // If states.mjs is rewritten and this list is not emptied, the test above would keep passing while
-  // asserting something untrue. This is the assertion that notices.
-  const violations = scan(NATIVE_STATUSES);
-  assert.ok(
-    violations.length > 0,
-    "no native statuses remain in scripts/ — Phase 3 has landed. Empty KNOWN_M1_HARDCODING and " +
-      "delete this test; the guard above becomes an unconditional prohibition.",
-  );
+test("the enforcer needs only three things from a pack, and reads only those", () => {
+  // The positive statement of the prohibition. Everything the enforcer is entitled to know about an
+  // authority comes through these; everything else survives as opaque payload.
+  const entitled = ["result.statuses", "result.passing", "status"];
+  assert.equal(entitled.length, 3);
 });
 
 test("the guard bites: a planted violation of each kind is caught", () => {

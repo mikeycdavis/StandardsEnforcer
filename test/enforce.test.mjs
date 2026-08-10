@@ -22,12 +22,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { enforce, runOfficialEvaluator } from "../scripts/enforce.mjs";
-import { STATE, PASSING, VERDICT_STATES, REQUIRES_RECORDED_DECISION, REACHABLE, exitFor, EXIT } from "../scripts/states.mjs";
+import { STATE, PASSING, REQUIRES_RECORDED_DECISION, REACHABLE, exitFor, EXIT } from "../scripts/states.mjs";
 import { verifyTagResolvesTo, resolveIdentity } from "../scripts/identity.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MLS = "F:/Repos/MachineLearningStandards";
-const TAG = "v1.4.0";
+const TAG = "v1.5.0";
 const CACHE = path.join(tmpdir(), "standards-enforcer-test-cache");
 
 const git = (args, cwd) => spawnSync("git", args, { encoding: "utf8", cwd, windowsHide: true });
@@ -70,24 +70,50 @@ test("INV-E1 · the passing set is closed, and every member is a verdict or a re
   // than loosening it: the enumeration is still exact, and the second clause is now the bound. A
   // passing state must either be something the standards said, or a decision a named human made.
   // Nothing can join this set by being an absence, which is the whole content of INV-E1.
-  assert.deepEqual([...PASSING].sort(), ["COMPLIANT", "COMPLIANT_WITH_EXCEPTIONS", "OUT_OF_SCOPE"]);
+  // 0.4.0 narrowed it back to one. The two standards verdicts left, because a verdict is no longer
+  // an enforcer state at all: EVALUATED passes only when the pack's own contract says the status it
+  // returned is passing, which is a fact about that release rather than a name enumerable here.
+  // What remains is the bound — every member must be a decision a named human made.
+  assert.deepEqual([...PASSING].sort(), ["OUT_OF_SCOPE"]);
   for (const s of PASSING) {
-    assert.ok(VERDICT_STATES.has(s) || REQUIRES_RECORDED_DECISION.has(s),
-      `${s} must be something the standards said, or a decision someone is accountable for`);
+    assert.ok(REQUIRES_RECORDED_DECISION.has(s),
+      `${s} may not pass without being a decision someone is accountable for`);
   }
   assert.deepEqual([...REQUIRES_RECORDED_DECISION], ["OUT_OF_SCOPE"]);
+  assert.equal(PASSING.has(STATE.EVALUATED), false,
+    "EVALUATED must not pass by being listed; it passes only by the pack's declared set");
 });
 
-test("verdict states carry the standards system's own exit codes, unaltered", () => {
-  // Passing them through rather than re-deriving them is what "do not reinterpret" means to a
-  // caller that sees only a status. These four are MachineLearningStandards' documented contract.
-  assert.equal(exitFor(STATE.COMPLIANT), 0);
-  assert.equal(exitFor(STATE.NON_COMPLIANT), 1);
-  assert.equal(exitFor(STATE.NOT_EVALUATED), 2);
-  assert.equal(exitFor(STATE.BLOCKED_BY_INVARIANT), 3);
-  // And the enforcer's own code is one the standards system never returns.
-  assert.equal(exitFor(STATE.NOT_ADOPTED), 4);
-  assert.equal(exitFor(STATE.STANDARDS_IDENTITY_MISMATCH), 4);
+test("the process projection is three codes, and none of them interprets a standard", () => {
+  // Through 0.3.0 this asserted that MachineLearningStandards' four exit codes travelled through
+  // unaltered — COMPLIANT 0, NON_COMPLIANT 1, NOT_EVALUATED 2, BLOCKED_BY_INVARIANT 3. That read as
+  // fidelity and was the opposite: knowing that NOT_EVALUATED means "no conclusion" and
+  // BLOCKED_BY_INVARIANT means "stop" is knowing what a pack's verdict MEANS, which is exactly what
+  // ADR 0001 forbids. Moving the strings out of states.mjs while keeping that mapping would have
+  // been cosmetic.
+  //
+  // `1` is "an authoritative evaluation completed and did not establish passing" — deliberately NOT
+  // "non-compliant". A pack's NOT_EVALUATED lands here without this enforcer calling it a failure.
+  assert.equal(exitFor(STATE.EVALUATED, true), EXIT.OK);
+  assert.equal(exitFor(STATE.EVALUATED, false), EXIT.NOT_PASSING);
+
+  // 4 is reserved for the enforcer's own inability to establish enforcement.
+  assert.equal(exitFor(STATE.NOT_ADOPTED), EXIT.NOT_ENFORCEABLE);
+  assert.equal(exitFor(STATE.STANDARDS_IDENTITY_MISMATCH), EXIT.NOT_ENFORCEABLE);
+  assert.equal(exitFor(STATE.ENFORCEMENT_ERROR), EXIT.NOT_ENFORCEABLE);
+
+  assert.deepEqual(Object.values(EXIT).sort(), [0, 1, 4]);
+});
+
+test("no native status can reach exit 2 or 3 by any route", () => {
+  // The compatibility assertion for a deliberately breaking change. Those codes are gone, and no
+  // spelling of a pack's vocabulary may resurrect them.
+  const spellings = ["COMPLIANT", "NOT_EVALUATED", "BLOCKED_BY_INVARIANT", "SUPPORTED", "BANANA"];
+  for (const s of [...spellings, ...Object.values(STATE), undefined, null]) {
+    for (const passing of [true, false]) {
+      assert.ok([0, 1, 4].includes(exitFor(s, passing)), `${s} produced an exit code outside 0/1/4`);
+    }
+  }
 });
 
 test("the states the implementation cannot reach are declared, not faked", () => {
@@ -171,7 +197,12 @@ test("adoption · NOT_ADOPTED does not claim the repository should have adopted"
 
 test("oracle · MachineLearningStandards under its own v1.4.0 reproduces the recorded verdict", { skip: !MLS_AVAILABLE && "MachineLearningStandards not on disk" }, async () => {
   const r = await enforce({ ...identity(), target: MLS });
-  assert.equal(r.state, STATE.COMPLIANT, "the recorded official result for this repository at v1.4.0");
+  // At v1.4.0 this asserted COMPLIANT. v1.5.0 repaired the false green, and this repository declares
+  // every domain rule not-applicable — so the honest official result is now NOT_EVALUATED, which its
+  // contract does not declare passing. The enforcer reports that without knowing what the word means.
+  assert.equal(r.state, STATE.EVALUATED);
+  assert.equal(r.authority.status, "NOT_EVALUATED");
+  assert.equal(r.passing, false);
   assert.equal(r.standards.verified, true);
   assert.equal(r.standards.sha, SHA);
 });
@@ -204,8 +235,10 @@ test("oracle · a non-compliant target reports non-compliant, with the official 
     await writeFile(path.join(dir, "project-policy.yml"), 'standardVersion: "1.0.0"\nproject: "t"\nexceptions: []\n');
 
     const r = await enforce({ ...identity(), target: dir });
-    assert.equal(r.state, STATE.NON_COMPLIANT);
-    assert.equal(exitFor(r.state), EXIT.NON_COMPLIANT);
+    assert.equal(r.state, STATE.EVALUATED);
+    assert.equal(r.authority.status, "NON_COMPLIANT");
+    assert.equal(r.passing, false);
+    assert.equal(exitFor(r.state, r.passing), EXIT.NOT_PASSING);
 
     const id = resolveIdentity({ repo: MLS, tag: TAG, sha: SHA, cacheRoot: CACHE });
     const direct = runOfficialEvaluator(id.dir, dir);
@@ -230,4 +263,32 @@ test("the enforcer contains no rule, no detector, and no scoring of its own", as
       assert.doesNotMatch(code, forbidden, `${f} looks like it is deciding a standards question`);
     }
   }
+});
+
+test("oracle · the specimen that found the false green does not pass, and no ML field is consulted", { skip: !MLS_AVAILABLE && "MachineLearningStandards not on disk" }, async () => {
+  // The exact hostile shape: a governed target with no ML work in it. Against v1.4.1 this pack
+  // returned COMPLIANT with denominator.scored 0 of 46 applicable, and the enforcer would have
+  // called it a pass. The defect was repaired in the authority, so this passes now because
+  // MachineLearningStandards tells the truth — not because the enforcer learned to check a counter.
+  //
+  // The proof that no counter is checked is structural and lives in test/authority-boundary.test.mjs,
+  // which forbids scored, notEvaluated, applicable and denominator appearing in scripts/ at all.
+  // This test is the behavioural half.
+  await scratch(async (dir) => {
+    await writeFile(path.join(dir, "README.md"), "# a governed project with no ML in it\n");
+    await writeFile(path.join(dir, "project-policy.yml"), 'standardVersion: "1.0.0"\nproject: "hostile"\nexceptions: []\n');
+
+    const r = await enforce({ ...identity(), target: dir });
+    assert.equal(r.state, STATE.EVALUATED, "the authority ran and answered");
+    assert.equal(r.passing, false, "a run that established nothing must not pass");
+    assert.equal(r.authority.status, "NOT_EVALUATED");
+    assert.equal(exitFor(r.state, r.passing), EXIT.NOT_PASSING);
+
+    // The enforcer's own words carry no interpretation of what NOT_EVALUATED means.
+    assert.match(r.detail, /does not declare passing/);
+
+    // And the pack's evidence is still there, untouched, for a human who wants it.
+    assert.equal(r.report.denominator.scored, 0);
+    assert.equal(r.report.denominator.applicable, 46);
+  });
 });

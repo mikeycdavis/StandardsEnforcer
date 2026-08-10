@@ -1,32 +1,55 @@
 /**
  * The enforcement state vocabulary, and the one invariant that governs it.
  *
- * Some of these are verdicts the standards system reached. Others are states about enforcement
- * itself — the repository never adopted, the identity did not verify, the gate is absent. Forcing
- * the second group into the standards system's exit codes would make "we could not establish
- * anything" indistinguishable from "the standards had no objection", which is the single failure
- * mode every MachineLearningStandards release from 1.0 to 1.4 was spent removing.
+ * Every state here is about ENFORCEMENT — whether an authority could be identified, reached, trusted
+ * and heard. None of them is a standards verdict, and that is the whole point of the 0.4.0 rewrite.
  *
  *     INV-E1 — StandardsEnforcer must never convert an unknown, missing, unverifiable, or failed
  *     enforcement condition into a successful compliance result.
  *
- * Enforced structurally: `PASSING` is an explicit, closed, enumerated set, `exitFor` derives from
- * it, and a test asserts that every state outside it exits non-zero. A state added later without a
- * decision about its exit code fails that test rather than defaulting to success. Every member of
- * `PASSING` is either a standards verdict or listed in `REQUIRES_RECORDED_DECISION`, which is what
- * stops the set growing by attrition.
+ * WHAT CHANGED IN 0.4.0, AND WHY IT HAD TO. Until 0.3.0 this file enumerated five pack-native
+ * statuses — COMPLIANT, COMPLIANT_WITH_EXCEPTIONS, NON_COMPLIANT, NOT_EVALUATED,
+ * BLOCKED_BY_INVARIANT — as enforcer states, and `exitFor` mapped them to exit codes 0/1/2/3.
+ *
+ * ADR 0001 does not merely say the enforcer should obtain those five strings from somewhere else. It
+ * says the enforcer must not know what a pack's verdict MEANS. Mapping `NOT_EVALUATED` to 2 and
+ * `BLOCKED_BY_INVARIANT` to 3 kept exactly that meaning, in encoded form, in this file. Moving the
+ * strings elsewhere would have been cosmetic; the semantics had to go.
+ *
+ * So the process projection collapses to three codes and stops claiming to know anything:
+ *
+ *     0   the authority spoke and established passing
+ *     1   the authority spoke and did not establish passing
+ *     4   the authority could not be established, heard, or trusted
+ *
+ * `1` deliberately reads as "an authoritative evaluation completed and did not establish passing",
+ * NOT as "non-compliant". A pack's `NOT_EVALUATED` lands in that bucket without this enforcer
+ * claiming it means failure — it means only that the pack did not put it in its passing set.
+ *
+ * WHAT IS LOST, SAID PLAINLY. A caller reading only an exit code can no longer distinguish "the
+ * standards said no" from "the standards reached no conclusion". That distinction was never the
+ * enforcer's to draw; it survives intact, verbatim, in the payload under `authority.status`. Only the
+ * lossy projection changed.
+ *
+ * `exitCodes` was NOT added to the adapter contract to preserve the old behaviour. That would create
+ * a second semantic projection owned by every pack, and Phase 0 already established that native exit
+ * codes are not a common abstraction — Betting exits 2 on NOT_EVALUATED, MachineLearning 3 on
+ * blocked, Health 4, Financial folds blocked into 1. `passing` is necessary because the enforcer must
+ * answer its own binary gate question. Reproducing native process semantics is not.
  */
 
-/** Every state the enforcer can ever report. Frozen surface: adding one is a MAJOR change. */
+/**
+ * Every state the enforcer can report. Frozen surface: changing it is a breaking change.
+ *
+ * `EVALUATED` is the only state that involves an authority having spoken, and it says nothing about
+ * what was said. Whether a merge may proceed is carried beside it in `passing`, decided by the
+ * pack's own declared set — never by this file recognising a word.
+ */
 export const STATE = {
-  // Verdicts the standards system reached, passed through unaltered.
-  COMPLIANT: "COMPLIANT",
-  COMPLIANT_WITH_EXCEPTIONS: "COMPLIANT_WITH_EXCEPTIONS",
-  NON_COMPLIANT: "NON_COMPLIANT",
-  NOT_EVALUATED: "NOT_EVALUATED",
-  BLOCKED_BY_INVARIANT: "BLOCKED_BY_INVARIANT",
+  // An authority was identified, invoked, and returned a status it had declared it could return.
+  EVALUATED: "EVALUATED",
 
-  // States about enforcement, which no standards system produces.
+  // States about enforcement, which no standards authority produces.
   // GATE_CONFIG_INVALID is distinct from GATE_MISSING on purpose: "nobody requires this" and
   // "something requires it in a way a pull request can satisfy for itself" need different fixes.
   NOT_ADOPTED: "NOT_ADOPTED",
@@ -40,36 +63,27 @@ export const STATE = {
   ENFORCEMENT_ERROR: "ENFORCEMENT_ERROR",
 };
 
-/** The states that are a standards verdict rather than an enforcement condition. */
-export const VERDICT_STATES = new Set([
-  STATE.COMPLIANT,
-  STATE.COMPLIANT_WITH_EXCEPTIONS,
-  STATE.NON_COMPLIANT,
-  STATE.NOT_EVALUATED,
-  STATE.BLOCKED_BY_INVARIANT,
-]);
-
 /**
- * The states a merge may proceed on.
+ * Enforcement states on which a merge may proceed WITHOUT an authority having spoken.
  *
  * Written as a closed set rather than as a default, because a default is how an unlisted state
- * becomes a pass.
+ * becomes a pass. `EVALUATED` is deliberately absent: it passes only when the pack's own contract
+ * says the status it returned is passing, which is a fact about that release and not about a state
+ * name this file could enumerate.
  *
- * M3 widened this from two members to three, which is the only widening in the enforcer's history
- * and is recorded rather than quietly made. `OUT_OF_SCOPE` is not a compliance result and never
- * becomes one: it says an authorised reviewer decided these standards do not govern this repository.
- * A governed population needs that to be a durable, mergeable state, because the alternative is a
- * portfolio scan that either blocks every excluded repository forever or starts reading detector
- * silence as proof a repository is not doing machine-learning work.
+ * `OUT_OF_SCOPE` is not a compliance result and never becomes one: it says an authorised reviewer
+ * decided these standards do not govern this repository. A governed population needs that to be a
+ * durable, mergeable state, because the alternative is a portfolio scan that either blocks every
+ * excluded repository forever or starts reading detector silence as proof of anything.
  *
- * The widening is bounded by `REQUIRES_RECORDED_DECISION` below. INV-E1 is untouched: an unknown,
- * missing or unverifiable condition still cannot reach this set, because an exclusion nobody
- * recorded is precisely an unknown and resolves to `SCOPE_REVIEW_REQUIRED`.
+ * The widening is bounded by `REQUIRES_RECORDED_DECISION`. INV-E1 is untouched: an unknown, missing
+ * or unverifiable condition still cannot reach this set, because an exclusion nobody recorded is
+ * precisely an unknown and resolves to `SCOPE_REVIEW_REQUIRED`.
  */
-export const PASSING = new Set([STATE.COMPLIANT, STATE.COMPLIANT_WITH_EXCEPTIONS, STATE.OUT_OF_SCOPE]);
+export const PASSING = new Set([STATE.OUT_OF_SCOPE]);
 
 /**
- * Passing states that are not a standards verdict, and what makes them legitimate.
+ * Passing states that are not an authority's answer, and what makes them legitimate.
  *
  * A member here may only be produced alongside a named authorised reviewer, a review date and a
  * reason. The enforcer asserts that at the point of production and a test asserts it of the payload,
@@ -78,41 +92,32 @@ export const PASSING = new Set([STATE.COMPLIANT, STATE.COMPLIANT_WITH_EXCEPTIONS
 export const REQUIRES_RECORDED_DECISION = new Set([STATE.OUT_OF_SCOPE]);
 
 /**
- * Exit codes.
+ * Exit codes. Three, and none of them interprets a standard.
  *
- * For any state that is a standards verdict the code is the standards system's own, unchanged —
- * `0` ok, `1` non-compliant, `2` no verdict reached, `3` blocked by an invariant. Passing them
- * through rather than re-deriving them is what "orchestrate, do not reinterpret" means at the
- * level a caller sees.
- *
- * `4` is the enforcer's own, and MachineLearningStandards never returns it. A caller reading only
- * an exit status can therefore distinguish "the standards said no" from "enforcement could not be
- * established", which are different problems with different owners.
+ * `4` is reserved exclusively for the enforcer's own inability to establish enforcement: an identity
+ * that does not verify, a missing or non-conforming contract where one is required, an invocation
+ * that failed, output that could not be parsed, a status the pack never declared. Every one of those
+ * is "the authority could not be established, heard, or trusted", which is a different problem with
+ * a different owner from "the authority answered and the answer was not a pass".
  */
-export const EXIT = { OK: 0, NON_COMPLIANT: 1, NO_VERDICT: 2, BLOCKED: 3, NOT_ENFORCEABLE: 4 };
+export const EXIT = { OK: 0, NOT_PASSING: 1, NOT_ENFORCEABLE: 4 };
 
-export function exitFor(state) {
-  if (PASSING.has(state)) return EXIT.OK;
-  switch (state) {
-    case STATE.NON_COMPLIANT:
-      return EXIT.NON_COMPLIANT;
-    case STATE.NOT_EVALUATED:
-    case STATE.ENFORCEMENT_ERROR:
-      return EXIT.NO_VERDICT;
-    case STATE.BLOCKED_BY_INVARIANT:
-      return EXIT.BLOCKED;
-    case STATE.NOT_ADOPTED:
-    case STATE.SCOPE_REVIEW_REQUIRED:
-    case STATE.SCOPE_REGISTRY_INVALID:
-    case STATE.GATE_MISSING:
-    case STATE.GATE_CONFIG_INVALID:
-    case STATE.BYPASS_USED:
-    case STATE.STANDARDS_IDENTITY_MISMATCH:
-      return EXIT.NOT_ENFORCEABLE;
-    default:
-      // An unrecognised state is itself an unknown, and INV-E1 says an unknown is not a pass.
-      return EXIT.NO_VERDICT;
-  }
+/**
+ * Project a result onto a process exit code.
+ *
+ * Takes `passing` rather than deriving it, because deriving it would mean recognising a status — the
+ * thing this module no longer does. A caller that forgets to pass it gets `false`, which fails
+ * closed, which is the direction INV-E1 requires.
+ */
+export function exitFor(state, passing = false) {
+  // Two routes to zero, and they are not interchangeable. `PASSING` is the closed enumeration of
+  // enforcement states that may merge without an authority having spoken — today only OUT_OF_SCOPE,
+  // and only ever by a recorded human decision. `passing` is the authority's own answer, read from
+  // its declared set. Keeping both means a state cannot pass by omission and a verdict cannot pass by
+  // being named.
+  if (PASSING.has(state) || passing) return EXIT.OK;
+  if (state === STATE.EVALUATED) return EXIT.NOT_PASSING;
+  return EXIT.NOT_ENFORCEABLE;
 }
 
 /**
@@ -123,17 +128,12 @@ export function exitFor(state) {
  * nobody checks.
  *
  * `BYPASS_USED` needs a source for bypass events; GitHub exposes them through audit-log endpoints
- * this enforcer cannot assume are available, so the semantic is settled in ADR 0003 — a bypass is
- * an event and never a verdict — and the state is not produced until the data can be read.
- *
- * It is not faked. M3 made the three scope states reachable, leaving it as the only gap.
+ * this enforcer cannot assume are available, so the semantic is settled in ADR 0003 — a bypass is an
+ * event and never a verdict — and the state is not produced until the data can be read. It is not
+ * faked, and it remains the only gap.
  */
 export const REACHABLE = new Set([
-  STATE.COMPLIANT,
-  STATE.COMPLIANT_WITH_EXCEPTIONS,
-  STATE.NON_COMPLIANT,
-  STATE.NOT_EVALUATED,
-  STATE.BLOCKED_BY_INVARIANT,
+  STATE.EVALUATED,
   STATE.NOT_ADOPTED,
   STATE.SCOPE_REVIEW_REQUIRED,
   STATE.OUT_OF_SCOPE,

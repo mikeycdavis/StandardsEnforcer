@@ -42,13 +42,14 @@ import { assessGate } from "./gate.mjs";
 import { detectFootprint } from "./footprint.mjs";
 import { resolveScope, OUTCOME } from "./scope.mjs";
 import { githubPlatform } from "./platform/github.mjs";
-import { STATE, VERDICT_STATES, PASSING, REQUIRES_RECORDED_DECISION, exitFor } from "./states.mjs";
+import { STATE, PASSING, REQUIRES_RECORDED_DECISION, exitFor } from "./states.mjs";
+import { readAdapter, AdapterContractError, ADAPTER_FILENAME } from "./contracts/adapter.mjs";
 
 const PLATFORMS = { github: githubPlatform };
 
 const HERE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_CACHE = path.join(tmpdir(), "standards-enforcer-cache");
-export const SCHEMA_VERSION = "0.3.0";
+export const SCHEMA_VERSION = "0.4.0";
 
 /** The file whose presence is adoption. Absence is not non-compliance; it is a different state. */
 const POLICY_FILE = "project-policy.yml";
@@ -58,41 +59,95 @@ const POLICY_FILE = "project-policy.yml";
 // ---------------------------------------------------------------------------
 
 /**
- * Run the official evaluator out of a verified checkout and return its report verbatim.
+ * Load the invocation contract from a verified checkout.
+ *
+ * THE SIGNATURE IS THE POINT. It takes the resolved checkout directory and derives the path itself.
+ * There is no `adapterPath` parameter and no way for a caller to supply one, because the contract
+ * must come from the identity-verified release and from nowhere else — not the governed target, not
+ * project policy, not a workspace override, not an environment variable, not a cached newer copy
+ * (ADR 0005). A parameter would be a mechanism for substituting another location, and a mechanism
+ * that exists is a mechanism that gets used.
+ *
+ * NO FALLBACK, OF ANY KIND. If the pinned release has no contract, that is an integration failure.
+ * The enforcer does not search `main`, another tag, or a central registry, because a contract from a
+ * different point in time describes a different evaluator.
+ */
+export function loadAdapter(standardsDir) {
+  const file = path.join(standardsDir, ADAPTER_FILENAME);
+  const contract = readAdapter(file); // throws AdapterContractError; validated against the schema
+  const entrypoint = path.resolve(standardsDir, contract.evaluation.entrypoint);
+  // The static containment check lives in the conformance boundary; this is the resolved half, which
+  // a static check cannot do because it cannot know about a symlink. Bytes verified are bytes
+  // executed, and a path that leaves the verified tree breaks that on its own.
+  const inside = path.relative(standardsDir, entrypoint);
+  if (inside.startsWith("..") || path.isAbsolute(inside)) {
+    throw new AdapterContractError(
+      `${contract.evaluation.entrypoint} resolves outside the verified checkout, to ${entrypoint}`,
+      [inside],
+    );
+  }
+  return { contract, entrypoint };
+}
+
+/**
+ * Invoke the evaluator exactly as the pinned release declares, and return its report verbatim.
  *
  * `report` is the evaluator's own JSON, unmodified. The enforcer adds context beside it and never
- * inside it — the same discipline MachineLearningStandards applies to coverage, and for the same
- * reason: a reader must be able to tell what the standards said from what the enforcer added.
+ * inside it — a reader must be able to tell what the authority said from what the enforcer added.
+ *
+ * NO PROBING. The declared argv is run once. A failure is a failure; the enforcer does not try
+ * `validate` because `evaluate` failed, because a subcommand that happens to succeed may be
+ * answering a different question — `check` exists in two packs and means something else in both.
  */
 export function runOfficialEvaluator(standardsDir, target) {
-  const cli = path.join(standardsDir, "scripts", "standards.mjs");
-  if (!existsSync(cli)) {
-    return { ok: false, why: `the materialised standards release has no scripts/standards.mjs`, exitCode: null, report: null };
+  let loaded;
+  try {
+    loaded = loadAdapter(standardsDir);
+  } catch (e) {
+    return { ok: false, why: e.message, exitCode: null, report: null, contract: null };
   }
-  const r = spawnSync(process.execPath, [cli, "evaluate", `--dir=${target}`, "--json"], {
+  const { contract, entrypoint } = loaded;
+  if (!existsSync(entrypoint)) {
+    return {
+      ok: false,
+      why: `the contract names ${contract.evaluation.entrypoint}, which is not in the pinned release`,
+      exitCode: null,
+      report: null,
+      contract,
+    };
+  }
+  const argv = contract.evaluation.arguments.map((a) => a.replaceAll("{target}", target));
+  const r = spawnSync(process.execPath, [entrypoint, ...argv], {
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
     windowsHide: true,
   });
-  if (r.error) return { ok: false, why: `the evaluator could not be run (${r.error.message})`, exitCode: null, report: null };
+  if (r.error) {
+    return { ok: false, why: `the evaluator could not be run (${r.error.message})`, exitCode: null, report: null, contract };
+  }
   if (!r.stdout || !r.stdout.trim()) {
     const reason = (r.stderr || "").trim().split("\n")[0] || `the evaluator exited ${r.status} and printed nothing`;
-    return { ok: false, why: reason, exitCode: r.status, report: null };
+    return { ok: false, why: reason, exitCode: r.status, report: null, contract };
   }
   let report;
   try {
     report = JSON.parse(r.stdout);
   } catch {
-    return { ok: false, why: "the evaluator did not return JSON", exitCode: r.status, report: null };
+    return { ok: false, why: "the evaluator did not return JSON", exitCode: r.status, report: null, contract };
   }
-  return { ok: true, why: null, exitCode: r.status, report };
+  return { ok: true, why: null, exitCode: r.status, report, contract };
 }
 
 // ---------------------------------------------------------------------------
 // Enforcement.
 // ---------------------------------------------------------------------------
 
-function result(state, detail, extra = {}) {
+/**
+ * @param passing  Supplied only for `EVALUATED`, where it comes from the pack's declared passing set.
+ *                 Every other state derives it from `PASSING`, which is a closed enumeration of
+ *                 enforcement states — so a state nobody listed cannot pass by omission.
+ */
+function result(state, detail, extra = {}, passing = PASSING.has(state)) {
   // A passing state that is not a verdict is legitimate only when a named human decided it. Checked
   // here, at the single point every result is constructed, so no future branch can reach the passing
   // set through an absence — see REQUIRES_RECORDED_DECISION in states.mjs.
@@ -107,8 +162,8 @@ function result(state, detail, extra = {}) {
   return {
     schemaVersion: SCHEMA_VERSION,
     state,
-    passing: PASSING.has(state),
-    isStandardsVerdict: VERDICT_STATES.has(state),
+    passing,
+    isStandardsVerdict: state === STATE.EVALUATED,
     detail,
     ...extra,
     // Authoritative only when the enforcement root verified. A passing verdict from an advisory run
@@ -234,40 +289,49 @@ export async function enforce({
     return result(STATE.ENFORCEMENT_ERROR, run.why, { standards, gate: gateReport, scope: scopeReport });
   }
 
-  const verdict = run.report.status;
-  if (!VERDICT_STATES.has(verdict)) {
-    // The evaluator returned a status this enforcer does not know. That is an unknown, and INV-E1
-    // says an unknown is not a pass — even when the unknown looks reassuring.
+  const status = run.report?.status;
+  if (typeof status !== "string" || !run.contract.result.statuses.includes(status)) {
+    // The evaluator returned a status its own contract does not declare. That is an unknown, and
+    // INV-E1 says an unknown is not a pass — even when the unknown looks reassuring. Note the test
+    // is membership of THIS release's declared vocabulary, not of any list held here.
     return result(STATE.ENFORCEMENT_ERROR,
-      `the standards release returned the status "${verdict}", which this enforcer does not recognise`,
+      `the standards release returned the status ${JSON.stringify(status)}, which its own contract does not declare`,
       { standards, gate: gateReport, scope: scopeReport, standardsExitCode: run.exitCode, report: run.report });
   }
 
-  return result(verdict, describe(run.report), {
+  // The whole of the enforcer's opinion about the verdict: is this status in the set the pack itself
+  // declared passing. No other field of the report is consulted — not a score, not a summary count,
+  // not a denominator — and test/authority-boundary.test.mjs is what keeps that true.
+  const passing = run.contract.result.passing.includes(status);
+
+  return result(STATE.EVALUATED, describe(status, passing), {
     standards,
     gate: gateReport,
     scope: scopeReport,
     standardsExitCode: run.exitCode,
+    // The native answer, kept as data rather than promoted into the enforcer's state machine.
+    authority: { standard: run.contract.standard.id, status },
     // Verbatim. The enforcer reports what the standards said; it does not summarise it into a
     // shape of its own, because a summary is a second definition.
     report: run.report,
-  });
+  }, passing);
 }
 
 /**
- * One line of context beside the verdict, read out of the report rather than derived from it.
+ * One line of context beside the verdict.
  *
- * The first draft asked whether the status was BLOCKED_BY_INVARIANT before deciding whether a score
- * was meaningful — which is a MachineLearningStandards rule ("blocked means unscored"), restated
- * here where it would go stale the moment that rule changed. The structural test in
- * test/enforce.test.mjs caught it. Reading `report.score` and saying what is there needs no opinion
- * about why it is null.
+ * It reads the status and the pack's own passing set, and nothing else. An earlier version printed
+ * the project name, the score and the passed/failed/skipped counts — which was a summary of a pack's
+ * evidence assembled here, and MathematicsStandards is the reason it is gone: it reports `score: 97`
+ * with 52 rules "passed" beside a status of NOT_EVALUATED. Any line quoting that number would be
+ * quoting the most convincing false green available, in the enforcer's own voice.
+ *
+ * The full native report is still carried verbatim beside this line. Summarising it here would be a
+ * second definition of what the pack said.
  */
-function describe(report) {
-  const s = report.summary ?? {};
-  return `${report.project ?? "project"}: ${report.status}, ` +
-    `score ${report.score === null || report.score === undefined ? "not computed" : report.score + "%"}, ` +
-    `${s.passed ?? 0} passed / ${s.failed ?? 0} failed / ${s.skipped ?? 0} skipped`;
+function describe(status, passing) {
+  return `the authority reported ${JSON.stringify(status)}, which its own contract ` +
+    `${passing ? "declares passing" : "does not declare passing"}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -380,11 +444,11 @@ async function main() {
       `enforce: ${parsed.error}\n\n` +
         "  node scripts/enforce.mjs --target=<repo> --standards=<standards-repo> --tag=<tag> --sha=<40-hex> [--json]\n",
     );
-    return exitFor(STATE.ENFORCEMENT_ERROR);
+    return exitFor(STATE.ENFORCEMENT_ERROR, false);
   }
   const r = await enforce(parsed.args);
   process.stdout.write(parsed.args.json ? JSON.stringify(r, null, 2) + "\n" : render(r));
-  return exitFor(r.state);
+  return exitFor(r.state, r.passing);
 }
 
 if (process.argv[1]?.endsWith("enforce.mjs")) {

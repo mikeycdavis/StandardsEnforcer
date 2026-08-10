@@ -26,7 +26,7 @@ import { STATE, exitFor, EXIT } from "../scripts/states.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MLS = "F:/Repos/MachineLearningStandards";
-const TAG = "v1.4.0";
+const TAG = "v1.5.0";
 const CACHE = path.join(tmpdir(), "standards-enforcer-test-cache");
 const CHECK = "standards / machine-learning";
 const PINNED_WF = "acme/standards-ci/.github/workflows/standards.yml@1111111111111111111111111111111111111111";
@@ -294,7 +294,11 @@ test("adversarial · no repository-local change a pull request can make alters t
       assert.equal(r.gate.rooted, true, `${name}: the requirement moved, which means it was reachable from the repository`);
       assert.deepEqual(r.gate.rootedAt, ["organization"], `${name}: rooting changed`);
       if (r.passing) {
-        assert.equal(r.state, STATE.COMPLIANT, `${name}: produced a passing state it should not have`);
+        // The only route to passing here is an authority having spoken and its own contract calling
+        // that answer passing. Before 0.4.0 this named COMPLIANT directly, which was the enforcer
+        // asserting it knew which word meant yes.
+        assert.equal(r.state, STATE.EVALUATED, `${name}: produced a passing state it should not have`);
+        assert.equal(typeof r.authority.status, "string");
         assert.equal(r.authoritative, true);
       }
     }
@@ -322,14 +326,31 @@ test("advisory · a run with no gate checked is stamped non-authoritative and sa
   });
 });
 
-test("advisory · the rendered output warns when a pass came from an unrooted run", { skip: !MLS_AVAILABLE && "MachineLearningStandards not on disk" }, () => {
-  const r = spawnSync(process.execPath, [
-    path.join(ROOT, "scripts/enforce.mjs"),
-    `--target=${MLS}`, `--standards=${MLS}`, `--tag=${TAG}`, `--sha=${SHA}`,
-  ], { encoding: "utf8" });
-  assert.equal(r.status, 0);
-  assert.match(r.stdout, /ADVISORY/);
-  assert.match(r.stdout, /does not establish that/);
+test("advisory · the rendered output warns when a pass came from an unrooted run", { skip: !MLS_AVAILABLE && "MachineLearningStandards not on disk" }, async () => {
+  // The target used to be MachineLearningStandards itself, which reported COMPLIANT on its own tree
+  // having evaluated nothing. v1.5.0 repaired that, so this needs a target the pack genuinely passes
+  // — one applicable rule established and nothing failing. `scored: 1` rather than `scored: 0` is
+  // what makes this a pass worth asserting an advisory notice about.
+  const dir = await mkdtemp(path.join(tmpdir(), "advisory-"));
+  try {
+    await mkdir(path.join(dir, "src"), { recursive: true });
+    await writeFile(path.join(dir, "src/train.py"), "import sklearn\nSEED = 1\n");
+    await writeFile(path.join(dir, "requirements.txt"), "scikit-learn==1.5.0\n");
+    await writeFile(
+      path.join(dir, "project-policy.yml"),
+      'standardVersion: "1.0.0"\nproject: "clean-ml"\nexceptions: []\n',
+    );
+
+    const r = spawnSync(process.execPath, [
+      path.join(ROOT, "scripts/enforce.mjs"),
+      `--target=${dir}`, `--standards=${MLS}`, `--tag=${TAG}`, `--sha=${SHA}`,
+    ], { encoding: "utf8" });
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, /ADVISORY/);
+    assert.match(r.stdout, /does not establish that/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("a half-configured gate is refused rather than half-checked", () => {
@@ -337,6 +358,6 @@ test("a half-configured gate is refused rather than half-checked", () => {
     path.join(ROOT, "scripts/enforce.mjs"),
     "--target=.", "--standards=.", "--tag=v1", `--sha=${"0".repeat(40)}`, "--platform=github",
   ], { encoding: "utf8" });
-  assert.equal(r.status, EXIT.NO_VERDICT);
+  assert.equal(r.status, EXIT.NOT_ENFORCEABLE);
   assert.match(r.stderr, /half-configured gate is not a gate/);
 });

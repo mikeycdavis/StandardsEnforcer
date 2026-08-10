@@ -26,7 +26,7 @@ import { fileURLToPath } from "node:url";
 import { enforce } from "../scripts/enforce.mjs";
 import { detectFootprint, footprintDigest, codeView } from "../scripts/footprint.mjs";
 import { resolveScope, OUTCOME } from "../scripts/scope.mjs";
-import { STATE, PASSING, REQUIRES_RECORDED_DECISION, REACHABLE, VERDICT_STATES, exitFor, EXIT } from "../scripts/states.mjs";
+import { STATE, PASSING, REQUIRES_RECORDED_DECISION, REACHABLE, exitFor, EXIT } from "../scripts/states.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MLS = "F:/Repos/MachineLearningStandards";
@@ -348,8 +348,8 @@ test("states · SCOPE_REVIEW_REQUIRED and OUT_OF_SCOPE are reachable; only BYPAS
 test("states · every passing state is a verdict or carries a recorded human decision", () => {
   // The bound on M3's widening of PASSING. A future state cannot join it by attrition.
   for (const s of PASSING) {
-    assert.ok(VERDICT_STATES.has(s) || REQUIRES_RECORDED_DECISION.has(s),
-      `${s} may not be a passing state without being a verdict or a recorded decision`);
+    assert.ok(REQUIRES_RECORDED_DECISION.has(s),
+      `${s} may not be a passing state without being a recorded decision`);
   }
   assert.equal(exitFor(STATE.OUT_OF_SCOPE), EXIT.OK);
   assert.equal(exitFor(STATE.SCOPE_REVIEW_REQUIRED), EXIT.NOT_ENFORCEABLE);
@@ -357,7 +357,8 @@ test("states · every passing state is a verdict or carries a recorded human dec
 });
 
 test("states · OUT_OF_SCOPE is not a standards verdict", () => {
-  assert.equal(VERDICT_STATES.has(STATE.OUT_OF_SCOPE), false,
+  // EVALUATED is the only state an authority's answer can produce, and an exclusion is not one.
+  assert.notEqual(STATE.OUT_OF_SCOPE, STATE.EVALUATED,
     "an exclusion must never read as though the standards examined this repository and were satisfied");
 });
 
@@ -420,7 +421,7 @@ test("enforce · a scope check without a registry path is refused rather than ha
     path.join(ROOT, "scripts/enforce.mjs"),
     "--target=.", "--standards=.", "--tag=v1", `--sha=${"0".repeat(40)}`, "--repo-id=github:1",
   ], { encoding: "utf8" });
-  assert.equal(r.status, EXIT.NO_VERDICT);
+  assert.equal(r.status, EXIT.NOT_ENFORCEABLE);
   assert.match(r.stderr, /half-configured scope check/);
 });
 
