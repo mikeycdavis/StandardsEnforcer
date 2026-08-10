@@ -12,15 +12,22 @@
  * `(target, scope registry, today)`. That makes "I did not disturb the concurrent scope work"
  * executable rather than a claim about a diff.
  *
- * THE FIXTURE IS THE ARGUMENT. The standards release materialised here is a real, tagged, verifiable
- * git repository that contains **no evaluator whatsoever** — no `scripts/`, no adapter, nothing to
- * invoke. Every case below must therefore resolve without the seam being reached at all. If Phase 3
- * ever moves adapter loading, contract validation, or invocation above scope resolution, these tests
- * do not merely change value: they turn into ENFORCEMENT_ERROR and say exactly what happened.
+ * THE FIXTURE IS THE ARGUMENT. Every standards release materialised here is a real, tagged,
+ * verifiable git repository that is nonetheless a **broken authority integration** — no adapter and
+ * no evaluator, a malformed adapter, or an evaluator that cannot produce a verdict. Scope-decisive
+ * cases must resolve without the seam being reached at all. If Phase 3 ever moves adapter loading,
+ * contract validation, or invocation above scope resolution, these tests do not merely change value:
+ * they turn into ENFORCEMENT_ERROR and say exactly what happened.
  *
- * That is the property ADR 0004 and ADR 0005 need together. A standard that is out of scope must not
- * become an integration failure because its pinned release lacks a contract, and a repository whose
- * scope is unresolved must not have an evaluator run against it in the meantime.
+ * Three kinds rather than one, because a single "no evaluator" fixture can be satisfied by an
+ * implementation that happens to check for `scripts/` early and would still break on a malformed
+ * contract. The property is about ordering, so it has to hold for every way the release can be
+ * unusable.
+ *
+ * That is the property ADR 0004 and ADR 0005 need together, and it has two arms. A standard that is
+ * out of scope must not become an integration failure because its pinned release lacks a contract —
+ * and the identical release must stop a governed repository dead. Both arms are asserted over all
+ * three defects, because an implementation that gets one right by accident gets the other wrong.
  */
 
 import test from "node:test";
@@ -46,12 +53,35 @@ function git(args, cwd) {
 }
 
 /**
- * A standards release with an identity and no implementation.
+ * Three ways a standards release can be a broken authority integration.
  *
- * Deliberate. Scope is resolved before anything is invoked, so every case here must succeed against
- * a release that could not possibly be invoked.
+ * Each has a real identity — it tags, it resolves, it materialises — and is unusable in a different
+ * way once something tries to obtain a verdict from it. Parameterising over all three is what stops
+ * the ordering property from being proved by one lucky fixture: "no evaluator" alone could be passed
+ * by an implementation that happens to check for `scripts/` early and would still break on a
+ * malformed contract.
  */
-async function emptyRelease(dir) {
+const BROKEN = {
+  "no adapter and no evaluator": {},
+  "a malformed adapter": { "standards-adapter.json": "{ this is not json" },
+  "an unusable evaluator": {
+    "standards-adapter.json": JSON.stringify({
+      schemaVersion: "1.0.0",
+      standard: { id: "seam-fixture" },
+      evaluation: { entrypoint: "scripts/standards.mjs", arguments: ["validate", "{target}", "--json"] },
+      result: { statuses: ["COMPLIANT", "NON_COMPLIANT"], passing: ["COMPLIANT"] },
+    }),
+    "scripts/standards.mjs": "process.stderr.write('this release cannot produce a verdict\\n');\nprocess.exit(1);\n",
+  },
+};
+
+/**
+ * A standards release with an identity and a chosen kind of brokenness.
+ *
+ * Deliberate, and the argument this file rests on. Scope is resolved before anything is invoked, so
+ * a reviewed exclusion must succeed against a release that could not possibly produce a verdict.
+ */
+async function brokenRelease(dir, files = {}) {
   const repo = path.join(dir, "standards");
   await mkdir(repo, { recursive: true });
   git(["init", "--quiet", "-b", "main"], repo);
@@ -59,8 +89,12 @@ async function emptyRelease(dir) {
   git(["config", "user.name", "Seam Invariance"], repo);
   git(["config", "commit.gpgsign", "false"], repo);
   await writeFile(path.join(repo, "VERSION"), "1.0.0\n");
+  for (const [rel, content] of Object.entries(files)) {
+    await mkdir(path.dirname(path.join(repo, rel)), { recursive: true });
+    await writeFile(path.join(repo, rel), content);
+  }
   git(["add", "-A"], repo);
-  git(["commit", "--quiet", "-m", "a release with no evaluator"], repo);
+  git(["commit", "--quiet", "-m", "a release that cannot produce a verdict"], repo);
   git(["tag", "-a", "v1.0.0", "-m", "release"], repo);
   return { repo, sha: git(["rev-list", "-n", "1", "v1.0.0"], repo) };
 }
@@ -93,10 +127,10 @@ const decision = (over = {}) => ({
  * fail on a reworded message while missing an actual behaviour change. State, disposition and
  * whether the standards were invoked are the contract.
  */
-async function outcome({ files = {}, entry, inTarget = false, key = ID }) {
+async function outcome({ files = {}, entry, inTarget = false, key = ID, release = {} }) {
   const dir = await mkdtemp(path.join(tmpdir(), "seam-"));
   try {
-    const { repo, sha } = await emptyRelease(dir);
+    const { repo, sha } = await brokenRelease(dir, release);
     const target = path.join(dir, "target");
     await mkdir(target, { recursive: true });
 
@@ -275,4 +309,76 @@ test("scope · no scope-decisive path reaches the evaluator seam", async () => {
     states.add(r.state);
   }
   assert.equal(states.size, 3, "the three cases must remain distinguishable, not collapse into one state");
+});
+
+// ===========================================================================
+// Where M2 and M3 meet: one broken authority integration, two correct answers
+// ===========================================================================
+//
+// The same three unusable releases, under the two scope dispositions that reach them:
+//
+//                          broken authority integration
+//                                     │
+//                       ┌─────────────┴─────────────┐
+//                       │                           │
+//                reviewed OUT_OF_SCOPE            APPLIES
+//                       │                           │
+//                       ▼                           ▼
+//                 OUT_OF_SCOPE              ENFORCEMENT_ERROR
+//               evaluator untouched          fail closed
+//
+// Both arms are the same invariant seen from either side. A reviewed exclusion stands on the
+// reviewer's authority and needs nothing from the pinned release, so an integration defect must not
+// reach it. A governed repository needs everything from the pinned release, so the identical defect
+// must stop it. An implementation that got one arm right by accident gets the other wrong.
+
+for (const [how, release] of Object.entries(BROKEN)) {
+  test(`paired · a reviewed exclusion survives ${how}`, async () => {
+    const r = await outcome({
+      release,
+      entry: current({ disposition: "out-of-scope", reason: "No models are trained or served here." }),
+    });
+    assert.deepEqual(r, {
+      state: STATE.OUT_OF_SCOPE,
+      passing: true,
+      scopeChecked: true,
+      disposition: "out-of-scope",
+      governed: null,
+      invokedStandards: false,
+    });
+  });
+
+  test(`paired · a governed repository fails closed on ${how}`, async () => {
+    // In scope AND adopted, so the evaluator is genuinely required. The same defect that was
+    // correctly irrelevant above is now decisive, and INV-E1 forbids it becoming a pass.
+    const r = await outcome({
+      release,
+      files: { ...ML, "project-policy.yml": "standardVersion: '1.0.0'\n" },
+      entry: current(),
+    });
+    assert.equal(r.state, STATE.ENFORCEMENT_ERROR, `${how} produced ${r.state} for a governed repository`);
+    assert.equal(r.passing, false);
+    assert.equal(r.disposition, "in-scope", "the scope decision is still reported beside the failure");
+  });
+}
+
+test("paired · the two arms disagree for every broken release, and never collapse", async () => {
+  // Guards the pairing itself. If both arms ever returned the same state, one of them would have
+  // stopped testing anything — and the failure mode that matters (an exclusion becoming an
+  // integration error, or a governed repository passing on a release that cannot answer) would be
+  // invisible.
+  for (const [how, release] of Object.entries(BROKEN)) {
+    const excluded = await outcome({
+      release,
+      entry: current({ disposition: "out-of-scope", reason: "r" }),
+    });
+    const governed = await outcome({
+      release,
+      files: { ...ML, "project-policy.yml": "standardVersion: '1.0.0'\n" },
+      entry: current(),
+    });
+    assert.notEqual(excluded.state, governed.state, `both arms returned ${excluded.state} for ${how}`);
+    assert.equal(excluded.passing, true, `${how}: a reviewed exclusion must still pass`);
+    assert.equal(governed.passing, false, `${how}: a governed repository must not pass`);
+  }
 });
