@@ -1,0 +1,81 @@
+# Backlog
+
+<!-- GENERATED FILE - do not edit by hand. Re-run the backlog script after changing anything in items/. -->
+
+Work on this project classified with the Extended Agile Hierarchy. Every item is a file in
+[`items/`](./items/); its YAML frontmatter is the source of truth and this page is derived from it.
+
+**9 of 16 leaf items complete — 56%**
+
+```
+██████████████████████░░░░░░░░░░░░░░░░░░  56%
+```
+
+## Status
+
+| Status | Items |
+| --- | ---: |
+| ○ Not started | 6 |
+| ◑ In progress | 5 |
+| ◒ Blocked | 2 |
+| ● Complete | 11 |
+| **Total** | **24** |
+
+## The hierarchy
+
+| Level | Prefix | Count | Answers |
+| --- | --- | ---: | --- |
+| Theme | `TH-` | 1 | Which enduring area of value is this? |
+| Initiative | `IN-` | 1 | What outcome are we pursuing there? |
+| Epic | `EP-` | 5 | What large body of work delivers it? |
+| Feature | `FE-` | 10 | What shippable slice of that epic? |
+| Story | `ST-` | 7 | What user-visible change, roughly one PR? |
+| Task | `TA-` | 0 | What technical step inside a story? |
+
+## Progress by theme
+
+| Theme | Progress | Done | Remaining |
+| --- | --- | ---: | ---: |
+| [TH-01 Enforced standards compliance across the portfolio](./items/TH-01.md) | `████████░░░░░░` 56% | 9 | 7 |
+
+## In flight
+
+- ◑ [EP-02](./items/EP-02.md) — The enforcement root — a gate the governed pull request cannot satisfy
+- ◑ [EP-04](./items/EP-04.md) — The enforcer's own release lineage
+- ◑ [FE-04](./items/FE-04.md) — M4 — the enforcement root against live GitHub
+- ◒ [FE-09](./items/FE-09.md) — Make BYPASS_USED reachable
+- ◑ [IN-01](./items/IN-01.md) — Enforcement a governed repository cannot weaken
+- ◒ [ST-07](./items/ST-07.md) — Validate the required-workflows remedy against a real organisation ruleset
+- ◑ [TH-01](./items/TH-01.md) — Enforced standards compliance across the portfolio
+
+## Ready to pick up
+
+_Nothing marked ready._
+
+## Everything
+
+- ◑ **[TH-01](./items/TH-01.md)** Enforced standards compliance across the portfolio _(9/16)_
+  - ◑ **[IN-01](./items/IN-01.md)** Enforcement a governed repository cannot weaken _(9/16)_
+    - ● **[EP-01](./items/EP-01.md)** Authority transport — run a pack's own evaluator under a pinned identity _(6/6)_
+      - ● **[FE-01](./items/FE-01.md)** M1 — run the official standards implementation and report what it said
+      - ● **[FE-02](./items/FE-02.md)** M2 — contract-driven authority transport _(5/5)_
+        - ● **[ST-01](./items/ST-01.md)** M2 Phase 0 — what the eight released interfaces actually are
+        - ● **[ST-02](./items/ST-02.md)** M2 Phase 1 — the contract is adequate; four of eight packs are not
+        - ● **[ST-03](./items/ST-03.md)** M2 Phase 3 — the enforcer stops knowing what a verdict means
+        - ● **[ST-04](./items/ST-04.md)** An executable adapter conformance boundary
+        - ● **[ST-05](./items/ST-05.md)** Adapter provenance bound to the verified release
+    - ◑ **[EP-02](./items/EP-02.md)** The enforcement root — a gate the governed pull request cannot satisfy _(2/3)_
+      - ● **[FE-03](./items/FE-03.md)** M2 — a gate is a required check, not a file
+      - ◑ **[FE-04](./items/FE-04.md)** M4 — the enforcement root against live GitHub _(1/2)_
+        - ● **[ST-06](./items/ST-06.md)** Establish live whether an Actions-bound required check is spoofable
+        - ◒ **[ST-07](./items/ST-07.md)** Validate the required-workflows remedy against a real organisation ruleset
+    - ● **[EP-03](./items/EP-03.md)** Scope — whether a standard governs a repository is a recorded decision
+    - ◑ **[EP-04](./items/EP-04.md)** The enforcer's own release lineage _(0/1)_
+      - ○ **[FE-06](./items/FE-06.md)** Decide the disposition of the m3-scope-registry line relative to main
+    - ○ **[EP-05](./items/EP-05.md)** Reach beyond one repository, one platform, one standard _(0/5)_
+      - ○ **[FE-07](./items/FE-07.md)** Repository discovery across an organisation
+      - ○ **[FE-08](./items/FE-08.md)** A second platform adapter
+      - ◒ **[FE-09](./items/FE-09.md)** Make BYPASS_USED reachable
+      - ○ **[FE-10](./items/FE-10.md)** Reviewer identity beyond a configured list
+      - ○ **[FE-11](./items/FE-11.md)** Cross-pack dependency ordering
+
