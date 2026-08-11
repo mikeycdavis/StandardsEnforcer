@@ -1,0 +1,43 @@
+Compliance
+  Status: NON_COMPLIANT
+  Score:  91%  (required-level rules that were evaluated: 11)
+  Rules:  17 passed, 1 failed, 0 warning(s), 32 skipped
+  Cover:  18 automated, 0 manual-review, 32 not-evaluated
+
+  Failing:
+    planning.breakdown-directory [required] artifacts/project-plan-breakdown/ exists but has no 00-overview.md.
+      -> Run /plan-structure and /plan-handoff, writing each top-level section to its own file under artifacts/project-plan-breakdown/.
+
+  Unestablished prohibitions — nobody looked for these:
+    ai.no-fabricated-capabilities
+    ai.no-safety-bypass
+    architecture.no-hidden-global-state
+    architecture.no-boundary-bypass
+    architecture.no-duplicate-implementations
+    concurrency.no-unmanaged-shared-state
+    data.migration-rollback
+    data.no-silent-discard
+    data.no-audit-corruption
+    data.no-prod-data-in-dev
+    errors.no-false-success
+    errors.no-unbounded-retry
+    observability.no-silenced-failures
+    meta.standards-not-weakened
+    scm.no-shared-history-rewrite
+    security.no-disabled-access-controls
+    security.no-untrusted-exec
+    testing.no-weakening-to-pass
+    testing.no-fabricated-results
+
+  A forbidden rule is satisfied by the absence of a violation, so a rule nothing has
+  established has established nothing, and the verdict is capped at NOT_EVALUATED
+  rather than reporting COMPLIANT over an unexamined prohibition (Standard 45 R6).
+  Resolve each: evaluate it, attest to it after a human review, declare it
+  not-applicable with a revisitWhen, or except it where the rule is exemptible.
+
+  Framework: 50 rule(s) catalogued across 23 of 53 standards; 6 fully machine-represented.
+
+  The score is a summary statistic over evaluated required rules, not a measure of
+  how much of the standard was verified. Status is the verdict; a skipped rule is
+  neither a pass nor a failure. Framework coverage is maturity of the tooling, not
+  compliance of this project — the two never combine into one number.

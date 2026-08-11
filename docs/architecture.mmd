@@ -1,0 +1,45 @@
+flowchart TB
+    subgraph trust["Trust roots — outside the governed repository"]
+        ORGRULE["Organisation ruleset<br/>requires the check"]
+        GATEWF["standards-gate.yml<br/>reusable workflow, pinned by SHA"]
+        REGISTRY["scope-registry.json<br/>held in a restricted repository"]
+    end
+
+    subgraph packs["Standards packs — independent repositories"]
+        PACKREPO["Pack repository<br/>tag + 40-hex commit"]
+        ADAPTERJSON["standards-adapter.json<br/>entrypoint, arguments, statuses, passing"]
+        EVALUATOR["The pack's own evaluator<br/>the only thing that judges a standard"]
+    end
+
+    subgraph enforcer["StandardsEnforcer — this repository"]
+        CLI["scripts/enforce.mjs<br/>CLI + the one invocation site"]
+        IDENTITY["scripts/identity.mjs<br/>tag→SHA, SHA-keyed checkout cache"]
+        GATE["scripts/gate.mjs<br/>is the check rooted outside the PR"]
+        SCOPE["scripts/scope.mjs<br/>who recorded that this repo is governed"]
+        FOOTPRINT["scripts/footprint.mjs<br/>ML evidence; decides nothing"]
+        CONTRACT["scripts/contracts/<br/>adapter.mjs + jsonschema.mjs"]
+        STATES["scripts/states.mjs<br/>state vocabulary, INV-E1, exit 0/1/4"]
+    end
+
+    subgraph platform["Platform adapters"]
+        GH["scripts/platform/github.mjs<br/>rulesets + classic protection via gh"]
+    end
+
+    TARGET["Governed repository<br/>project-policy.yml"]
+
+    ORGRULE -->|"requires check context"| GATEWF
+    GATEWF -->|"invokes, pinned enforcer SHA"| CLI
+    CLI -->|"verify triple, clone --detach"| IDENTITY
+    IDENTITY -->|"verified checkout"| PACKREPO
+    CLI -->|"assessGate(platform, gate)"| GATE
+    GATE -->|"requiredChecks(repo, branch)"| GH
+    GH -->|"gh api (rulesets, protection)"| ORGRULE
+    CLI -->|"resolveScope(registry, repoId)"| SCOPE
+    SCOPE -->|"reads, refused if inside target"| REGISTRY
+    SCOPE -->|"staleness basis only"| FOOTPRINT
+    FOOTPRINT -->|"scans tree"| TARGET
+    CLI -->|"loadAdapter(verified dir)"| CONTRACT
+    CONTRACT -->|"validated against schema"| ADAPTERJSON
+    CLI -->|"spawn declared argv, {target}"| EVALUATOR
+    EVALUATOR -->|"JSON status, verbatim"| CLI
+    CLI -->|"state + passing"| STATES

@@ -1,0 +1,54 @@
+sequenceDiagram
+    autonumber
+    participant PR as Pull request<br/>(governed repo)
+    participant WF as standards-gate.yml<br/>(pinned, external repo)
+    participant CLI as enforce.mjs
+    participant ID as identity.mjs
+    participant GATE as gate.mjs + platform/github.mjs
+    participant SCOPE as scope.mjs + footprint.mjs
+    participant PACK as Pack evaluator<br/>(verified checkout)
+
+    PR->>WF: opens — the organisation ruleset requires the check
+    WF->>CLI: node enforce.mjs --target --standards --tag --sha --platform --gate-* --scope-*
+    CLI->>ID: resolveIdentity(repo, tag, sha)
+    alt tag does not resolve to the declared commit
+        ID-->>CLI: ok:false, why
+        CLI-->>WF: STANDARDS_IDENTITY_MISMATCH, exit 4
+    else identity verified
+        ID-->>CLI: SHA-keyed checkout dir (HEAD == sha)
+        CLI->>GATE: assessGate(platform, {repo, branch, expectedCheck, trustedWorkflowRef})
+        alt nothing requires the check / rule inactive
+            GATE-->>CLI: verdict "missing"
+            CLI-->>WF: GATE_MISSING, exit 4 (no verdict produced)
+        else required but spoofable or unpinned
+            GATE-->>CLI: verdict "invalid"
+            CLI-->>WF: GATE_CONFIG_INVALID, exit 4 (no verdict produced)
+        else rooted
+            GATE-->>CLI: rootedAt, appIds, pinnedWorkflows
+            CLI->>SCOPE: detectFootprint(target) then resolveScope(registry, repoId, footprint)
+            alt registry missing, malformed, or inside the target
+                SCOPE-->>CLI: registry-invalid
+                CLI-->>WF: SCOPE_REGISTRY_INVALID, exit 4
+            else unreviewed, self-asserted, undated, expired or stale
+                SCOPE-->>CLI: review-required
+                CLI-->>WF: SCOPE_REVIEW_REQUIRED, exit 4
+            else out-of-scope, recorded by an authorised reviewer
+                SCOPE-->>CLI: out-of-scope + decision
+                CLI-->>WF: OUT_OF_SCOPE, exit 0 (an exclusion, not a pass)
+            else in-scope
+                SCOPE-->>CLI: in-scope + decision
+                alt target has no project-policy.yml
+                    CLI-->>WF: NOT_ADOPTED, exit 4 (governed and has not adopted)
+                else adopted
+                    CLI->>PACK: run declared entrypoint + arguments, {target} substituted
+                    alt no JSON, unrunnable, or an undeclared status
+                        PACK-->>CLI: unusable output
+                        CLI-->>WF: ENFORCEMENT_ERROR, exit 4
+                    else a declared status
+                        PACK-->>CLI: {status, ...} verbatim
+                        CLI-->>WF: EVALUATED + passing from the pack's own set, exit 0 or 1
+                    end
+                end
+            end
+        end
+    end

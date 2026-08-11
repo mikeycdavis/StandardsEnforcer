@@ -1,0 +1,29 @@
+standards audit — StandardsEnforcer (F:/Repos/StandardsEnforcer)
+103 file(s) scanned, 3 finding(s).
+
+What the repository has
+  Observed architecture [OBSERVED]
+    An architecture document exists and is the authoritative description of structure.
+      docs/architecture.md
+  Detected application capabilities [INFERRED]
+    Entry points and capabilities inferred from naming conventions: 1 CLI entry point(s): standards-enforce; 1 npm script(s).
+      package.json
+  Detected APIs: nothing detected
+  Detected background jobs: nothing detected
+  Detected integrations: nothing detected
+  Detected AI interfaces: nothing detected
+
+What needs attention
+  [warning] Missing planning artifacts [OBSERVED]
+    artifacts/project-plan-breakdown/ exists but has no 00-overview.md.
+      artifacts/project-plan-breakdown/
+    see standards/44-existing-project-reconstruction.md#r4--required-artifacts-and-canonical-paths
+
+0 error(s), 1 warning(s), 2 informational.
+
+Coverage is partial by design. Detection is pattern-based and language-agnostic, so a
+clean run means nothing matched the patterns — not that the repository is compliant.
+Per-capability test coverage, dead-code reachability, and most standards requirements
+are not mechanically checked. See design/standards-audit-cli.md.
+
+This is evidence, not a verdict. Run `standards validate` for a compliance status.
