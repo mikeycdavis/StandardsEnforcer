@@ -15,7 +15,8 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 
 | Status | Items |
 | --- | ---: |
-| ○ Not started | 8 |
+| ○ Not started | 7 |
+| ◔ Ready | 1 |
 | ◑ In progress | 6 |
 | ◒ Blocked | 2 |
 | ● Complete | 10 |
@@ -51,7 +52,7 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 
 ## Ready to pick up
 
-_Nothing marked ready._
+- ◔ [FE-13](./items/FE-13.md) — A cache marker is not proof of current identity
 
 ## Everything
 
@@ -65,7 +66,7 @@ _Nothing marked ready._
         - ● **[ST-03](./items/ST-03.md)** M2 Phase 3 — the enforcer stops knowing what a verdict means
         - ● **[ST-04](./items/ST-04.md)** An executable adapter conformance boundary
         - ● **[ST-05](./items/ST-05.md)** Adapter provenance bound to the verified release
-      - ○ **[FE-13](./items/FE-13.md)** A cache marker is not proof of current identity
+      - ◔ **[FE-13](./items/FE-13.md)** A cache marker is not proof of current identity
     - ◑ **[EP-02](./items/EP-02.md)** The enforcement root — a gate the governed pull request cannot satisfy _(2/3)_
       - ● **[FE-03](./items/FE-03.md)** M2 — a gate is a required check, not a file
       - ◑ **[FE-04](./items/FE-04.md)** M4 — the enforcement root against live GitHub _(1/2)_
