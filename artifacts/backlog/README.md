@@ -5,10 +5,10 @@
 Work on this project classified with the Extended Agile Hierarchy. Every item is a file in
 [`items/`](./items/); its YAML frontmatter is the source of truth and this page is derived from it.
 
-**9 of 18 leaf items complete — 50%**
+**9 of 19 leaf items complete — 47%**
 
 ```
-████████████████████░░░░░░░░░░░░░░░░░░░░  50%
+███████████████████░░░░░░░░░░░░░░░░░░░░░  47%
 ```
 
 ## Status
@@ -16,11 +16,11 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 | Status | Items |
 | --- | ---: |
 | ○ Not started | 7 |
-| ◔ Ready | 1 |
+| ◔ Ready | 2 |
 | ◑ In progress | 6 |
 | ◒ Blocked | 2 |
 | ● Complete | 10 |
-| **Total** | **26** |
+| **Total** | **27** |
 
 ## The hierarchy
 
@@ -29,7 +29,7 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 | Theme | `TH-` | 1 | Which enduring area of value is this? |
 | Initiative | `IN-` | 1 | What outcome are we pursuing there? |
 | Epic | `EP-` | 5 | What large body of work delivers it? |
-| Feature | `FE-` | 12 | What shippable slice of that epic? |
+| Feature | `FE-` | 13 | What shippable slice of that epic? |
 | Story | `ST-` | 7 | What user-visible change, roughly one PR? |
 | Task | `TA-` | 0 | What technical step inside a story? |
 
@@ -37,7 +37,7 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 
 | Theme | Progress | Done | Remaining |
 | --- | --- | ---: | ---: |
-| [TH-01 Enforced standards compliance across the portfolio](./items/TH-01.md) | `███████░░░░░░░` 50% | 9 | 9 |
+| [TH-01 Enforced standards compliance across the portfolio](./items/TH-01.md) | `███████░░░░░░░` 47% | 9 | 10 |
 
 ## In flight
 
@@ -53,12 +53,13 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 ## Ready to pick up
 
 - ◔ [FE-13](./items/FE-13.md) — A cache marker is not proof of current identity
+- ◔ [FE-14](./items/FE-14.md) — A skipped oracle is not a passing integration
 
 ## Everything
 
-- ◑ **[TH-01](./items/TH-01.md)** Enforced standards compliance across the portfolio _(9/18)_
-  - ◑ **[IN-01](./items/IN-01.md)** Enforcement a governed repository cannot weaken _(9/18)_
-    - ◑ **[EP-01](./items/EP-01.md)** Authority transport — run a pack's own evaluator under a pinned identity _(6/7)_
+- ◑ **[TH-01](./items/TH-01.md)** Enforced standards compliance across the portfolio _(9/19)_
+  - ◑ **[IN-01](./items/IN-01.md)** Enforcement a governed repository cannot weaken _(9/19)_
+    - ◑ **[EP-01](./items/EP-01.md)** Authority transport — run a pack's own evaluator under a pinned identity _(6/8)_
       - ● **[FE-01](./items/FE-01.md)** M1 — run the official standards implementation and report what it said
       - ● **[FE-02](./items/FE-02.md)** M2 — contract-driven authority transport _(5/5)_
         - ● **[ST-01](./items/ST-01.md)** M2 Phase 0 — what the eight released interfaces actually are
@@ -67,6 +68,7 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
         - ● **[ST-04](./items/ST-04.md)** An executable adapter conformance boundary
         - ● **[ST-05](./items/ST-05.md)** Adapter provenance bound to the verified release
       - ◔ **[FE-13](./items/FE-13.md)** A cache marker is not proof of current identity
+      - ◔ **[FE-14](./items/FE-14.md)** A skipped oracle is not a passing integration
     - ◑ **[EP-02](./items/EP-02.md)** The enforcement root — a gate the governed pull request cannot satisfy _(2/3)_
       - ● **[FE-03](./items/FE-03.md)** M2 — a gate is a required check, not a file
       - ◑ **[FE-04](./items/FE-04.md)** M4 — the enforcement root against live GitHub _(1/2)_
