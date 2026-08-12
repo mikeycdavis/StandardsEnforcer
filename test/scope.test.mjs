@@ -24,7 +24,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { enforce } from "../scripts/enforce.mjs";
-import { detectFootprint, footprintDigest, codeView } from "../scripts/footprint.mjs";
+import { detectFootprint, footprintDigest, codeView, SURFACE } from "../scripts/footprint.mjs";
 import { resolveScope, OUTCOME } from "../scripts/scope.mjs";
 import { STATE, PASSING, REQUIRES_RECORDED_DECISION, REACHABLE, exitFor, EXIT } from "../scripts/states.mjs";
 
@@ -35,6 +35,8 @@ const CACHE = path.join(tmpdir(), "standards-enforcer-test-cache");
 const TODAY = "2026-08-09";
 const REVIEWER = "ml-governance@acme.example";
 const ID = "github:1024871";
+/** The asking pack's own contract id. Tests may name a pack; `scripts/` may not. */
+const STANDARD = "machine-learning";
 
 const git = (args, cwd) => spawnSync("git", args, { encoding: "utf8", cwd, windowsHide: true });
 const MLS_AVAILABLE = existsSync(path.join(MLS, ".git")) && git(["rev-list", "-n", "1", TAG], MLS).status === 0;
@@ -56,13 +58,24 @@ async function writeTree(dir, files) {
   }
 }
 
-/** A registry written outside the target, which is the only place a registry may be. */
+/**
+ * A registry written outside the target, which is the only place a registry may be.
+ *
+ * FE-12 moved dispositions under `standards`, keyed by the asking pack's own contract id, and gave a
+ * decision's evidence basis a `surface`. Both are absorbed here rather than at ~15 call sites: every
+ * test below is about a *property* of scope resolution, and rewriting each fixture by hand would have
+ * meant reviewing fifteen diffs to confirm none of those properties had quietly moved. The shape is
+ * the fixture's business; the assertions are the tests'.
+ */
 async function registryAt(dir, entry, { reviewers = [REVIEWER], name = "acme/moneyball", key = ID } = {}) {
   const p = path.join(dir, "scope-registry.json");
+  const filed = entry && entry.reviewedFootprint && !entry.reviewedFootprint.surface
+    ? { ...entry, reviewedFootprint: { surface: SURFACE, ...entry.reviewedFootprint } }
+    : entry;
   await writeFile(p, JSON.stringify({
     schemaVersion: "1.0.0",
     authorisedReviewers: reviewers,
-    repositories: entry === null ? {} : { [key]: { name, machineLearning: entry } },
+    repositories: entry === null ? {} : { [key]: { name, standards: { [STANDARD]: filed } } },
   }, null, 2));
   return p;
 }
@@ -79,8 +92,11 @@ const decision = (over = {}) => ({
   ...over,
 });
 
+/** The observed surfaces map `resolveScope` now takes, built from a single footprint result. */
+const observed = (footprint) => ({ [footprint.surface ?? SURFACE]: { kinds: footprint.kinds, digest: footprint.digest } });
+
 const resolve = (registryPath, footprint, over = {}) =>
-  resolveScope({ registryPath, repoId: ID, repoName: "acme/moneyball", footprint, today: TODAY, ...over });
+  resolveScope({ registryPath, repoId: ID, repoName: "acme/moneyball", standardId: STANDARD, footprints: observed(footprint), today: TODAY, ...over });
 
 // ===========================================================================
 // The eight fixtures. What detection sees, and what it calls it.
@@ -376,7 +392,7 @@ test("enforce · in scope and not adopted is a stronger finding than no policy f
 
       const scoped = await enforce({
         target: dir, standardsRepo: MLS, tag: TAG, sha: SHA, cacheRoot: CACHE, today: TODAY,
-        scope: { registryPath: reg, repoId: ID, repoName: "acme/moneyball" },
+        scope: { registryPath: reg, repoId: ID, repoName: "acme/moneyball", standardId: STANDARD },
       });
       assert.equal(scoped.state, STATE.NOT_ADOPTED);
       assert.equal(scoped.governed, true);
@@ -405,7 +421,7 @@ test("enforce · a recorded exclusion merges, evaluates nothing, and reads as an
       }));
       const r = await enforce({
         target: dir, standardsRepo: MLS, tag: TAG, sha: SHA, cacheRoot: CACHE, today: TODAY,
-        scope: { registryPath: reg, repoId: ID, repoName: "acme/moneyball" },
+        scope: { registryPath: reg, repoId: ID, repoName: "acme/moneyball", standardId: STANDARD },
       });
       assert.equal(r.state, STATE.OUT_OF_SCOPE);
       assert.equal(r.passing, true);
@@ -443,7 +459,7 @@ test("adversarial · nothing a repository writes about its own scope changes its
       const reg = await registryAt(outside, decision({ reviewedFootprint: { kinds, digest: footprintDigest(kinds) } }));
       const run = () => enforce({
         target: dir, standardsRepo: MLS, tag: TAG, sha: SHA, cacheRoot: CACHE, today: TODAY,
-        scope: { registryPath: reg, repoId: ID, repoName: "acme/moneyball" },
+        scope: { registryPath: reg, repoId: ID, repoName: "acme/moneyball", standardId: STANDARD },
       });
 
       const baseline = await run();

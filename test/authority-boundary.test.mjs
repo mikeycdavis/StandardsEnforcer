@@ -67,6 +67,15 @@ test("there is an executable surface to constrain", () => {
  * a single `if (standard.id === "betting")` is how a protocol becomes a lookup table.
  */
 const PACK_IDS = [
+  // The spellings that are not the contract id come first, because they are the ones that got past
+  // this guard. `scripts/scope.mjs` read a hardcoded `entry.machineLearning` and named
+  // `MachineLearningStandards` in its own prose for every pack, including packs that were not it —
+  // and nothing here fired, because neither spelling is the id. One pack was privileged in code for
+  // the whole of M3 while a test asserting that could not happen sat two files away. A prohibition
+  // that covers only the canonical spelling is a prohibition on typing it canonically (FE-12).
+  "machineLearning",
+  "MachineLearningStandards",
+  "machine_learning",
   "betting",
   "machine-learning",
   "mathematics",

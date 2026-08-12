@@ -35,6 +35,26 @@
  * Scope authority is also independent of enforcement authority. A verified enforcement root makes
  * the *check* unavoidable; it does not make a partial detector more certain, and nothing here reads
  * the gate.
+ *
+ * ---
+ *
+ * THE UNIT IS repository × standards pack (FE-12). This module used to read one hardcoded key —
+ * `entry.machineLearning` — and name one pack in its own prose, for every pack. A repository in scope
+ * for one standard and out of scope for another could not be expressed at all, and the
+ * EngineeringStandards adoption had to keep its decision in an evidence document because the registry
+ * the enforcer reads had nowhere to put it. The registry format was already pack-shaped; the reader
+ * was not.
+ *
+ * So the caller names the standard that is asking, the key is that standard's own contract id, and
+ * there is no default. **Nothing in this file may know which packs exist.** Adding one is a registry
+ * edit, not a change here, and `test/authority-boundary.test.mjs` enforces that against the source.
+ *
+ * THE EVIDENCE BASIS NAMES ITS SURFACE, AND GENERALISING SCOPE DID NOT GENERALISE DETECTION. There is
+ * one detector, over one evidence surface. A disposition records which surface it was reviewed
+ * against; if the enforcer has no observation of that surface, freshness is **undetermined** — not
+ * fresh, not stale — and the answer is review-required. Assuming an unnamed basis must be the surface
+ * that happens to exist would be the enforcer deciding what evidence a reviewer had in mind, and a
+ * pack with no detector is not a pack whose detector found nothing (ADR 0004).
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -107,16 +127,28 @@ export function loadRegistry(registryPath, { target = null } = {}) {
  * display name: `acme/moneyball` can be renamed, transferred, deleted and recreated by someone else,
  * and a scope decision that follows a name follows whoever holds the name today.
  *
- * `footprint` is `detectFootprint()`'s result and is used for exactly one thing — deciding whether
- * the evidence basis a reviewer recorded still describes this repository.
+ * `standardId` is the asking pack's own `standard.id`, taken from the adapter contract in its
+ * verified release. It is the key the disposition is filed under, and it has no default: a caller
+ * that does not say which standard is asking has not asked a question that has an answer, and
+ * answering anyway is how one pack becomes privileged again.
+ *
+ * `footprints` maps evidence-surface name to `{ kinds, digest }` — every surface the enforcer
+ * actually observed on this run. Used for exactly one thing: deciding whether the evidence basis a
+ * reviewer recorded still describes this repository.
  */
-export function resolveScope({ registryPath, repoId, repoName = null, target = null, footprint, today }) {
+export function resolveScope({ registryPath, repoId, repoName = null, standardId = null, target = null, footprints = {}, today }) {
   const loaded = loadRegistry(registryPath, { target });
   if (loaded.outcome === OUTCOME.REGISTRY_INVALID) return loaded;
   const { registry, reviewers } = loaded;
 
   if (!repoId) {
     return invalid("no immutable repository identity was supplied; scope decisions are keyed by identity, not by name");
+  }
+  if (!standardId) {
+    return invalid(
+      "no standard was named, so there is no disposition to look up. Scope is recorded per standards pack, and a " +
+      "scope question with no pack in it is not a question this registry can answer",
+    );
   }
 
   const entry = registry.repositories[repoId];
@@ -135,36 +167,52 @@ export function resolveScope({ registryPath, repoId, repoName = null, target = n
       );
     }
     return review(
-      `no scope decision is recorded for ${repoName ?? repoId}. Whether MachineLearningStandards governs it is ` +
+      `no scope decision is recorded for ${repoName ?? repoId}. Whether ${standardId} governs it is ` +
       "unreviewed, and unreviewed is a state to resolve rather than a reason to proceed",
-      { unreviewed: true },
+      { unreviewed: true, standardId },
     );
   }
 
-  const ml = entry.machineLearning;
-  if (!ml || typeof ml !== "object") {
-    return review(`the registry entry for ${repoName ?? repoId} records no machine-learning disposition`, { malformed: true });
+  // Dispositions live under `standards`, keyed by the pack's own contract id. A missing decision for
+  // one pack says nothing about any other: silence about a standard is a question, never an answer,
+  // and letting a repository inherit an unrelated pack's decision would be the hardcoded key back in
+  // a friendlier costume.
+  const filed = entry.standards;
+  if (!filed || typeof filed !== "object" || Array.isArray(filed)) {
+    return review(
+      `the registry entry for ${repoName ?? repoId} records no per-standard dispositions, so nothing in it says ` +
+      `whether ${standardId} governs this repository`,
+      { malformed: true, standardId },
+    );
   }
-  if (ml.disposition !== DISPOSITION.IN_SCOPE && ml.disposition !== DISPOSITION.OUT_OF_SCOPE) {
-    return review(`the recorded disposition "${ml.disposition}" is not one this enforcer recognises`, { malformed: true });
+  const recorded = filed[standardId];
+  if (!recorded || typeof recorded !== "object") {
+    return review(
+      `the registry entry for ${repoName ?? repoId} records no disposition for ${standardId}`,
+      { malformed: true, standardId },
+    );
+  }
+  if (recorded.disposition !== DISPOSITION.IN_SCOPE && recorded.disposition !== DISPOSITION.OUT_OF_SCOPE) {
+    return review(`the recorded disposition "${recorded.disposition}" is not one this enforcer recognises`, { malformed: true, standardId });
   }
 
   const decision = {
-    disposition: ml.disposition,
-    reviewedBy: ml.reviewedBy ?? null,
-    reviewedAt: ml.reviewedAt ?? null,
-    reason: ml.reason ?? null,
-    evidence: ml.evidence ?? [],
-    revisitWhen: ml.revisitWhen ?? [],
-    reviewedFootprint: ml.reviewedFootprint ?? null,
-    expiresAt: ml.expiresAt ?? null,
+    standardId,
+    disposition: recorded.disposition,
+    reviewedBy: recorded.reviewedBy ?? null,
+    reviewedAt: recorded.reviewedAt ?? null,
+    reason: recorded.reason ?? null,
+    evidence: recorded.evidence ?? [],
+    revisitWhen: recorded.revisitWhen ?? [],
+    reviewedFootprint: recorded.reviewedFootprint ?? null,
+    expiresAt: recorded.expiresAt ?? null,
   };
 
   // The socially realistic bypass: whoever wants to avoid the standards records `out-of-scope`
   // themselves. It is a legitimate *proposal* and is reported as one; it is not a disposition.
   if (!decision.reviewedBy || !reviewers.has(decision.reviewedBy)) {
     return review(
-      `the disposition "${ml.disposition}" for ${repoName ?? repoId} was recorded by ` +
+      `the disposition "${recorded.disposition}" for ${repoName ?? repoId} was recorded by ` +
       `${decision.reviewedBy ? `"${decision.reviewedBy}"` : "nobody"}, who is not an authorised scope reviewer. ` +
       "A proposal to be excluded is not an exclusion",
       { decision, selfAsserted: true },
@@ -184,30 +232,45 @@ export function resolveScope({ registryPath, repoId, repoName = null, target = n
   }
 
   const basis = decision.reviewedFootprint;
-  if (!basis || !Array.isArray(basis.kinds) || typeof basis.digest !== "string") {
+  if (!basis || !Array.isArray(basis.kinds) || typeof basis.digest !== "string" || typeof basis.surface !== "string") {
     return review(
-      `the scope decision for ${repoName ?? repoId} records no evidence basis, so whether it still describes this ` +
-      "repository cannot be determined. A decision that cannot go stale cannot be trusted to be fresh",
+      `the scope decision for ${repoName ?? repoId} records no evidence basis naming the surface it was reviewed ` +
+      "against, so whether it still describes this repository cannot be determined. A decision that cannot go " +
+      "stale cannot be trusted to be fresh",
       { decision, noBasis: true },
     );
   }
 
-  if (basis.digest !== footprint.digest) {
+  // The surface has to be one this run actually observed. Comparing a basis against a different
+  // surface's digest would manufacture staleness; assuming the only surface that exists must be the
+  // one meant would be the enforcer deciding what evidence the reviewer had in mind. Undetermined is
+  // the truthful third answer, and it goes to a human.
+  const observed = footprints[basis.surface];
+  if (!observed) {
+    return review(
+      `the scope decision for ${repoName ?? repoId} was reviewed against the evidence surface "${basis.surface}", ` +
+      "which this run did not observe. Whether that decision is still current cannot be determined here — which " +
+      "is not the same as it being stale, and not the same as it being fresh",
+      { decision, unobservedSurface: basis.surface, observedSurfaces: Object.keys(footprints) },
+    );
+  }
+
+  if (basis.digest !== observed.digest) {
     const before = new Set(basis.kinds);
-    const now = new Set(footprint.kinds);
-    const gained = footprint.kinds.filter((k) => !before.has(k));
+    const now = new Set(observed.kinds);
+    const gained = observed.kinds.filter((k) => !before.has(k));
     const lost = basis.kinds.filter((k) => !now.has(k));
     return review(
-      `the machine-learning footprint of ${repoName ?? repoId} no longer matches the one reviewed on ` +
+      `the ${basis.surface} of ${repoName ?? repoId} no longer matches the one reviewed on ` +
       `${decision.reviewedAt}` +
       (gained.length ? `; gained ${gained.join(", ")}` : "") +
       (lost.length ? `; lost ${lost.join(", ")}` : ""),
-      { decision, stale: true, gained, lost, reviewedKinds: basis.kinds, observedKinds: footprint.kinds },
+      { decision, stale: true, gained, lost, reviewedKinds: basis.kinds, observedKinds: observed.kinds },
     );
   }
 
   return {
-    outcome: ml.disposition === DISPOSITION.IN_SCOPE ? OUTCOME.IN_SCOPE : OUTCOME.OUT_OF_SCOPE,
+    outcome: recorded.disposition === DISPOSITION.IN_SCOPE ? OUTCOME.IN_SCOPE : OUTCOME.OUT_OF_SCOPE,
     why: null,
     detail: {
       decision,

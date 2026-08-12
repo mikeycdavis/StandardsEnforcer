@@ -46,6 +46,16 @@ on:
         description: The check context the organisation ruleset requires.
         required: true
         type: string
+      standard-id:
+        description: >-
+          The asking pack's own contract id, as it appears in that release's standards-adapter.json —
+          `machine-learning`, `engineering`, and so on. Scope dispositions are filed per standards
+          pack, so this is the key the registry is looked up under. Required whenever a scope registry
+          is supplied. It is passed rather than read out of the pinned release on purpose: a reviewed
+          exclusion must survive a release whose adapter is malformed, absent or unusable.
+        required: false
+        default: ''
+        type: string
       require-organisation-root:
         description: Refuse a repository-level rule as the enforcement root.
         required: false
@@ -132,7 +142,7 @@ jobs:
             --gate-check='${{ inputs.gate-check }}' \
             --trusted-workflow='${{ github.workflow_ref }}' \
             ${{ inputs.require-organisation-root && '--require-organisation-root' || '' }} \
-            ${{ inputs.scope-registry-repo != '' && format('--scope-registry=scope/{0} --repo-id=github:{1} --repo-name={2}', inputs.scope-registry-path, github.repository_id, github.repository) || '' }}
+            ${{ inputs.scope-registry-repo != '' && format('--scope-registry=scope/{0} --repo-id=github:{1} --standard={2} --repo-name={3}', inputs.scope-registry-path, github.repository_id, inputs.standard-id, github.repository) || '' }}
 
       # --repo-id is github.repository_id, not github.repository. The name can be renamed,
       # transferred, or freed and claimed by somebody else; a scope decision that follows a name

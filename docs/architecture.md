@@ -70,7 +70,7 @@ and the contract has no `runtime` field precisely because nothing has yet forced
 | `--gate-repo=`, `--gate-branch=`, `--gate-check=` | The repository, branch and required check context to assess |
 | `--trusted-workflow=<ref>` | The reusable-workflow ref that must be pinned to a commit |
 | `--require-organisation-root` | Refuse a repository-level rule as the enforcement root |
-| `--scope-registry=<path>`, `--repo-id=<id>`, `--repo-name=<name>` | The external registry, and the immutable platform identity to look up |
+| `--scope-registry=<path>`, `--repo-id=<id>`, `--standard=<id>`, `--repo-name=<name>` | The external registry, the immutable platform identity to look up, and which standards pack is asking. All but `--repo-name` are required together — a half-configured scope check is not a scope check |
 
 Both the gate group and the scope group are **all-or-nothing**: supplying any option from a group
 without its required companions is an argument error, not a half-check. "A half-configured gate is
@@ -163,9 +163,9 @@ The registry's shape is documented by example in
 | `schemaVersion` | `"1.0.0"` |
 | `authorisedReviewers[]` | The trust source. An empty or missing list makes **every** entry non-authoritative, and the registry is refused |
 | `repositories["github:<numeric id>"]` | Keyed by immutable identity. `name` is for humans and is never matched on |
-| `…​.machineLearning.disposition` | `in-scope` or `out-of-scope`. Anything else is review-required |
+| `…​.standards["<pack id>"].disposition` | `in-scope` or `out-of-scope`. Anything else is review-required. **Keyed by the asking pack's own contract id** — the unit is repository × standards pack, and no pack is privileged in code |
 | `…​.reviewedBy` / `reviewedAt` / `reason` | Required for both directions. Missing any of them makes the entry a proposal, not a decision |
-| `…​.reviewedFootprint.{kinds,digest}` | The evidence basis. Without it a decision cannot go stale, and is therefore not trusted to be fresh |
+| `…​.reviewedFootprint.{surface,kinds,digest}` | The evidence basis, naming the surface it was reviewed against. Without it a decision cannot go stale, and is therefore not trusted to be fresh. A basis naming a surface this run did not observe is **undetermined** — neither fresh nor stale — and goes back to a human |
 | `…​.revisitWhen[]`, `evidence[]`, `expiresAt` | Reviewer-supplied context; `expiresAt` is an optional self-imposed bound, not a default timer |
 
 ---
@@ -497,10 +497,13 @@ A pull request opened against a governed repository, end to end:
    which is the whole point of M2.
 6. `detectFootprint(target)` (`scripts/footprint.mjs:160`) walks the target and produces kinds,
    signals and a digest. It decides nothing.
-7. `resolveScope()` (`scripts/scope.mjs:113`) loads the external registry — refusing one inside the
-   target — looks up `github:<id>`, and checks the reviewer is authorised, the date is a date, a
-   reason exists, any `expiresAt` has not passed, and the recorded `reviewedFootprint.digest` still
-   equals the observed one. Failure → `SCOPE_REVIEW_REQUIRED` or `SCOPE_REGISTRY_INVALID`, exit `4`.
+7. `resolveScope()` (`scripts/scope.mjs`) loads the external registry — refusing one inside the
+   target — looks up `github:<id>`, then the disposition filed under the asking pack's id, and checks
+   the reviewer is authorised, the date is a date, a reason exists, any `expiresAt` has not passed,
+   and the recorded `reviewedFootprint.digest` still equals the one observed for the surface the basis
+   names. **The asking pack's id comes from `--standard`, not from the pinned release's adapter**, so
+   that a reviewed exclusion survives a release whose contract is malformed, absent or unusable — the
+   invariant `test/scope-seam-invariance.test.mjs` exists to hold. Failure → `SCOPE_REVIEW_REQUIRED` or `SCOPE_REGISTRY_INVALID`, exit `4`.
    `out-of-scope` → `OUT_OF_SCOPE`, exit `0`, rendered explicitly as *"Nothing was evaluated. This is
    an exclusion, not a pass."*
 8. `existsSync(target/project-policy.yml)` decides adoption. Absent → `NOT_ADOPTED`, exit `4`, phrased

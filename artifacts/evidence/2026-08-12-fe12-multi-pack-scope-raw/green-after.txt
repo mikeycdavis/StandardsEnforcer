@@ -1,0 +1,26 @@
+✔ there is an executable surface to constrain (0.8986ms)
+✔ no executable source names a pack's identity (2.8148ms)
+✔ no executable source names a pack's native status (1.2667ms)
+✔ no executable source names a pack's evidence field (1.353ms)
+✔ the enforcer needs only three things from a pack, and reads only those (0.1153ms)
+✔ the guard bites: a planted violation of each kind is caught (0.4229ms)
+✔ the guard does not bite on the enforcer's own vocabulary (0.2221ms)
+✔ comments may explain the prohibition without violating it (0.0694ms)
+✔ one repository carries independent simultaneous dispositions for two packs (5.0369ms)
+✔ a pack with no recorded disposition is review-required, not covered by another pack's (2.1565ms)
+✔ resolving without naming a standard is refused rather than defaulted (1.8871ms)
+✔ an unreviewed repository's reason names the standard that is asking (3.1921ms)
+✔ a disposition reviewed against a surface the enforcer did not compute is undetermined (1.8096ms)
+✔ a basis that names no surface at all is refused (1.6828ms)
+✔ staleness still bites, per pack, against the surface actually named (2.0807ms)
+✔ one pack's stale decision does not disturb another pack's fresh one (1.8667ms)
+✔ a self-asserted disposition is a proposal for every pack, not just the first one (1.7614ms)
+✔ adding a pack requires no change to the enforcer, which is the actual acceptance test (2.5783ms)
+ℹ tests 18
+ℹ suites 0
+ℹ pass 18
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 107.0184

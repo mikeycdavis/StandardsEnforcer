@@ -38,7 +38,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { enforce } from "../scripts/enforce.mjs";
-import { detectFootprint, footprintDigest } from "../scripts/footprint.mjs";
+import { detectFootprint, footprintDigest, SURFACE } from "../scripts/footprint.mjs";
 import { STATE } from "../scripts/states.mjs";
 
 const TODAY = "2026-08-09";
@@ -99,14 +99,25 @@ async function brokenRelease(dir, files = {}) {
   return { repo, sha: git(["rev-list", "-n", "1", "v1.0.0"], repo) };
 }
 
+/**
+ * FE-12 filed dispositions under `standards`, keyed by the asking pack's contract id, and gave a
+ * decision's evidence basis a `surface`. Absorbed here so the tests below keep asserting what they
+ * were written to assert — that no scope-decisive path touches the evaluator seam.
+ */
 async function registry(at, entry, { reviewers = [REVIEWER], key = ID } = {}) {
+  const filed = entry && entry.reviewedFootprint && !entry.reviewedFootprint.surface
+    ? { ...entry, reviewedFootprint: { surface: SURFACE, ...entry.reviewedFootprint } }
+    : entry;
   await writeFile(at, JSON.stringify({
     schemaVersion: "1.0.0",
     authorisedReviewers: reviewers,
-    repositories: entry === null ? {} : { [key]: { name: NAME, machineLearning: entry } },
+    repositories: entry === null ? {} : { [key]: { name: NAME, standards: { [STANDARD]: filed } } },
   }, null, 2));
   return at;
 }
+
+/** The asking pack's id. Supplied by the invocation, never read out of the release under test. */
+const STANDARD = "machine-learning";
 
 const decision = (over = {}) => ({
   disposition: "in-scope",
@@ -156,7 +167,7 @@ async function outcome({ files = {}, entry, inTarget = false, key = ID, release 
       tag: "v1.0.0",
       sha,
       cacheRoot: path.join(dir, "cache"),
-      scope: { registryPath, repoId: ID, repoName: NAME },
+      scope: { registryPath, repoId: ID, repoName: NAME, standardId: STANDARD },
       today: TODAY,
     });
 
