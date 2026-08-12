@@ -1,9 +1,18 @@
 # 0003 — The enforcement root
 
-- **Status:** Accepted
+- **Status:** Accepted; **central mitigation superseded by live evidence, 2026-08-10**
 - **Date:** 2026-08-09
 - **Deciders:** Project owner
 - **Milestone:** M2. Makes `GATE_MISSING` reachable and adds `GATE_CONFIG_INVALID`.
+- **Superseded in part by:**
+  [2026-08-10-m2-superseded.md](../evidence/2026-08-10-m2-superseded.md), on the evidence of
+  [M4 against live GitHub](../evidence/2026-08-10-m4-live-github.md). The app binding
+  (`integration_id` / `app_id`) does **not** establish an enforcement root for GitHub Actions: it
+  identifies the app that produced a check, not the enforcement implementation, and every workflow
+  in the repository runs as that one app. What survives never depended on the binding — a gate is a
+  required check and not a workflow file; a name-only requirement is spoofable; an unpinned
+  trusted-workflow reference is not a root; an unknown is never an absence; a bypass is an event,
+  not a verdict. The conclusion built on top of it does not hold.
 
 ## Context
 
