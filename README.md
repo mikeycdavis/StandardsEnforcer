@@ -183,3 +183,5 @@ artifacts/evidence/     what was actually run, and what it produced
   on the evidence of M4, and what survives because it never depended on the app binding
 - [M3 scope registry](artifacts/evidence/2026-08-09-m3-scope-registry.md) — the detection fixtures,
   the staleness model, and a repository trying to declare itself ungoverned
+- [M3 reconciled](artifacts/evidence/2026-08-12-m3-reconciliation.md) — an approved plan classified
+  against the implementation that already existed, and the four conflicts adjudicated
