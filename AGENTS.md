@@ -29,7 +29,13 @@ you the wrong answer confidently.
    standards below governs.
 4. **The applicable standard documents** — `<standards-repo>/standards/NN-*.md`, read on demand.
    Open one when a rule is relevant to what you are doing; do not read all 53 up front.
-5. **Current plan artifacts** — `artifacts/project-plan-breakdown/`.
+5. **Current plans** — `artifacts/plan/`, date-prefixed. The live one is
+   [`2026-08-12-m3-reconciled-plan.md`](artifacts/plan/2026-08-12-m3-reconciled-plan.md).
+   `artifacts/project-plan-breakdown/` is the decomposition surface EngineeringStandards requires and
+   is **intentionally empty**: `standards init` creates it empty because scaffolding template
+   sections over existing code is fabricated history, and `planning.breakdown-directory` is left
+   failing rather than satisfied dishonestly. Do not populate it to make a rule green. Reading only
+   that directory would tell you this project has no plan, which is false.
 6. **Decision records** — `artifacts/adr/`.
 
 Adoption workflow, commands, and the audit/validate distinction: `<standards-repo>/INSTRUCTIONS.md`.
