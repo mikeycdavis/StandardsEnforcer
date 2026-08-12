@@ -142,7 +142,14 @@ test("two identities never share a cache entry", async () => {
       const second = resolveIdentity({ repo: dir, tag: "v1.0.1", sha: later, cacheRoot });
       assert.equal(second.ok, true, second.why ?? "");
       assert.notEqual(second.dir, first.dir, "a second identity reused the first identity's tree");
-      assert.deepEqual(readdirSync(cacheRoot).sort(), [commit, later].sort());
+      // Entries only. Completion markers sit beside the checkouts rather than inside them (FE-13), so
+      // the cache root holds `<sha>` and `<sha>.complete` per identity. What this test owns is that
+      // one identity never reaches another's tree; the marker layout is asserted in
+      // `identity-cache.test.mjs`, and duplicating it here is how two files come to disagree.
+      const entries = readdirSync(cacheRoot, { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name);
+      assert.deepEqual(entries.sort(), [commit, later].sort());
     });
   });
 });
