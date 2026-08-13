@@ -107,6 +107,66 @@ assertions observing another file's entries, 12 failures then 4 — is **superse
 was accurate against the pre-`31fb5ec` implementation and is preserved in the item's history so the
 change in failure mode remains visible. It must not be cited as current evidence.
 
+## The falsifier — written after ADR 0006, observed red before any remedy
+
+`test/cache-concurrency.test.mjs`. Three arms, run three consecutive times, **identical every time**:
+
+```text
+✖ arm 1   two processes, same identity, shared root      RED   3/3
+✔ arm 2   a tampered verified entry is not trusted       green 3/3
+✔ arm 2b  a real checkout of a different commit          green 3/3
+✔ arm 3   two different identities materialise together  green 3/3
+```
+
+Raw: [`falsifier-red-before.txt`](2026-08-12-fe15-cache-concurrency-raw/falsifier-red-before.txt).
+
+**One red property and three negative controls, deliberately.** Arms 2, 2b and 3 pin guarantees the
+product *already* has, so the remedy cannot buy determinism by giving them up. Forcing them red would
+have meant damaging the code to manufacture a failure, and a falsifier that damages what it measures
+is measuring itself.
+
+### What Arm 1 actually shows, and it is worse than expected
+
+Both processes fail. Not one losing to a winner — **both**:
+
+```text
+the verified checkout could not be published: EPERM, Permission denied:
+  <cacheRoot>/2570997e…
+the verified checkout could not be published: EPERM: operation not permitted,
+  rename '<cacheRoot>/.staging-2570997e…-34556' -> '<cacheRoot>/2570997e…'
+```
+
+Each process cloned, checked out, and **verified its own staging tree successfully**. Both then tried
+to publish into the same destination, and on Windows a directory cannot be removed or renamed over
+while another process holds a handle inside it. So one failed removing the destination and the other
+failed renaming onto it.
+
+Two observations that matter for the remedy:
+
+1. **The failure is at publication, not at verification.** Per-process staging did exactly what
+   FE-13 built it for — neither process deleted a tree the other was executing from, and neither
+   served unverified bytes. The unprotected step is the swap.
+2. **Nothing was thrown.** Both returned `ok: false` with a reason, because FE-13 wrapped the
+   filesystem mutations. The contract's "two outcomes only" held under a condition it was not
+   designed for.
+
+This is the FE-13 residual, reproduced exactly as it was described: *"two runs can still repair the
+same identity concurrently… the window is narrowed rather than closed."*
+
+### A timing seam was required; a verification seam was not
+
+Arms 2, 2b and 3 needed no new surface at all — tamper after materialisation, re-enter through the
+ordinary path. Arm 1 needed two genuinely separate processes entering `materialise()` at the same
+instant, which cannot be staged from inside one.
+
+`test-support/materialise-once.mjs` is that seam and nothing more: it spins to a shared wall-clock
+barrier, then calls the ordinary exported `materialise()` with ordinary arguments and prints whatever
+it returns. **It does not stub, wrap, weaken or bypass anything on the identity path.** A helper that
+could make verification pass would invalidate every arm it appears in.
+
+It lives in `test-support/` rather than `test/`, so `node --test` does not collect it — the same
+reason the oracle resolver moved there.
+
 ## The question this does not answer
 
 The remedy depends on something this reproduction cannot establish:

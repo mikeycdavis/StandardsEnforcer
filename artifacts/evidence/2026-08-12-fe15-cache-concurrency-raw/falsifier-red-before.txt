@@ -1,0 +1,41 @@
+✖ arm 1 · two processes materialising the same identity both complete, and neither invalidates the other (1441.1547ms)
+✔ arm 2 · a tampered entry is not trusted, however the entry came to be there (1015.0988ms)
+✔ arm 2b · the same holds for a real checkout of a different commit (1012.2805ms)
+✔ arm 3 · two different identities materialise concurrently, not one after the other (1144.5038ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 3
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4662.1595
+
+✖ failing tests:
+
+test at test\cache-concurrency.test.mjs:120:1
+✖ arm 1 · two processes materialising the same identity both complete, and neither invalidates the other (1441.1547ms)
+  AssertionError [ERR_ASSERTION]: a process was defeated by a concurrent one materialising the same identity:
+    the verified checkout could not be published: EPERM, Permission denied: \\?\C:\Users\Mike\AppData\Local\Temp\fe15-cache-04tUcr\196fd5b74ee98069676e643fbdbb14039a8036e7 '\\?\C:\Users\Mike\AppData\Local\Temp\fe15-cache-04tUcr\196fd5b74ee98069676e643fbdbb14039a8036e7'
+    the verified checkout could not be published: EPERM, Permission denied: \\?\C:\Users\Mike\AppData\Local\Temp\fe15-cache-04tUcr\196fd5b74ee98069676e643fbdbb14039a8036e7 '\\?\C:\Users\Mike\AppData\Local\Temp\fe15-cache-04tUcr\196fd5b74ee98069676e643fbdbb14039a8036e7'
+  + actual - expected
+  
+  + [
+  +   "the verified checkout could not be published: EPERM, Permission denied: \\\\?\\C:\\Users\\Mike\\AppData\\Local\\Temp\\fe15-cache-04tUcr\\196fd5b74ee98069676e643fbdbb14039a8036e7 '\\\\?\\C:\\Users\\Mike\\AppData\\Local\\Temp\\fe15-cache-04tUcr\\196fd5b74ee98069676e643fbdbb14039a8036e7'",
+  +   "the verified checkout could not be published: EPERM, Permission denied: \\\\?\\C:\\Users\\Mike\\AppData\\Local\\Temp\\fe15-cache-04tUcr\\196fd5b74ee98069676e643fbdbb14039a8036e7 '\\\\?\\C:\\Users\\Mike\\AppData\\Local\\Temp\\fe15-cache-04tUcr\\196fd5b74ee98069676e643fbdbb14039a8036e7'"
+  + ]
+  - []
+  
+      at file:///F:/Repos/StandardsEnforcer-integration/test/cache-concurrency.test.mjs:140:12
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async twoReleases (file:///F:/Repos/StandardsEnforcer-integration/test/cache-concurrency.test.mjs:71:12)
+      at async TestContext.<anonymous> (file:///F:/Repos/StandardsEnforcer-integration/test/cache-concurrency.test.mjs:121:3)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ "the verified checkout could not be published: EPERM, Permission denied: \\\\?\\C:\\Users\\Mike\\AppData\\Local\\Temp\\fe15-cache-04tUcr\\196fd5b74ee98069676e643fbdbb14039a8036e7 '\\\\?\\C:\\Users\\Mike\\AppData\\Local\\Temp\\fe15-cache-04tUcr\\196fd5b74ee98069676e643fbdbb14039a8036e7'", "the verified checkout could not be published: EPERM, Permission denied: \\\\?\\C:\\Users\\Mike\\AppData\\Local\\Temp\\fe15-cache-04tUcr\\196fd5b74ee98069676e643fbdbb14039a8036e7 '\\\\?\\C:\\Users\\Mike\\AppData\\Local\\Temp\\fe15-cache-04tUcr\\196fd5b74ee98069676e643fbdbb14039a8036e7'" ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
