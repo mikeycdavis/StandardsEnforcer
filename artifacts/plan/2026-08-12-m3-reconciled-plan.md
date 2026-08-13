@@ -244,7 +244,7 @@ passing === true  && exitCode === 0    normal               → EVALUATED, exit 
 
 Nothing here starts before Phase 0 lands.
 
-### 1.1 · ADR 0006 — the review surface, written before the digest
+### 1.1 · ADR 0007 — the review surface, written before the digest
 
 Written first so the code cannot decide the exclusion semantics by accident. It states: the surface is
 the whole repository minus reasoned exclusions; `reviewedAgainst.paths` is **echo, never input**, and
@@ -453,11 +453,11 @@ that hides unknown cells; any such option is the back door.
 ## 3. Implementation order
 
 ```text
-D1 → D2 → D3 → ADR 0006 → gitfacts → glob → digest
+D1 → D2 → D3 → ADR 0007 → gitfacts → glob → digest
    → registry generalisation → ratchet → attestation → matrix → evidence artifact
 ```
 
-ADR 0006 precedes `digest.mjs`. Each layer is mutation-tested before the next is built.
+ADR 0007 precedes `digest.mjs`. Each layer is mutation-tested before the next is built.
 
 ## 4. Verification
 
