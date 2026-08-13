@@ -49,13 +49,17 @@ falls to a non-zero exit, and a test walks the whole vocabulary asserting it.
 
 ## States
 
+**Every state here is about enforcement. None of them is a standards verdict**, and that is the whole
+point of the 0.4.0 rewrite. Until 0.3.0 this table listed five pack-native statuses — `COMPLIANT`,
+`COMPLIANT_WITH_EXCEPTIONS`, `NON_COMPLIANT`, `NOT_EVALUATED`, `BLOCKED_BY_INVARIANT` — as enforcer
+states, and mapped them to exit codes. [ADR 0001](artifacts/adr/0001-orchestrate-do-not-reimplement.md)
+does not merely say those strings should come from somewhere else; it says the enforcer must not know
+what a pack's verdict **means**. Mapping `NOT_EVALUATED` to `2` kept exactly that meaning in encoded
+form, so the semantics had to go, not just the strings.
+
 | State | Meaning | Exit |
 | --- | --- | --- |
-| `COMPLIANT` | The standards accepted the repository | `0` |
-| `COMPLIANT_WITH_EXCEPTIONS` | Accepted, with approved and current waivers | `0` |
-| `NON_COMPLIANT` | The standards rejected it | `1` |
-| `NOT_EVALUATED` | The standards reached no verdict | `2` |
-| `BLOCKED_BY_INVARIANT` | The standards system declared itself untrustworthy here | `3` |
+| `EVALUATED` | An authority was identified, invoked, and returned a status **its own contract declares**. Says nothing about what was said. | `0` or `1` — see below |
 | `OUT_OF_SCOPE` | An authorised reviewer recorded that these standards do not govern this repository | `0` |
 | `NOT_ADOPTED` | No standards version governs this repository — blocking once scope confirms it does | `4` |
 | `SCOPE_REVIEW_REQUIRED` | The scope disposition is absent, unauthorised, or no longer matches the evidence | `4` |
@@ -64,17 +68,37 @@ falls to a non-zero exit, and a test walks the whole vocabulary asserting it.
 | `GATE_CONFIG_INVALID` | Something requires it, in a way the pull request could satisfy for itself | `4` |
 | `BYPASS_USED` | An authorised bypass was used; an event, never a verdict | `4` |
 | `STANDARDS_IDENTITY_MISMATCH` | The declared release does not resolve to the declared commit | `4` |
-| `ENFORCEMENT_ERROR` | Enforcement could not be carried out | `2` |
+| `ENFORCEMENT_ERROR` | Enforcement could not be carried out | `4` |
 
-The first five are verdicts, passed through **with the standards system's own exit codes,
-unchanged**. The rest are states about enforcement, and `4` is a code MachineLearningStandards never
-returns — so a caller can tell *the standards said no* from *enforcement could not be established*.
+Whether a merge may proceed rides **beside** `EVALUATED` as `passing`, decided by the pack's own
+declared set — never by this repository recognising a word. The process projection is three codes:
+
+```text
+0   the authority spoke and established passing
+1   the authority spoke and did not establish passing
+4   the authority could not be established, heard, or trusted
+```
+
+`1` reads as *"an authoritative evaluation completed and did not establish passing"*, **not** as
+"non-compliant". A pack's `NOT_EVALUATED` lands there without this enforcer claiming it means failure
+— only that the pack did not put it in its passing set.
+
+**What is lost, said plainly:** a caller reading only the exit code can no longer tell "the standards
+said no" from "the standards reached no conclusion". That distinction was never the enforcer's to
+draw, and it survives verbatim in the payload under `authority.status`. Only the lossy projection
+changed. `4` remains a code MachineLearningStandards never returns.
 
 `OUT_OF_SCOPE` is the one non-verdict a merge may proceed on, and it is bounded rather than trusted:
 it is producible only alongside a named authorised reviewer, a date and a reason, `result()` demotes
 it to `SCOPE_REVIEW_REQUIRED` without them, and a test asserts that every passing state is either a
 standards verdict or a recorded decision. An exclusion nobody recorded is an unknown, and INV-E1
 still forbids an unknown from passing.
+
+**A declared pass is not enough on its own.** If a pack reports a status its own contract calls
+passing and then does not complete — a nonzero exit, or no exit code at all — that is authority
+evidence contradicting itself, and it becomes `ENFORCEMENT_ERROR` rather than a pass. The two cases
+are reported differently: one is evidence that contradicts itself, the other is evidence that never
+arrived. Nothing here interprets what a native exit code *means*.
 
 ## Identity
 
@@ -160,8 +184,14 @@ scripts/footprint.mjs   ML evidence detection. Deliberately incapable of decidin
 scripts/platform/       adapters. GitHub today; the boundary exists for the next one
 scripts/states.mjs      the state vocabulary, the exit contract, and INV-E1
 test/                   the invariant, identity, adoption, the oracle, the gate, and scope
+test-support/           helpers node --test must NOT collect: the oracle resolver, and the
+                        single-materialisation runner the concurrency arms drive. A file under
+                        test/ with no tests in it counts as a passing test, which is how a
+                        vacuous green got into a count here once
 artifacts/adr/          decisions
+artifacts/plan/         the live forward-looking plan; see AGENTS.md §5
 artifacts/evidence/     what was actually run, and what it produced
+artifacts/backlog/      tracked work; README.md there is generated, never hand-edited
 ```
 
 ## Decisions
@@ -170,6 +200,8 @@ artifacts/evidence/     what was actually run, and what it produced
 - [0002](artifacts/adr/0002-states-and-the-no-unknown-pass-invariant.md) — the state model, and INV-E1
 - [0003](artifacts/adr/0003-the-enforcement-root.md) — the enforcement root: a required check, bound to an app, from a pinned implementation — **mitigation superseded by live evidence**
 - [0004](artifacts/adr/0004-scope-is-a-recorded-decision.md) — scope is a recorded decision, not a detection
+- [0005](artifacts/adr/0005-adapter-provenance.md) — the governed repository supplies evidence; the pinned release supplies authority
+- [0006](artifacts/adr/0006-the-cache-is-shared-and-coordination-is-not-authority.md) — the cache is shared on purpose, and a lock is not evidence
 
 ## Evidence
 
