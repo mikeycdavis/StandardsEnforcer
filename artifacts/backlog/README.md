@@ -5,10 +5,10 @@
 Work on this project classified with the Extended Agile Hierarchy. Every item is a file in
 [`items/`](./items/); its YAML frontmatter is the source of truth and this page is derived from it.
 
-**12 of 21 leaf items complete — 57%**
+**13 of 21 leaf items complete — 62%**
 
 ```
-███████████████████████░░░░░░░░░░░░░░░░░  57%
+█████████████████████████░░░░░░░░░░░░░░░  62%
 ```
 
 ## Status
@@ -16,9 +16,9 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 | Status | Items |
 | --- | ---: |
 | ○ Not started | 6 |
-| ◑ In progress | 8 |
+| ◑ In progress | 7 |
 | ◒ Blocked | 2 |
-| ● Complete | 13 |
+| ● Complete | 14 |
 | **Total** | **29** |
 
 ## The hierarchy
@@ -36,7 +36,7 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 
 | Theme | Progress | Done | Remaining |
 | --- | --- | ---: | ---: |
-| [TH-01 Enforced standards compliance across the portfolio](./items/TH-01.md) | `████████░░░░░░` 57% | 12 | 9 |
+| [TH-01 Enforced standards compliance across the portfolio](./items/TH-01.md) | `█████████░░░░░` 62% | 13 | 8 |
 
 ## In flight
 
@@ -46,7 +46,6 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 - ◑ [FE-04](./items/FE-04.md) — M4 — the enforcement root against live GitHub
 - ◒ [FE-09](./items/FE-09.md) — Make BYPASS_USED reachable
 - ◑ [FE-14](./items/FE-14.md) — A skipped oracle is not a passing integration
-- ◑ [FE-16](./items/FE-16.md) — A pack cannot be reported as passing when its process did not complete
 - ◑ [IN-01](./items/IN-01.md) — Enforcement a governed repository cannot weaken
 - ◒ [ST-07](./items/ST-07.md) — Validate the required-workflows remedy against a real organisation ruleset
 - ◑ [TH-01](./items/TH-01.md) — Enforced standards compliance across the portfolio
@@ -57,9 +56,9 @@ _Nothing marked ready._
 
 ## Everything
 
-- ◑ **[TH-01](./items/TH-01.md)** Enforced standards compliance across the portfolio _(12/21)_
-  - ◑ **[IN-01](./items/IN-01.md)** Enforcement a governed repository cannot weaken _(12/21)_
-    - ◑ **[EP-01](./items/EP-01.md)** Authority transport — run a pack's own evaluator under a pinned identity _(8/10)_
+- ◑ **[TH-01](./items/TH-01.md)** Enforced standards compliance across the portfolio _(13/21)_
+  - ◑ **[IN-01](./items/IN-01.md)** Enforcement a governed repository cannot weaken _(13/21)_
+    - ◑ **[EP-01](./items/EP-01.md)** Authority transport — run a pack's own evaluator under a pinned identity _(9/10)_
       - ● **[FE-01](./items/FE-01.md)** M1 — run the official standards implementation and report what it said
       - ● **[FE-02](./items/FE-02.md)** M2 — contract-driven authority transport _(5/5)_
         - ● **[ST-01](./items/ST-01.md)** M2 Phase 0 — what the eight released interfaces actually are
@@ -70,7 +69,7 @@ _Nothing marked ready._
       - ● **[FE-13](./items/FE-13.md)** A cache marker is not proof of current identity
       - ◑ **[FE-14](./items/FE-14.md)** A skipped oracle is not a passing integration
       - ● **[FE-15](./items/FE-15.md)** Concurrent processes share a mutable cache root
-      - ◑ **[FE-16](./items/FE-16.md)** A pack cannot be reported as passing when its process did not complete
+      - ● **[FE-16](./items/FE-16.md)** A pack cannot be reported as passing when its process did not complete
     - ◑ **[EP-02](./items/EP-02.md)** The enforcement root — a gate the governed pull request cannot satisfy _(2/3)_
       - ● **[FE-03](./items/FE-03.md)** M2 — a gate is a required check, not a file
       - ◑ **[FE-04](./items/FE-04.md)** M4 — the enforcement root against live GitHub _(1/2)_

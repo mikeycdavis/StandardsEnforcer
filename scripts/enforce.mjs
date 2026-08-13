@@ -319,6 +319,45 @@ export async function enforce({
   // not a denominator — and test/authority-boundary.test.mjs is what keeps that true.
   const passing = run.contract.result.passing.includes(status);
 
+  // FE-16. The one place a process outcome is consulted at all, and only when the pack has declared
+  // itself passing.
+  //
+  // THIS IS NOT EXIT-CODE INTERPRETATION, AND MUST NOT BECOME IT. Nothing below asks what a code
+  // MEANS, because there is nothing to ask: Betting exits 2 on NOT_EVALUATED, MachineLearning 3 on
+  // blocked, Health 4, Financial folds blocked into 1. A pack that declares failure and exits nonzero
+  // is having an ordinary bad day and passes through untouched — which is exactly what the superseded
+  // plan's general D3 got wrong, and why it was rejected on evidence.
+  //
+  // What is noticed is one impossible combination: "this passed" alongside "the process did not
+  // complete successfully". That is authority evidence contradicting itself, and INV-E1 says an
+  // unknown is not a pass.
+  //
+  // ORDER IS LOAD-BEARING. This sits AFTER the vocabulary check above, because `passing` cannot be
+  // computed from a status the contract never declared — so with an undeclared status there is no
+  // contradiction to report, only an undeclared status. test/exit-contradiction.test.mjs case 4 is
+  // what holds that ordering in place.
+  if (passing) {
+    // `null` and nonzero are kept apart deliberately, though `!== 0` would catch both and be the
+    // smaller diff. They are different findings and a reader must be able to tell which occurred:
+    // one is evidence that contradicts itself, the other is evidence that never arrived.
+    if (run.exitCode === null) {
+      // `spawnSync` reports no code when the child was killed by a signal. The evaluator printed a
+      // complete report and then did not survive to say it was finished, so what was read is the
+      // state of an interrupted run rather than a conclusion.
+      return result(STATE.ENFORCEMENT_ERROR,
+        `the standards release reported ${status}, and its process did not complete: it was ended by ` +
+        `a signal without returning an exit code, so completion could not be established`,
+        { standards, gate: gateReport, scope: scopeReport, standardsExitCode: run.exitCode, report: run.report });
+    }
+    if (run.exitCode !== 0) {
+      return result(STATE.ENFORCEMENT_ERROR,
+        `the standards release reported ${status}, which its own contract declares passing, and then ` +
+        `exited ${run.exitCode}: the declared status and the process result contradict each other, ` +
+        `and this enforcer does not choose between them`,
+        { standards, gate: gateReport, scope: scopeReport, standardsExitCode: run.exitCode, report: run.report });
+    }
+  }
+
   return result(STATE.EVALUATED, describe(status, passing), {
     standards,
     gate: gateReport,
