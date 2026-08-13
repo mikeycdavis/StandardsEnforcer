@@ -94,9 +94,28 @@ refuse a blanket expiry: a review that fires for no reason stops being a review.
 **The hole, stated plainly: first-party code can grow inside an excluded tree and no content check
 will see it.** Four bounds contain it, none of which reintroduce churn:
 
-1. **Discovery scans the whole repository, including excluded paths.** A signal landing outside the
-   reviewed surface returns the cell to `SCOPE_REVIEW_REQUIRED` regardless of a recorded
-   determination. This is discovery's one privilege and the primary bound.
+1. **Discovery scans excluded paths, and a signal landing outside the reviewed surface returns the
+   cell to `SCOPE_REVIEW_REQUIRED`** regardless of a recorded determination. This is discovery's one
+   privilege and the primary bound.
+
+   > **Corrected 2026-08-13, on the implementation's own evidence.** This bound was first written as
+   > *"discovery scans the whole repository"*. It does not. `footprint.mjs` has always skipped a fixed
+   > list of directory **names** — `vendor`, `node_modules`, `dist`, `build`, `.next`,
+   > `site-packages`, `__pycache__`, `.venv` and others — and those are exactly the names a reviewer
+   > reaches for when writing an exclusion. **An exclusion naming one of them therefore has no bound
+   > on it at all: not content, and not signals.** Found by this bound's own falsifier, which failed
+   > when it was pointed at `vendor/**`.
+   >
+   > The bound is real for every other path, and is pinned by `test/review-surface.test.mjs` arm 2.
+   > The gap is pinned separately by arm 2b, so it is a measured property rather than something the
+   > next reader discovers by trusting this paragraph. Widening discovery's reach is a change to
+   > detection with its own false-positive cost, and it is deliberately not made here.
+
+   A second limit found the same way: discovery recorded **one exemplar file per signal kind**, so a
+   model file inside an excluded tree was invisible whenever any file inside the surface already
+   carried the same kind — the common case, and the one an under-declaring reviewer produces. Fixed
+   in this slice: `signals` now carry every location, capped, with an occurrence count. `kinds` and
+   the footprint digest are unchanged, so `reviewedFootprint` means exactly what it meant.
 2. **Exclusions expire with the determination.** They are fields of it, not of the registry.
 3. **Every run reports each exclusion with its current match count beside the count at review time** —
    `vendor/** — 1,204 files (3 when reviewed)`. Growth is visible even where it is not invalidating,
@@ -105,7 +124,8 @@ will see it.** Four bounds contain it, none of which reintroduce churn:
    commit. *(The ratchet is a later slice; this records the requirement, not its implementation.)*
 
 Bound 1 inherits discovery's false negatives, which are unbounded. So the honest claim is: **an
-excluded tree is watched for signals and for size, and is not watched for content.**
+excluded tree is watched for signals and for size, and is not watched for content — and a tree whose
+directory name is on discovery's skip list is watched for size only.**
 
 Both branches are mutation-tested. Adding a file under an exclusion must **not** invalidate; adding a
 file under an exclusion **that matches a signal** must invalidate.

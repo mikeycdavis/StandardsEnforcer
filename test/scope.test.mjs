@@ -25,6 +25,7 @@ import { fileURLToPath } from "node:url";
 
 import { enforce } from "../scripts/enforce.mjs";
 import { detectFootprint, footprintDigest, codeView, SURFACE } from "../scripts/footprint.mjs";
+import { RESOLVER_VERSION, proposeSurface } from "../scripts/digest.mjs";
 import { resolveScope, OUTCOME } from "../scripts/scope.mjs";
 import { STATE, PASSING, REQUIRES_RECORDED_DECISION, REACHABLE, exitFor, EXIT } from "../scripts/states.mjs";
 import { oracleAt } from "../test-support/oracle.mjs";
@@ -85,6 +86,52 @@ async function registryAt(dir, entry, { reviewers = [REVIEWER], name = "acme/mon
   return p;
 }
 
+
+/**
+ * A recorded reviewed surface, and an observation that matches it.
+ *
+ * ADR 0007 makes the reviewed surface the freshness authority, so every determination needs one and
+ * `resolveScope` needs a way to observe the current one. These tests are about OTHER properties --
+ * reviewer authority, dates, per-pack keying -- so they supply a matching pair and leave the surface
+ * mechanics to test/review-surface.test.mjs. Supplying a MATCHING observation is the honest default
+ * here: a mismatched one would turn every case in this file into a staleness test.
+ */
+const SURFACE_BASIS = { resolverVersion: RESOLVER_VERSION, surfaceDigest: "surface-0", contentDigest: "content-0", exclusions: [] };
+const currentSurface = () => ({
+  ok: true,
+  resolverVersion: RESOLVER_VERSION,
+  surfaceDigest: SURFACE_BASIS.surfaceDigest,
+  contentDigest: SURFACE_BASIS.contentDigest,
+  counts: { tracked: 1, reviewed: 1, excluded: 0 },
+  exclusions: [],
+  notCovered: [],
+});
+
+/**
+ * Make a scratch directory into a governed repository, and return the reviewed surface for it.
+ *
+ * Since ADR 0007 the freshness authority is the tracked content of the repository, read from its
+ * index. A target that is not a git repository has no tracked content, so no surface can be
+ * established and the determination is `undetermined` — which is correct, and is not what these
+ * end-to-end cases are about. Committing the fixture is fidelity to the thing under test: a governed
+ * repository is a git repository.
+ */
+function governed(dir) {
+  const g = (args) => {
+    const r = spawnSync("git", args, { cwd: dir, encoding: "utf8", windowsHide: true });
+    assert.equal(r.status, 0, `git ${args.join(" ")}: ${r.stderr}`);
+  };
+  g(["init", "--quiet", "-b", "main"]);
+  g(["config", "user.email", "t@example.invalid"]);
+  g(["config", "user.name", "scope"]);
+  g(["config", "commit.gpgsign", "false"]);
+  g(["add", "-A"]);
+  g(["commit", "--quiet", "-m", "the governed repository"]);
+  const proposed = proposeSurface(dir, []);
+  assert.equal(proposed.ok, true, `the fixture repository produced no reviewed surface: ${proposed.why}`);
+  return proposed.reviewedSurface;
+}
+
 const decision = (over = {}) => ({
   disposition: "in-scope",
   reviewedBy: REVIEWER,
@@ -93,6 +140,7 @@ const decision = (over = {}) => ({
   evidence: ["src/train.py"],
   revisitWhen: ["training leaves this repository"],
   reviewedFootprint: null,
+  reviewedSurface: SURFACE_BASIS,
   expiresAt: null,
   ...over,
 });
@@ -101,7 +149,7 @@ const decision = (over = {}) => ({
 const observed = (footprint) => ({ [footprint.surface ?? SURFACE]: { kinds: footprint.kinds, digest: footprint.digest } });
 
 const resolve = (registryPath, footprint, over = {}) =>
-  resolveScope({ registryPath, repoId: ID, repoName: "acme/moneyball", standardId: STANDARD, footprints: observed(footprint), today: TODAY, ...over });
+  resolveScope({ registryPath, repoId: ID, repoName: "acme/moneyball", standardId: STANDARD, footprints: observed(footprint), observeSurface: currentSurface, today: TODAY, ...over });
 
 // ===========================================================================
 // The eight fixtures. What detection sees, and what it calls it.
@@ -393,7 +441,8 @@ test("enforce · in scope and not adopted is a stronger finding than no policy f
     await scratch(async (dir) => {
       await writeFile(path.join(dir, "train.py"), "import sklearn\nm.fit(X, y)\n");
       const kinds = detectFootprint(dir).kinds;
-      const reg = await registryAt(outside, decision({ reviewedFootprint: { kinds, digest: footprintDigest(kinds) } }));
+      const reviewedSurface = governed(dir);
+      const reg = await registryAt(outside, decision({ reviewedFootprint: { kinds, digest: footprintDigest(kinds) }, reviewedSurface }));
 
       const scoped = await enforce({
         target: dir, standardsRepo: MLS, tag: TAG, sha: SHA, cacheRoot: CACHE, today: TODAY,
@@ -423,6 +472,7 @@ test("enforce · a recorded exclusion merges, evaluates nothing, and reads as an
         disposition: "out-of-scope",
         reason: "Consumes a hosted inference API; trains and evaluates nothing.",
         reviewedFootprint: { kinds, digest: footprintDigest(kinds) },
+        reviewedSurface: governed(dir),
       }));
       const r = await enforce({
         target: dir, standardsRepo: MLS, tag: TAG, sha: SHA, cacheRoot: CACHE, today: TODAY,
@@ -461,7 +511,8 @@ test("adversarial · nothing a repository writes about its own scope changes its
     await scratch(async (dir) => {
       await writeFile(path.join(dir, "train.py"), "import sklearn\nm.fit(X, y)\n");
       const kinds = detectFootprint(dir).kinds;
-      const reg = await registryAt(outside, decision({ reviewedFootprint: { kinds, digest: footprintDigest(kinds) } }));
+      const reviewedSurface = governed(dir);
+      const reg = await registryAt(outside, decision({ reviewedFootprint: { kinds, digest: footprintDigest(kinds) }, reviewedSurface }));
       const run = () => enforce({
         target: dir, standardsRepo: MLS, tag: TAG, sha: SHA, cacheRoot: CACHE, today: TODAY,
         scope: { registryPath: reg, repoId: ID, repoName: "acme/moneyball", standardId: STANDARD },

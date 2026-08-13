@@ -40,6 +40,7 @@ import { fileURLToPath } from "node:url";
 import { resolveIdentity } from "./identity.mjs";
 import { assessGate } from "./gate.mjs";
 import { detectFootprint } from "./footprint.mjs";
+import { reviewSurface } from "./digest.mjs";
 import { resolveScope, OUTCOME } from "./scope.mjs";
 import { githubPlatform } from "./platform/github.mjs";
 import { STATE, PASSING, REQUIRES_RECORDED_DECISION, exitFor } from "./states.mjs";
@@ -263,8 +264,14 @@ export async function enforce({
     // Every evidence surface this run observed, keyed by surface name. One detector exists today; the
     // map is the shape because a decision's basis names the surface it was reviewed against, and an
     // unobserved surface has to be answerable with "cannot determine" rather than with a guess.
-    const footprints = { [footprint.surface]: { kinds: footprint.kinds, digest: footprint.digest } };
-    const resolved = resolveScope({ ...scope, target, footprints, today });
+    // `signals` rides along so scope can apply discovery's one privilege: a signal landing inside an
+    // excluded tree returns the decision for review. It is still evidence and still cannot decide a
+    // disposition — the only state reachable from a signal remains SCOPE_REVIEW_REQUIRED.
+    const footprints = { [footprint.surface]: { kinds: footprint.kinds, digest: footprint.digest, signals: footprint.signals } };
+    // The seam is which repository to measure and when, never what the answer means. The comparison
+    // lives in digest.mjs and the decision in scope.mjs; this supplies neither.
+    const observeSurface = (exclusions) => reviewSurface(target, exclusions);
+    const resolved = resolveScope({ ...scope, target, footprints, observeSurface, today });
     const detection = { surface: footprint.surface, kinds: footprint.kinds, signals: footprint.signals, assurance: footprint.assurance, note: footprint.note };
 
     if (resolved.outcome === OUTCOME.REGISTRY_INVALID) {

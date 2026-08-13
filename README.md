@@ -129,9 +129,18 @@ registry   →  held OUTSIDE the governed repository. One inside the tree it gov
               Keyed by immutable platform identity, never by name. Dispositions count only
               from a named authorised reviewer, with a date, a reason and an evidence basis.
 
-staleness  →  a change in the KINDS of ML evidence relative to what was reviewed. Not a timer:
-              a review that fires for no reason stops being a review.
+staleness  →  a change in the TRACKED CONTENT of the reviewed surface, which is the whole
+              repository minus explicit, reasoned exclusions. Not a timer: a review that fires
+              for no reason stops being a review. A change in the KINDS of ML evidence is still
+              a reason to look again, but it is discovery evidence and not the authority — a
+              repository can gain a great deal of first-party ML code without gaining a new kind
+              of it. Where the surface cannot be established at all, the answer is `undetermined`,
+              which is neither fresh nor stale and goes to a human.
 ```
+
+There is **no CLI for the review surface yet.** `scripts/digest.mjs` exports `proposeSurface`, which
+produces the block a reviewer pastes into a determination, and the contract it holds to is
+`test/review-surface.test.mjs`.
 
 The asymmetry is the point, and it is the negative-evidence lesson from MachineLearningStandards 1.2
 applied one level out: **evidence found can contradict a recorded decision; evidence not found can
@@ -202,6 +211,7 @@ artifacts/backlog/      tracked work; README.md there is generated, never hand-e
 - [0004](artifacts/adr/0004-scope-is-a-recorded-decision.md) — scope is a recorded decision, not a detection
 - [0005](artifacts/adr/0005-adapter-provenance.md) — the governed repository supplies evidence; the pinned release supplies authority
 - [0006](artifacts/adr/0006-the-cache-is-shared-and-coordination-is-not-authority.md) — the cache is shared on purpose, and a lock is not evidence
+- [0007](artifacts/adr/0007-the-review-surface-is-the-whole-repository.md) — the review surface is the whole tracked repository, minus reasoned exclusions
 
 ## Evidence
 

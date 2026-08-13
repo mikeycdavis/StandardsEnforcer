@@ -18,8 +18,8 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 | ○ Not started | 6 |
 | ◑ In progress | 7 |
 | ◒ Blocked | 2 |
-| ● Complete | 15 |
-| **Total** | **30** |
+| ● Complete | 16 |
+| **Total** | **31** |
 
 ## The hierarchy
 
@@ -28,7 +28,7 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 | Theme | `TH-` | 1 | Which enduring area of value is this? |
 | Initiative | `IN-` | 1 | What outcome are we pursuing there? |
 | Epic | `EP-` | 5 | What large body of work delivers it? |
-| Feature | `FE-` | 16 | What shippable slice of that epic? |
+| Feature | `FE-` | 17 | What shippable slice of that epic? |
 | Story | `ST-` | 7 | What user-visible change, roughly one PR? |
 | Task | `TA-` | 0 | What technical step inside a story? |
 
@@ -75,7 +75,8 @@ _Nothing marked ready._
       - ◑ **[FE-04](./items/FE-04.md)** M4 — the enforcement root against live GitHub _(1/2)_
         - ● **[ST-06](./items/ST-06.md)** Establish live whether an Actions-bound required check is spoofable
         - ◒ **[ST-07](./items/ST-07.md)** Validate the required-workflows remedy against a real organisation ruleset
-    - ● **[EP-03](./items/EP-03.md)** Scope — whether a standard governs a repository is a recorded decision
+    - ● **[EP-03](./items/EP-03.md)** Scope — whether a standard governs a repository is a recorded decision _(1/1)_
+      - ● **[FE-18](./items/FE-18.md)** The reviewed surface is the freshness authority, not the signal-kind set
     - ◑ **[EP-04](./items/EP-04.md)** The enforcer's own release lineage _(1/2)_
       - ○ **[FE-06](./items/FE-06.md)** Decide the authoritative disposition of every live line relative to main
       - ● **[FE-17](./items/FE-17.md)** The front door advertises a state model the code removed

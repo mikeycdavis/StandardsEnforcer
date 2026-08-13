@@ -39,6 +39,7 @@ import path from "node:path";
 
 import { enforce } from "../scripts/enforce.mjs";
 import { detectFootprint, footprintDigest, SURFACE } from "../scripts/footprint.mjs";
+import { proposeSurface } from "../scripts/digest.mjs";
 import { STATE } from "../scripts/states.mjs";
 
 const TODAY = "2026-08-09";
@@ -104,10 +105,16 @@ async function brokenRelease(dir, files = {}) {
  * decision's evidence basis a `surface`. Absorbed here so the tests below keep asserting what they
  * were written to assert — that no scope-decisive path touches the evaluator seam.
  */
-async function registry(at, entry, { reviewers = [REVIEWER], key = ID } = {}) {
-  const filed = entry && entry.reviewedFootprint && !entry.reviewedFootprint.surface
+async function registry(at, entry, { reviewers = [REVIEWER], key = ID, reviewedSurface = null } = {}) {
+  let filed = entry && entry.reviewedFootprint && !entry.reviewedFootprint.surface
     ? { ...entry, reviewedFootprint: { surface: SURFACE, ...entry.reviewedFootprint } }
     : entry;
+  // ADR 0007 added a second half to an evidence basis: the reviewed SURFACE, which is what decides
+  // freshness. Absorbed here for the same reason the FE-12 shape was -- so the cases below keep
+  // asserting what they were written to assert, which is that no scope-decisive path touches the
+  // evaluator seam. A determination carrying a footprint basis is one this file means to be
+  // current, so it gets a surface computed from the target as it actually is.
+  if (filed && filed.reviewedFootprint && reviewedSurface) filed = { ...filed, reviewedSurface };
   await writeFile(at, JSON.stringify({
     schemaVersion: "1.0.0",
     authorisedReviewers: reviewers,
@@ -150,15 +157,33 @@ async function outcome({ files = {}, entry, inTarget = false, key = ID, release 
       await writeFile(path.join(target, rel), content);
     }
 
-    // The evidence basis has to be computed from the target as it actually is, or the decision is
-    // stale on arrival and every case collapses into SCOPE_REVIEW_REQUIRED for the wrong reason.
+    // A governed repository is a git repository, and since ADR 0007 the reviewed surface is read
+    // from its index. Committing the fixture is fidelity to the thing under test, not scaffolding:
+    // an uncommitted target has no tracked content, so no surface can be established and every case
+    // would collapse into SCOPE_REVIEW_REQUIRED as `undetermined`.
+    // Every governed repository has SOME content. A target with zero tracked files would make the
+    // reviewed surface empty, and ADR 0007 refuses to attest to an empty surface -- correctly, but it
+    // would make these cases fail as `undetermined` for a reason that has nothing to do with the seam
+    // they exist to pin. README.md carries no signal, so the footprint is unchanged.
+    await writeFile(path.join(target, "README.md"), "# governed\n");
+
+    git(["init", "--quiet", "-b", "main"], target);
+    git(["config", "user.email", "t@example.invalid"], target);
+    git(["config", "user.name", "seam"], target);
+    git(["config", "commit.gpgsign", "false"], target);
+    git(["add", "-A"], target);
+    git(["commit", "--quiet", "--allow-empty", "-m", "the governed repository"], target);
+
+    // Both halves of the evidence basis have to be computed from the target as it actually is, or
+    // the decision is stale on arrival and every case collapses for the wrong reason.
     const kinds = detectFootprint(target).kinds;
+    const proposed = proposeSurface(target, []);
     const resolved = typeof entry === "function" ? entry({ kinds, digest: footprintDigest(kinds) }) : entry;
 
     const registryPath = await registry(
       path.join(inTarget ? target : dir, "scope-registry.json"),
       resolved,
-      { key },
+      { key, reviewedSurface: proposed.ok ? proposed.reviewedSurface : null },
     );
 
     const r = await enforce({

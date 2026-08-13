@@ -32,6 +32,7 @@ import path from "node:path";
 
 import { resolveScope, OUTCOME } from "../scripts/scope.mjs";
 import { SURFACE } from "../scripts/footprint.mjs";
+import { RESOLVER_VERSION } from "../scripts/digest.mjs";
 
 const REVIEWER = "governance@acme.example";
 const OTHER_REVIEWER = "j.okafor@acme.example";
@@ -43,6 +44,27 @@ const surfaces = (kinds = ["training-call-shape"], digest = "d0") => ({ [SURFACE
 
 const basis = (kinds = ["training-call-shape"], digest = "d0", surface = SURFACE) => ({ surface, kinds, digest });
 
+
+/**
+ * A recorded reviewed surface, and an observation that matches it.
+ *
+ * ADR 0007 makes the reviewed surface the freshness authority, so every determination needs one and
+ * `resolveScope` needs a way to observe the current one. These tests are about OTHER properties --
+ * reviewer authority, dates, per-pack keying -- so they supply a matching pair and leave the surface
+ * mechanics to test/review-surface.test.mjs. Supplying a MATCHING observation is the honest default
+ * here: a mismatched one would turn every case in this file into a staleness test.
+ */
+const SURFACE_BASIS = { resolverVersion: RESOLVER_VERSION, surfaceDigest: "surface-0", contentDigest: "content-0", exclusions: [] };
+const currentSurface = () => ({
+  ok: true,
+  resolverVersion: RESOLVER_VERSION,
+  surfaceDigest: SURFACE_BASIS.surfaceDigest,
+  contentDigest: SURFACE_BASIS.contentDigest,
+  counts: { tracked: 1, reviewed: 1, excluded: 0 },
+  exclusions: [],
+  notCovered: [],
+});
+
 const decision = (over = {}) => ({
   disposition: "in-scope",
   reviewedBy: REVIEWER,
@@ -51,6 +73,7 @@ const decision = (over = {}) => ({
   evidence: ["src/train.py"],
   revisitWhen: [],
   reviewedFootprint: basis(),
+  reviewedSurface: SURFACE_BASIS,
   expiresAt: null,
   ...over,
 });
@@ -71,7 +94,7 @@ async function withRegistry(standards, fn, { reviewers = [REVIEWER, OTHER_REVIEW
 }
 
 const resolve = (registryPath, standardId, footprints = surfaces()) =>
-  resolveScope({ registryPath, repoId: ID, repoName: "acme/moneyball", standardId, footprints, today: TODAY });
+  resolveScope({ registryPath, repoId: ID, repoName: "acme/moneyball", standardId, footprints, observeSurface: currentSurface, today: TODAY });
 
 // ===========================================================================
 // The falsifier the item specified

@@ -60,6 +60,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
+import { compareSurface, SURFACE_DISPOSITION } from "./digest.mjs";
+import { compileExclusions, excludedBy, GlobError } from "./glob.mjs";
+
 export const DISPOSITION = { IN_SCOPE: "in-scope", OUT_OF_SCOPE: "out-of-scope" };
 
 /** Outcomes this module can produce. `in-scope`/`out-of-scope` come only from a registry entry. */
@@ -136,7 +139,7 @@ export function loadRegistry(registryPath, { target = null } = {}) {
  * actually observed on this run. Used for exactly one thing: deciding whether the evidence basis a
  * reviewer recorded still describes this repository.
  */
-export function resolveScope({ registryPath, repoId, repoName = null, standardId = null, target = null, footprints = {}, today }) {
+export function resolveScope({ registryPath, repoId, repoName = null, standardId = null, target = null, footprints = {}, observeSurface = null, today }) {
   const loaded = loadRegistry(registryPath, { target });
   if (loaded.outcome === OUTCOME.REGISTRY_INVALID) return loaded;
   const { registry, reviewers } = loaded;
@@ -205,6 +208,7 @@ export function resolveScope({ registryPath, repoId, repoName = null, standardId
     evidence: recorded.evidence ?? [],
     revisitWhen: recorded.revisitWhen ?? [],
     reviewedFootprint: recorded.reviewedFootprint ?? null,
+    reviewedSurface: recorded.reviewedSurface ?? null,
     expiresAt: recorded.expiresAt ?? null,
   };
 
@@ -269,17 +273,102 @@ export function resolveScope({ registryPath, repoId, repoName = null, standardId
     );
   }
 
+  // ===========================================================================
+  // The reviewed surface — the freshness authority (ADR 0007).
+  //
+  // Everything above this point is the kind-set footprint, and it keeps its job: a change in what
+  // KIND of evidence exists is a real reason to look again. What it no longer is, from here on, is
+  // what establishes that a decision is still current. The falsifier for the old model is a
+  // repository whose kind set is identical while its tracked content has materially changed — a tenth
+  // model file where one already existed. The footprint matches; the review is out of date.
+  //
+  //     reviewedFootprint   discovery evidence   may contradict a decision, never confirms one
+  //     reviewedSurface     freshness authority  decides current / stale / undetermined
+  // ===========================================================================
+
+  const recordedSurface = decision.reviewedSurface;
+
+  // The surface is recomputed from the exclusions the DETERMINATION records, not from any list the
+  // caller supplies. `surfaceDigest` then catches a post-review edit to those exclusions, because the
+  // recomputation moves and the recorded value does not.
+  let observedSurface = null;
+  if (observeSurface) {
+    try {
+      observedSurface = observeSurface(recordedSurface?.exclusions ?? []);
+    } catch (e) {
+      // A thrown resolver is an unknown, not a pass. Converted rather than propagated so that one
+      // unreadable repository cannot abort a portfolio run.
+      observedSurface = { ok: false, code: "RESOLVER_THREW", why: `the reviewed surface could not be computed: ${e.message}` };
+    }
+  }
+
+  const surface = compareSurface(recordedSurface, observedSurface);
+  if (surface.disposition !== SURFACE_DISPOSITION.CURRENT) {
+    // Both dispositions land here, and that is deliberate: to a merge, "this review no longer
+    // describes the repository" and "whether it does cannot be established" are the same
+    // instruction. They are reported distinctly because the remedies differ.
+    return review(
+      `the scope decision for ${repoName ?? repoId} is ${surface.disposition}: ${surface.why}`,
+      {
+        decision,
+        surface,
+        stale: surface.disposition === SURFACE_DISPOSITION.STALE,
+        undetermined: surface.disposition === SURFACE_DISPOSITION.UNDETERMINED,
+      },
+    );
+  }
+
+  // Discovery's one privilege (ADR 0007, bound 1). An excluded tree is watched for signals and for
+  // size, and is NOT watched for content — so ordinary growth inside `vendor/**` does not invalidate,
+  // and a signal appearing there does. Without this, an exclusion would be an unbounded blind spot
+  // rather than a contained one.
+  const observedFootprint = footprints[basis.surface];
+  if (Array.isArray(observedFootprint?.signals) && recordedSurface.exclusions?.length) {
+    let compiled;
+    try {
+      compiled = compileExclusions(recordedSurface.exclusions);
+    } catch (e) {
+      if (!(e instanceof GlobError)) throw e;
+      return review(`the exclusions recorded for ${repoName ?? repoId} cannot be interpreted: ${e.message}`, { decision, undetermined: true });
+    }
+    for (const signal of observedFootprint.signals) {
+      for (const evidence of signal.evidence ?? []) {
+        const hit = excludedBy(compiled, evidence);
+        if (hit) {
+          return review(
+            `${evidence} carries ${signal.kind} evidence and sits inside the excluded path ${hit.pattern}, which was ` +
+            `narrowed out of the reviewed surface because "${hit.reason}". A signal outside the reviewed surface ` +
+            "returns this decision for review regardless of how current the surface is",
+            { decision, signalOutsideSurface: { path: evidence, kind: signal.kind, exclusion: hit.pattern }, stale: true },
+          );
+        }
+      }
+    }
+  }
+
   return {
     outcome: recorded.disposition === DISPOSITION.IN_SCOPE ? OUTCOME.IN_SCOPE : OUTCOME.OUT_OF_SCOPE,
     why: null,
     detail: {
       decision,
+      surface: {
+        disposition: surface.disposition,
+        resolverVersion: recordedSurface.resolverVersion,
+        counts: observedSurface?.counts ?? null,
+        // Reported on every run, invalidating or not: growth inside an exclusion is what a human acts
+        // on, and it is invisible to both digests by design.
+        exclusions: observedSurface?.exclusions ?? [],
+        notCovered: observedSurface?.notCovered ?? [],
+      },
       // Said explicitly on every fresh disposition, and most importantly on exclusions. The decision
       // holds because a named reviewer made it, not because a detector went quiet. Detection only
       // failed to contradict it, over a footprint it admits it cannot see all of.
       standsOn:
-        `the review recorded by ${decision.reviewedBy} on ${decision.reviewedAt}. Automated detection did not ` +
-        "confirm this decision; it only failed to contradict it, and its coverage is partial",
+        `the review recorded by ${decision.reviewedBy} on ${decision.reviewedAt}, over ` +
+        `${observedSurface?.counts?.reviewed ?? "an unreported number of"} tracked files still matching the ` +
+        "content it was reviewed against. Automated detection did not confirm this decision; it only failed to " +
+        "contradict it, and its coverage is partial — and an excluded tree is watched for signals and for size, " +
+        "not for content",
       revisitWhen: decision.revisitWhen,
     },
   };

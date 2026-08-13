@@ -77,6 +77,9 @@ const CODE_EXT = new Set([".py", ".ipynb"]);
  */
 export const SURFACE = "training-evidence";
 
+/** How many locations one signal lists before it reports only a count. */
+const EVIDENCE_CAP = 25;
+
 /** Every signal kind this detector can emit. The digest is computed over a subset of these. */
 export const SIGNAL_KINDS = {
   "training-framework-import": "a training framework is imported by code in this repository",
@@ -174,7 +177,36 @@ function walk(root, out = [], rel = "") {
  */
 export function detectFootprint(root) {
   const signals = [];
-  const add = (kind, why, evidence) => signals.push({ kind, why, evidence, label: "INFERRED" });
+  const byKind = new Map();
+
+  /**
+   * Record a signal, or add a location to one already recorded.
+   *
+   * ONE SIGNAL PER KIND, BUT NOT ONE LOCATION PER KIND. An earlier version stopped looking once a
+   * kind had been seen, so `signals` carried a single exemplar file for each. That is fine for
+   * `kinds`, which is a set — and it silently defeats
+   * [ADR 0007](../artifacts/adr/0007-the-review-surface-is-the-whole-repository.md)'s first bound on
+   * excluded trees, which asks *"did a signal land outside the reviewed surface"*. With one exemplar
+   * per kind, a model file inside `vendor/**` is invisible whenever any file inside the surface
+   * already carries the same kind — which is the common case, and the case an under-declaring
+   * reviewer produces. Found by that bound's own falsifier, on 2026-08-13.
+   *
+   * `kinds` and `digest` are deliberately unchanged by this: the set of kinds is the same set, so
+   * `reviewedFootprint` means exactly what it meant.
+   */
+  const add = (kind, why, rel) => {
+    const existing = byKind.get(kind);
+    if (!existing) {
+      const signal = { kind, why, evidence: [rel], label: "INFERRED", occurrences: 1 };
+      byKind.set(kind, signal);
+      signals.push(signal);
+      return;
+    }
+    existing.occurrences++;
+    // Capped, because a monorepo with ten thousand notebooks would otherwise put ten thousand paths
+    // in a governance report. `occurrences` keeps the magnitude honest once the list stops growing.
+    if (existing.evidence.length < EVIDENCE_CAP) existing.evidence.push(rel);
+  };
 
   const files = walk(root);
   const seen = new Set();
@@ -183,23 +215,23 @@ export function detectFootprint(root) {
     const base = path.basename(rel);
     const ext = path.extname(rel).toLowerCase();
 
-    if (MODEL_EXT.has(ext) && !seen.has("model-artifact")) {
+    if (MODEL_EXT.has(ext)) {
       seen.add("model-artifact");
-      add("model-artifact", `${rel} is a serialised model`, [rel]);
+      add("model-artifact", `${rel} is a serialised model`, rel);
     }
-    if ((DATA_EXT.has(ext) || ext === ".dvc") && !seen.has("dataset-artifact")) {
+    if (DATA_EXT.has(ext) || ext === ".dvc") {
       seen.add("dataset-artifact");
-      add("dataset-artifact", `${rel} is committed data`, [rel]);
+      add("dataset-artifact", `${rel} is committed data`, rel);
     }
 
-    if (MANIFESTS.has(base) && !seen.has("training-framework-dependency")) {
+    if (MANIFESTS.has(base)) {
       let text = "";
       try { text = readFileSync(path.join(root, rel), "utf8"); } catch { continue; }
       const hit = TRAINING_FRAMEWORKS.find((f) =>
         new RegExp(`(^|[\\s"'\\[])(${f.replace(/_/g, "[-_]")})([\\s"'\\]=<>~!,;)]|$)`, "mi").test(text));
       if (hit) {
         seen.add("training-framework-dependency");
-        add("training-framework-dependency", `${rel} declares ${hit}`, [rel]);
+        add("training-framework-dependency", `${rel} declares ${hit}`, rel);
       }
       continue;
     }
@@ -215,25 +247,25 @@ export function detectFootprint(root) {
     const view = codeView(ext === ".ipynb" ? notebookCode(raw) : raw);
 
     const fw = importsAny(view, TRAINING_FRAMEWORKS);
-    if (fw && !seen.has("training-framework-import")) {
+    if (fw) {
       seen.add("training-framework-import");
-      add("training-framework-import", `${rel} imports ${fw}`, [rel]);
+      add("training-framework-import", `${rel} imports ${fw}`, rel);
     }
     // Corroborating only, and only in a file that already imports a framework. A bare `.fit(` in
     // scipy code is not training, and a signal that fires on it teaches reviewers to ignore signals.
-    if (fw && !seen.has("training-call-shape") && CALL_SHAPES.some((re) => re.test(view))) {
+    if (fw && CALL_SHAPES.some((re) => re.test(view))) {
       seen.add("training-call-shape");
-      add("training-call-shape", `${rel} calls a training-shaped API`, [rel]);
+      add("training-call-shape", `${rel} calls a training-shaped API`, rel);
     }
     const ic = importsAny(view, INFERENCE_CLIENTS);
-    if (ic && !seen.has("inference-client")) {
+    if (ic) {
       seen.add("inference-client");
-      add("inference-client", `${rel} imports ${ic}, a client for a hosted model`, [rel]);
+      add("inference-client", `${rel} imports ${ic}, a client for a hosted model`, rel);
     }
     const tr = importsAny(view, TRACKING);
-    if (tr && !seen.has("experiment-tracking")) {
+    if (tr) {
       seen.add("experiment-tracking");
-      add("experiment-tracking", `${rel} imports ${tr}`, [rel]);
+      add("experiment-tracking", `${rel} imports ${tr}`, rel);
     }
   }
 
