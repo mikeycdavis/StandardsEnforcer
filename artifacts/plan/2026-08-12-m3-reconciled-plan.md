@@ -72,6 +72,31 @@ surfaceDigest changed    the review-surface semantics changed
 expires passed           mandatory on not-applicable
 ```
 
+**Refined by `7df5e69`, and strengthened rather than reopened.** That implementation introduced a
+third evidence disposition for a case this decision had not modelled — a `reviewedFootprint` naming
+a surface the run did not observe at all. Three facts stay distinct:
+
+```text
+surface observed, matches      → current
+surface observed, differs      → stale        → SCOPE_REVIEW_REQUIRED
+surface not observed at all    → undetermined → SCOPE_REVIEW_REQUIRED
+```
+
+**`undetermined` is an applicability-evidence disposition, not a tenth `STATE`.** It answers a
+narrower question than C-A does. The externally visible governance state stays
+`SCOPE_REVIEW_REQUIRED` — same required human action — and the report preserves *why* it got there,
+because "we looked and it changed" and "we could not look" send a reviewer to different work.
+
+The content-derived resolver obeys the same rule when it is built:
+
+> **No current digest is not equivalent to a matching digest.**
+
+Cannot establish the reviewed surface → `undetermined`. Can establish it and the digest differs →
+`stale`. This is the same inversion §1.4 makes against the packs' `if (current && current !== …)`,
+arriving from the evidence side. And the signal-kind footprint does **not** become the staleness
+authority by having acquired a better unknown state: tracked content over the explicit review
+surface remains the decided basis, kinds remain discovery evidence.
+
 **C-B · The governance unit is repository × pack.** Generalise `scope.mjs`'s mechanics; do not
 replace them.
 
@@ -148,7 +173,26 @@ skip; a capable platform where the fixture fails goes red. Apply that discipline
   red, not green.
 - Any reported test count states the environment it was produced in.
 
-### 0.2 · D2 — a cache marker is not proof of current identity
+### 0.2 · D2 — a cache marker is not proof of current identity — **DONE, `31fb5ec`**
+
+> **Completed independently and integrated, not reimplemented.** FE-13 is `COMPLETE`; the fix landed
+> as `0.4.1` and was merged here at `c3cb08e`. It went beyond what this section specified: `HEAD`
+> alone would have satisfied the text below, and the implementation also requires a **clean working
+> tree**, because an edited file leaves `HEAD` correct while executing different code. The marker
+> moved **out of the checkout** — a marker inside the tree is a file the enforcer added to the
+> authority it is about to run. Repair stages to `.staging-<sha>-<pid>` and renames rather than
+> deleting in place.
+>
+> **Left open by it, and inherited here rather than assumed closed:** verification happens at
+> materialisation, not continuously; and **concurrent repair has no cross-process lock.** The second
+> bears directly on [FE-15](../backlog/items/FE-15.md), whose reproduction must be re-run against
+> this design — the old one was written about a mechanism that no longer exists.
+>
+> Also carried across: a real MachineLearningStandards cache entry on this machine was **five files
+> short, and the old code executed it.** No exploitation is claimed.
+>
+> The text below is retained as the specification that was written before the fix existed. It is
+> not a description of the fix.
 
 Tracked as [FE-13](../backlog/items/FE-13.md), whose framing governs:
 
@@ -279,7 +323,41 @@ theirs.** That is their defect, on their release cycle.
 - A directory in `paths` cannot digest to a constant — it is an error.
 - `reproducible: false` blocks attestation emission.
 
-### 1.5 · Generalise the registry to repository × pack
+### 1.5 · Generalise the registry to repository × pack — **DONE, `7df5e69`. Retention, not specification.**
+
+> **This section is superseded by the implementation it asked for.** FE-12 is `COMPLETE`; `0.5.0`
+> landed and was merged here at `56e735b`. What follows is what is **retained and must not drift**,
+> not what to build.
+>
+> **It keys better than this plan specified.** Dispositions live under **`standards.<pack id>`, keyed
+> by the pack's own contract id** — not under a generic `entry.packs[<packId>]` map the enforcer
+> would have had to know pack names to populate. **No legacy fallback**, deliberately: reading the
+> old `machineLearning` key would require the enforcer to know one pack's name, which is the defect.
+> An unmigrated registry is `SCOPE_REVIEW_REQUIRED` — fail-safe and visible, never silently
+> translated.
+>
+> **The id comes from the invocation, not from the pinned release.** Reading `standard.id` out of the
+> adapter looks stricter and broke seven scope-seam tests, among them *a reviewed exclusion survives
+> a malformed adapter*. A human decided the standard does not govern this repository; a broken
+> contract is not new information about that decision. Scope authority sits **outside** the evaluator
+> seam and the stricter-looking design would have moved it inside.
+>
+> **The finding to preserve, which is worth more than the feature.** `authority-boundary.test.mjs`
+> had banned pack identity in `scripts/` since M2 and passed the entire time, because its list held
+> the contract id `machine-learning` while `scope.mjs` wrote `machineLearning`. One pack was
+> privileged in code for the whole life of M3, two files from a test asserting that could not happen.
+> **A guard that protects a literal token rather than the semantic privilege is a false green by
+> representation mismatch** — found in this repository's own guardrail. The regression covering
+> non-canonical spellings is retained and must not be narrowed.
+>
+> **Generalising scope did not generalise detection.** One detector, one surface; a pack with no
+> detector is not a pack whose detector found nothing. See the `undetermined` disposition in §1.
+>
+> **Still outstanding, and not closed by this:** the EngineeringStandards `IN_SCOPE` decision remains
+> unmigrated — `7df5e69` removed the obstacle, and recording it is a reviewer's act, not a code
+> change. `--standard` is unvalidated beyond presence.
+
+The original specification, retained for the record:
 
 ```text
 entry.machineLearning  →  entry.packs[<packId>]
