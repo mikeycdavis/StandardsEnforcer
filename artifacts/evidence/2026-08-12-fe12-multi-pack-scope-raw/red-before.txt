@@ -1,0 +1,59 @@
+✔ there is an executable surface to constrain (0.8873ms)
+✖ no executable source names a pack's identity (3.3224ms)
+✔ no executable source names a pack's native status (1.44ms)
+✔ no executable source names a pack's evidence field (1.3824ms)
+✔ the enforcer needs only three things from a pack, and reads only those (0.1053ms)
+✔ the guard bites: a planted violation of each kind is caught (0.4098ms)
+✔ the guard does not bite on the enforcer's own vocabulary (0.2405ms)
+✔ comments may explain the prohibition without violating it (0.0748ms)
+file:///F:/Repos/StandardsEnforcer/test/scope-multi-pack.test.mjs:34
+import { SURFACE } from "../scripts/footprint.mjs";
+         ^^^^^^^
+SyntaxError: The requested module '../scripts/footprint.mjs' does not provide an export named 'SURFACE'
+    at #asyncInstantiate (node:internal/modules/esm/module_job:326:21)
+    at async ModuleJob.run (node:internal/modules/esm/module_job:429:5)
+    at async node:internal/modules/esm/loader:639:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.15.0
+✖ test\scope-multi-pack.test.mjs (49.0228ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 7
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 87.2083
+
+✖ failing tests:
+
+test at test\authority-boundary.test.mjs:170:3
+✖ no executable source names a pack's identity (3.3224ms)
+  AssertionError [ERR_ASSERTION]: ADR 0001 forbids the enforcer knowing this. Ask the pack instead:
+    scripts/scope.mjs names machineLearning
+  + actual - expected
+  
+  + [
+  +   'scripts/scope.mjs names machineLearning'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file:///F:/Repos/StandardsEnforcer/test/authority-boundary.test.mjs:172:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+      at Test.postRun (node:internal/test_runner/test:1330:19)
+      at Test.run (node:internal/test_runner/test:1258:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'scripts/scope.mjs names machineLearning' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at test\scope-multi-pack.test.mjs:1:1
+✖ test\scope-multi-pack.test.mjs (49.0228ms)
+  'test failed'

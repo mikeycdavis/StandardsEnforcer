@@ -38,6 +38,68 @@ the first time only one of them moves.
 
 ---
 
+## 0.5.0 — 2026-08-12
+
+**Breaking. Scope is recorded per standards pack, and no pack is privileged in code.**
+
+`resolveScope` read one hardcoded registry key, `entry.machineLearning`, and named
+MachineLearningStandards in its own prose for every pack — including packs that were not it. The unit
+of applicability is *repository × standards pack*, so a repository in scope for one standard and out
+of scope for another could not be expressed at all. The EngineeringStandards adoption on 2026-08-11
+had to record its `IN_SCOPE` decision in an evidence document because the registry the enforcer reads
+had nowhere to put it ([FE-12](artifacts/backlog/items/FE-12.md)).
+
+Minor, because two public-contract surfaces move: the registry format and the accepted CLI arguments.
+
+### 1. Dispositions are filed under `standards`, keyed by the pack's own contract id
+
+```jsonc
+// was
+"github:1024871": { "name": "acme/moneyball", "machineLearning": { … } }
+// now
+"github:1024871": { "name": "acme/moneyball", "standards": { "machine-learning": { … } } }
+```
+
+**Old entries are not silently accepted.** Reading the legacy key would require the enforcer to know
+one pack's name, which is the defect. An unmigrated registry produces `SCOPE_REVIEW_REQUIRED` —
+fail-safe, and visible. Migration is a registry edit.
+
+Silence about a pack is a question, never an answer: no disposition on file is review-required, and
+never inherits another pack's decision.
+
+### 2. `--standard=<id>` is required whenever a scope registry is supplied
+
+It joins `--scope-registry` and `--repo-id` in the all-or-nothing scope group, and the reusable
+workflow gains a `standard-id` input.
+
+**It is passed rather than read out of the pinned release's adapter, and that is deliberate.** Taking
+it from the contract looks stricter — the pack naming itself — but it would put scope resolution
+behind the evaluator seam, and `test/scope-seam-invariance.test.mjs` exists to assert that a reviewed
+exclusion survives a release whose adapter is malformed, absent or unusable. A human decided the
+standard does not govern the repository; a broken contract is not new information about that decision
+and must not convert it into an error.
+
+### 3. An evidence basis names the surface it was reviewed against
+
+`reviewedFootprint` gains `surface`, and `detectFootprint` reports which surface it observed
+(`training-evidence` — named for the evidence, not for a pack).
+
+**Generalising scope did not generalise detection, and must not appear to.** There is one detector. A
+basis naming a surface a run did not observe is **undetermined** — not fresh, not stale — and goes
+back to a human. Assuming the only surface that exists must be the one a reviewer meant would be the
+enforcer deciding what evidence they had in mind. A pack with no detector is not a pack whose detector
+found nothing (ADR 0004).
+
+A basis with no `surface` is refused for the same reason.
+
+### The guard that should outlive the feature
+
+`test/authority-boundary.test.mjs` now bans `machineLearning`, `MachineLearningStandards` and
+`machine_learning` in `scripts/`, not only the canonical `machine-learning`. One pack was privileged
+in code for the whole of M3 while a test asserting that could not happen sat two files away, because
+neither spelling was the contract id. A prohibition that covers only the canonical spelling is a
+prohibition on typing it canonically.
+
 ## 0.4.1 — 2026-08-12
 
 **A cache marker stops standing in for identity verification.**

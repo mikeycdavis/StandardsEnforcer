@@ -5,21 +5,21 @@
 Work on this project classified with the Extended Agile Hierarchy. Every item is a file in
 [`items/`](./items/); its YAML frontmatter is the source of truth and this page is derived from it.
 
-**10 of 20 leaf items complete — 50%**
+**11 of 20 leaf items complete — 55%**
 
 ```
-████████████████████░░░░░░░░░░░░░░░░░░░░  50%
+██████████████████████░░░░░░░░░░░░░░░░░░  55%
 ```
 
 ## Status
 
 | Status | Items |
 | --- | ---: |
-| ○ Not started | 7 |
+| ○ Not started | 6 |
 | ◔ Ready | 1 |
 | ◑ In progress | 7 |
 | ◒ Blocked | 2 |
-| ● Complete | 11 |
+| ● Complete | 12 |
 | **Total** | **28** |
 
 ## The hierarchy
@@ -37,7 +37,7 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 
 | Theme | Progress | Done | Remaining |
 | --- | --- | ---: | ---: |
-| [TH-01 Enforced standards compliance across the portfolio](./items/TH-01.md) | `███████░░░░░░░` 50% | 10 | 10 |
+| [TH-01 Enforced standards compliance across the portfolio](./items/TH-01.md) | `████████░░░░░░` 55% | 11 | 9 |
 
 ## In flight
 
@@ -57,8 +57,8 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 
 ## Everything
 
-- ◑ **[TH-01](./items/TH-01.md)** Enforced standards compliance across the portfolio _(10/20)_
-  - ◑ **[IN-01](./items/IN-01.md)** Enforcement a governed repository cannot weaken _(10/20)_
+- ◑ **[TH-01](./items/TH-01.md)** Enforced standards compliance across the portfolio _(11/20)_
+  - ◑ **[IN-01](./items/IN-01.md)** Enforcement a governed repository cannot weaken _(11/20)_
     - ◑ **[EP-01](./items/EP-01.md)** Authority transport — run a pack's own evaluator under a pinned identity _(7/9)_
       - ● **[FE-01](./items/FE-01.md)** M1 — run the official standards implementation and report what it said
       - ● **[FE-02](./items/FE-02.md)** M2 — contract-driven authority transport _(5/5)_
@@ -78,11 +78,11 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
     - ● **[EP-03](./items/EP-03.md)** Scope — whether a standard governs a repository is a recorded decision
     - ◑ **[EP-04](./items/EP-04.md)** The enforcer's own release lineage _(0/1)_
       - ○ **[FE-06](./items/FE-06.md)** Decide the disposition of the m3-scope-registry line relative to main
-    - ○ **[EP-05](./items/EP-05.md)** Reach beyond one repository, one platform, one standard _(0/6)_
+    - ○ **[EP-05](./items/EP-05.md)** Reach beyond one repository, one platform, one standard _(1/6)_
       - ○ **[FE-07](./items/FE-07.md)** Repository discovery across an organisation
       - ○ **[FE-08](./items/FE-08.md)** A second platform adapter
       - ◒ **[FE-09](./items/FE-09.md)** Make BYPASS_USED reachable
       - ○ **[FE-10](./items/FE-10.md)** Reviewer identity beyond a configured list
       - ○ **[FE-11](./items/FE-11.md)** Cross-pack dependency ordering
-      - ○ **[FE-12](./items/FE-12.md)** Scope dispositions keyed per pack, not hardcoded to machine-learning
+      - ● **[FE-12](./items/FE-12.md)** Scope dispositions keyed per pack, not hardcoded to machine-learning
 

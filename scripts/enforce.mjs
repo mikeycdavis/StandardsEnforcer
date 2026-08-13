@@ -248,9 +248,24 @@ export async function enforce({
   // have gone stale. The disposition itself comes only from the registry — see scope.mjs.
   let scopeReport = { checked: false, disposition: null, note: "No scope registry was configured. Whether these standards govern this repository is unreviewed here." };
   if (scope) {
+    // WHICH AUTHORITY IS ASKING COMES FROM THE INVOCATION, NOT FROM THE RELEASE, and the reason is a
+    // property this repository already paid for. Reading `standard.id` out of the pinned release's
+    // adapter looks stricter — the pack naming itself — but it puts scope resolution behind the
+    // evaluator seam, and `scope-seam-invariance.test.mjs` exists to assert that a reviewed exclusion
+    // survives a release whose adapter is malformed, absent or unusable. A human decided this
+    // standard does not govern this repository; a broken contract is not new information about that
+    // decision, and must not convert it into an error.
+    //
+    // The trusted workflow supplies `--standard`, alongside the registry path and repository identity
+    // it already supplies. The enforcer keeps no list of pack ids and validates nothing about this one
+    // beyond its presence: an unknown id simply has no disposition on file, which is review-required.
     const footprint = detectFootprint(target);
-    const resolved = resolveScope({ ...scope, target, footprint, today });
-    const detection = { kinds: footprint.kinds, signals: footprint.signals, assurance: footprint.assurance, note: footprint.note };
+    // Every evidence surface this run observed, keyed by surface name. One detector exists today; the
+    // map is the shape because a decision's basis names the surface it was reviewed against, and an
+    // unobserved surface has to be answerable with "cannot determine" rather than with a guess.
+    const footprints = { [footprint.surface]: { kinds: footprint.kinds, digest: footprint.digest } };
+    const resolved = resolveScope({ ...scope, target, footprints, today });
+    const detection = { surface: footprint.surface, kinds: footprint.kinds, signals: footprint.signals, assurance: footprint.assurance, note: footprint.note };
 
     if (resolved.outcome === OUTCOME.REGISTRY_INVALID) {
       return result(STATE.SCOPE_REGISTRY_INVALID, resolved.why, { standards, gate: gateReport, scope: { checked: true, disposition: null, detection, ...resolved.detail } });
@@ -358,6 +373,7 @@ function parseArgs(argv) {
     else if (a.startsWith("--scope-registry=")) s.registryPath = path.resolve(a.slice(17));
     else if (a.startsWith("--repo-id=")) s.repoId = a.slice(10);
     else if (a.startsWith("--repo-name=")) s.repoName = a.slice(12);
+    else if (a.startsWith("--standard=")) s.standardId = a.slice(11);
     else if (!a.startsWith("--") && !args.target) args.target = path.resolve(a);
     else return { error: `unrecognised argument: ${a}` };
   }
@@ -375,7 +391,7 @@ function parseArgs(argv) {
     // Same discipline as the gate. Scope resolved against a registry with no repository identity, or
     // an identity with no registry, is not a scope check — it is half of one, and half of a control
     // reads like the whole of one in a log.
-    for (const [k, flag] of [["registryPath", "--scope-registry"], ["repoId", "--repo-id"]]) {
+    for (const [k, flag] of [["registryPath", "--scope-registry"], ["repoId", "--repo-id"], ["standardId", "--standard"]]) {
       if (!s[k]) return { error: `${flag} is required once any scope option is given; a half-configured scope check is not a scope check` };
     }
     args.scope = s;

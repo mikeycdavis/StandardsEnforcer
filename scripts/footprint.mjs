@@ -62,6 +62,21 @@ const DATA_EXT = new Set([".csv", ".parquet", ".tfrecord", ".feather", ".arrow",
 const MANIFESTS = new Set(["requirements.txt", "requirements-dev.txt", "pyproject.toml", "environment.yml", "environment.yaml", "Pipfile", "setup.py", "setup.cfg"]);
 const CODE_EXT = new Set([".py", ".ipynb"]);
 
+/**
+ * The name of the evidence surface this module observes.
+ *
+ * IT IS NAMED FOR THE EVIDENCE, NOT FOR A PACK, and that is deliberate rather than fastidious. A
+ * scope decision records the surface it was reviewed against, so that `scope.mjs` can ask "do I have
+ * an observation of *this* surface" without knowing which standards pack cares about it. Calling it
+ * after a pack would put a pack's identity back into `scripts/`, and would also be a lie: this
+ * detector answers a question about a repository, and any number of standards might be interested in
+ * the answer.
+ *
+ * There is exactly one surface today. That is a fact about how much detection exists, not a licence
+ * for a consumer to assume a basis it cannot see must be this one.
+ */
+export const SURFACE = "training-evidence";
+
 /** Every signal kind this detector can emit. The digest is computed over a subset of these. */
 export const SIGNAL_KINDS = {
   "training-framework-import": "a training framework is imported by code in this repository",
@@ -224,6 +239,7 @@ export function detectFootprint(root) {
 
   const kinds = [...seen].sort();
   return {
+    surface: SURFACE,
     kinds,
     signals,
     digest: footprintDigest(kinds),
@@ -250,5 +266,5 @@ export function footprintDigest(kinds) {
 if (process.argv[1]?.endsWith("footprint.mjs")) {
   const root = path.resolve(process.argv[2] ?? ".");
   const f = detectFootprint(root);
-  process.stdout.write(JSON.stringify({ root, reviewedFootprint: { kinds: f.kinds, digest: f.digest }, signals: f.signals, assurance: f.assurance, note: f.note }, null, 2) + "\n");
+  process.stdout.write(JSON.stringify({ root, reviewedFootprint: { surface: f.surface, kinds: f.kinds, digest: f.digest }, signals: f.signals, assurance: f.assurance, note: f.note }, null, 2) + "\n");
 }
