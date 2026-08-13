@@ -21,7 +21,10 @@ Zero dependencies. Node 18 or later. Nothing to install.
 >
 > **M2** — For a repository already adopted, it determines whether enforcement of that release is
 > rooted outside changes the governed pull request controls, and produces no verdict where it is
-> not.
+> not. **This claim is not currently established for GitHub Actions.** The mitigation it rested on
+> was falsified by live evidence; see
+> [the supersession record](artifacts/evidence/2026-08-10-m2-superseded.md). There is **no
+> live-validated authoritative GitHub enforcement root for GitHub Actions** today.
 >
 > **M3** — Every repository in the governed population has an explicit scope disposition, and the
 > absence or staleness of that disposition is visible. Automated detection may require review; it
@@ -165,14 +168,22 @@ artifacts/evidence/     what was actually run, and what it produced
 
 - [0001](artifacts/adr/0001-orchestrate-do-not-reimplement.md) — orchestrate the standards; never reimplement them
 - [0002](artifacts/adr/0002-states-and-the-no-unknown-pass-invariant.md) — the state model, and INV-E1
-- [0003](artifacts/adr/0003-the-enforcement-root.md) — the enforcement root: a required check, bound to an app, from a pinned implementation
+- [0003](artifacts/adr/0003-the-enforcement-root.md) — the enforcement root: a required check, bound to an app, from a pinned implementation — **mitigation superseded by live evidence**
 - [0004](artifacts/adr/0004-scope-is-a-recorded-decision.md) — scope is a recorded decision, not a detection
+- [0005](artifacts/adr/0005-adapter-provenance.md) — the adapter is read from the identity-verified release, and nowhere else
+- [0006](artifacts/adr/0006-the-cache-is-shared-and-coordination-is-not-authority.md) — the cache is shared on purpose; coordination decides who may write, verification decides what may run
 
 ## Evidence
 
 - [M1 oracle](artifacts/evidence/2026-08-09-m1-oracle.md) — MachineLearningStandards `v1.4.0` against
   itself and against Numerai, with the payload-fidelity comparison
 - [M2 enforcement root](artifacts/evidence/2026-08-09-m2-enforcement-root.md) — the negative and
-  adversarial cases, including the spoofable-check finding
+  adversarial cases, including the spoofable-check finding.
+  **Its central mitigation has been falsified — read it with
+  [the supersession record](artifacts/evidence/2026-08-10-m2-superseded.md).**
+- [M2 superseded](artifacts/evidence/2026-08-10-m2-superseded.md) — what M2 no longer establishes,
+  on the evidence of M4, and what survives because it never depended on the app binding
 - [M3 scope registry](artifacts/evidence/2026-08-09-m3-scope-registry.md) — the detection fixtures,
   the staleness model, and a repository trying to declare itself ungoverned
+- [M3 reconciled](artifacts/evidence/2026-08-12-m3-reconciliation.md) — an approved plan classified
+  against the implementation that already existed, and the four conflicts adjudicated

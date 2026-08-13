@@ -23,17 +23,21 @@ import { fileURLToPath } from "node:url";
 import { enforce } from "../scripts/enforce.mjs";
 import { assessGate, isPinnedWorkflowRef, GITHUB_ACTIONS_APP_ID } from "../scripts/gate.mjs";
 import { STATE, exitFor, EXIT } from "../scripts/states.mjs";
+import { oracleAt } from "../test-support/oracle.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const MLS = "F:/Repos/MachineLearningStandards";
 const TAG = "v1.5.0";
 const CACHE = path.join(tmpdir(), "standards-enforcer-test-cache");
 const CHECK = "standards / machine-learning";
 const PINNED_WF = "acme/standards-ci/.github/workflows/standards.yml@1111111111111111111111111111111111111111";
 
 const git = (args, cwd) => spawnSync("git", args, { encoding: "utf8", cwd, windowsHide: true });
-const MLS_AVAILABLE = existsSync(path.join(MLS, ".git")) && git(["rev-list", "-n", "1", TAG], MLS).status === 0;
-const SHA = MLS_AVAILABLE ? git(["rev-list", "-n", "1", TAG], MLS).stdout.trim() : null;
+// Resolved, never assumed. The gate-root tests below were among those skipping silently on CI.
+const ORACLE = oracleAt(TAG);
+const MLS = ORACLE.repo;
+const MLS_AVAILABLE = ORACLE.available;
+const SHA = ORACLE.sha;
+const NEEDS_ORACLE = { skip: ORACLE.skip };
 
 /**
  * A platform whose answers come from somewhere the governed repository's files cannot reach.
@@ -93,7 +97,7 @@ test("gate · nothing required on the branch is GATE_MISSING", () => {
   assert.match(g.why, /Nothing is required/);
 });
 
-test("gate · a workflow that exists but is required by nobody is still missing", { skip: !MLS_AVAILABLE && "MachineLearningStandards not on disk" }, async () => {
+test("gate · a workflow that exists but is required by nobody is still missing", NEEDS_ORACLE, async () => {
   // The whole reason a gate is not a file. The repository below has a perfectly good workflow in
   // its own tree, and the branch requires nothing.
   await scratch(async (dir) => {
@@ -252,7 +256,7 @@ test("gate · organisation rooting can be required, and then a repository rule i
 // THE ADVERSARIAL CASE
 // ===========================================================================
 
-test("adversarial · no repository-local change a pull request can make alters the requirement", { skip: !MLS_AVAILABLE && "MachineLearningStandards not on disk" }, async () => {
+test("adversarial · no repository-local change a pull request can make alters the requirement", NEEDS_ORACLE, async () => {
   // Every plausible escape available to a pull request, applied one after another to the same
   // working tree, with the external requirement held constant outside it. The assertion is not
   // that the verdict stays the same — deleting the policy legitimately changes it — but that the
@@ -316,7 +320,7 @@ test("adversarial · no repository-local change a pull request can make alters t
 // Advisory versus authoritative
 // ===========================================================================
 
-test("advisory · a run with no gate checked is stamped non-authoritative and says so", { skip: !MLS_AVAILABLE && "MachineLearningStandards not on disk" }, async () => {
+test("advisory · a run with no gate checked is stamped non-authoritative and says so", NEEDS_ORACLE, async () => {
   await scratch(async (dir) => {
     await adoptedProject(dir);
     const r = await enforce({ target: dir, standardsRepo: MLS, tag: TAG, sha: SHA, cacheRoot: CACHE });
@@ -326,7 +330,7 @@ test("advisory · a run with no gate checked is stamped non-authoritative and sa
   });
 });
 
-test("advisory · the rendered output warns when a pass came from an unrooted run", { skip: !MLS_AVAILABLE && "MachineLearningStandards not on disk" }, async () => {
+test("advisory · the rendered output warns when a pass came from an unrooted run", NEEDS_ORACLE, async () => {
   // The target used to be MachineLearningStandards itself, which reported COMPLIANT on its own tree
   // having evaluated nothing. v1.5.0 repaired that, so this needs a target the pack genuinely passes
   // — one applicable rule established and nothing failing. `scored: 1` rather than `scored: 0` is

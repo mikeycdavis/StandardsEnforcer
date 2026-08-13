@@ -35,7 +35,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 
 const FULL_SHA = /^[0-9a-f]{40}$/;
@@ -158,6 +158,96 @@ export function checkoutIsExactly(dir, sha) {
 }
 
 /**
+ * Coordination for the one step that cannot be done concurrently: publication.
+ *
+ * ADR 0006. The cache root is shared across independent processes by design — the default root is
+ * machine-wide and `--cache` is the opt-out — so two runs may materialise the same identity at the
+ * same moment. FE-13 made that safe up to a point by staging per process, and said what it had not
+ * closed. FE-15's falsifier showed the rest: both processes clone, both check out, both verify their
+ * own staging tree, and then **both fail to publish**, because a directory cannot be replaced while
+ * another process holds a handle inside it.
+ *
+ * The scope is deliberately as small as the evidence allows:
+ *
+ *     clone / checkout / verify staging   ← concurrent, untouched
+ *     acquire per-identity publish lock
+ *     re-check the destination            ← under the lock, and it is verification, not trust
+ *     publish, or accept an entry that already verifies
+ *     release
+ *
+ * KEYED BY IDENTITY, NEVER GLOBAL. The unit that races is the publication of one SHA into one name.
+ * Two different SHAs are different directories that cannot invalidate each other, and a lock over the
+ * whole root would serialise unrelated releases — a portfolio run over eight packs made sequential in
+ * its slowest phase for no correctness gain.
+ *
+ * A LOCK IS NOT EVIDENCE. Holding it says nothing whatever about what the destination contains: a
+ * tree corrupted before the lock existed is corrupted while it is held. Every path below still ends
+ * at `checkoutIsExactly`. Coordination decides who may write; verification decides what may run.
+ */
+const PUBLISH_LOCK = { timeoutMs: 15_000, staleMs: 120_000, pollMs: 25 };
+
+function publishLockFor(cacheRoot, sha) {
+  return path.join(cacheRoot, `${sha}.publish-lock`);
+}
+
+/**
+ * Take the publish lock for one identity, or report why not.
+ *
+ * A directory is the lock, because `mkdir` is atomic on every filesystem this runs on — two processes
+ * cannot both create it, and no separate compare-and-swap is needed.
+ *
+ * A holder that died leaves the directory behind, so a lock older than `staleMs` is reclaimable. That
+ * is safe *because* reclaiming grants nothing: the reclaiming process still verifies the destination
+ * before using it, so a wrongly-reclaimed lock costs redundant work and cannot produce a wrong
+ * result. Waiting is bounded, and running out of patience is a retryable failure rather than
+ * permission to proceed — a timeout is not a pass.
+ */
+function acquirePublishLock(cacheRoot, sha, clock = Date.now) {
+  const lock = publishLockFor(cacheRoot, sha);
+  const deadline = clock() + PUBLISH_LOCK.timeoutMs;
+  let reclaimed = null;
+
+  for (;;) {
+    const taken = attempt(() => mkdirSync(lock));
+    if (taken.ok) {
+      return {
+        ok: true,
+        reclaimed,
+        why: null,
+        release: () => attempt(() => rmSync(lock, { recursive: true, force: true })),
+      };
+    }
+
+    const age = attempt(() => { reclaimed = clock() - statSync(lock).mtimeMs; });
+    if (!age.ok) continue;   // it vanished between the two calls, which means it is free
+
+    if (reclaimed > PUBLISH_LOCK.staleMs) {
+      // Reclaim, then go round again rather than assuming the removal won the race. Two processes
+      // may reclaim the same abandoned lock; only one of them will then succeed at `mkdir`.
+      attempt(() => rmSync(lock, { recursive: true, force: true }));
+      continue;
+    }
+    reclaimed = null;
+
+    if (clock() >= deadline) {
+      return {
+        ok: false,
+        reclaimed: null,
+        why:
+          `another process has been publishing ${sha} for longer than ${PUBLISH_LOCK.timeoutMs}ms. ` +
+          "This is a retryable enforcement failure: nothing about it establishes that the cached " +
+          "entry is usable, and proceeding without the lock would be a guess",
+        release: () => {},
+      };
+    }
+
+    // Idle rather than spin. `Atomics.wait` blocks this thread without a timer, which matters
+    // because the whole module is synchronous and there is no event loop turn to yield to.
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, PUBLISH_LOCK.pollMs);
+  }
+}
+
+/**
  * Materialise the standards implementation at a SHA, in a cache keyed by that SHA.
  *
  * Content-addressed on purpose: two runs naming the same SHA get the same tree, and a cache entry
@@ -209,25 +299,49 @@ export function materialise(repo, sha, cacheRoot) {
     const fresh = checkoutIsExactly(staging, sha);
     if (!fresh.ok) return { ok: false, dir: null, cached: false, repaired, why: `the materialised checkout failed verification: ${fresh.why}` };
 
-    const published = attempt(() => {
-      rmSync(marker, { force: true });
-      rmSync(dest, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
-      renameSync(staging, dest);
-    });
-    if (!published.ok) {
-      // Losing the swap is not automatically a failure: another run may have published a good entry
-      // for this identity in the meantime. That entry is checked exactly as any other would be —
-      // deferring to it without verification would be the original defect wearing a different hat.
-      const rival = existsSync(dest) ? checkoutIsExactly(dest, sha) : { ok: false, why: published.why };
-      if (!rival.ok) {
-        return { ok: false, dir: null, cached: false, repaired, why: `the verified checkout could not be published: ${published.why}` };
-      }
-      return { ok: true, dir: dest, cached: true, repaired, why: null };
+    // Everything above this line runs concurrently and is untouched. Only the swap is coordinated,
+    // because only the swap races: two processes cannot replace one directory at once.
+    const lock = acquirePublishLock(cacheRoot, sha);
+    if (!lock.ok) {
+      return { ok: false, dir: null, cached: false, repaired, retryable: true, why: lock.why };
     }
 
-    spawnSync(process.execPath, ["-e", `require('fs').writeFileSync(${JSON.stringify(marker)}, ${JSON.stringify(sha)})`], { windowsHide: true });
-    if (!existsSync(marker)) return { ok: false, dir: null, cached: false, repaired, why: "the cache entry could not be marked complete" };
-    return { ok: true, dir: dest, cached: false, repaired, why: null };
+    try {
+      // The re-check that makes the lock worth taking. This process may have spent a second cloning
+      // and verifying while another published a perfectly good entry for the same identity. Replacing
+      // it would be pointless work and would briefly unpublish a tree someone may be executing from.
+      //
+      // It is a verification, not a lock-ownership inference. Holding the lock is why it is safe to
+      // *look* now; `checkoutIsExactly` is the only thing that decides whether what we found may be
+      // used. If this ever becomes "the lock was acquired, so the entry is fine", it is
+      // `.enforcer-complete` again one layer out — the exact reading ADR 0006 rule 5 forbids.
+      if (existsSync(dest)) {
+        const settled = checkoutIsExactly(dest, sha);
+        if (settled.ok) return { ok: true, dir: dest, cached: true, repaired, why: null };
+      }
+
+      const published = attempt(() => {
+        rmSync(marker, { force: true });
+        rmSync(dest, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+        renameSync(staging, dest);
+      });
+      if (!published.ok) {
+        // Retained as defence in depth. With the lock held this should not be reachable, and if it is
+        // reachable the answer is still verification rather than deference: an entry that appeared
+        // from somewhere is checked exactly as any other would be.
+        const rival = existsSync(dest) ? checkoutIsExactly(dest, sha) : { ok: false, why: published.why };
+        if (!rival.ok) {
+          return { ok: false, dir: null, cached: false, repaired, why: `the verified checkout could not be published: ${published.why}` };
+        }
+        return { ok: true, dir: dest, cached: true, repaired, why: null };
+      }
+
+      spawnSync(process.execPath, ["-e", `require('fs').writeFileSync(${JSON.stringify(marker)}, ${JSON.stringify(sha)})`], { windowsHide: true });
+      if (!existsSync(marker)) return { ok: false, dir: null, cached: false, repaired, why: "the cache entry could not be marked complete" };
+      return { ok: true, dir: dest, cached: false, repaired, why: null };
+    } finally {
+      lock.release();
+    }
   } finally {
     attempt(() => rmSync(staging, { recursive: true, force: true }));
   }

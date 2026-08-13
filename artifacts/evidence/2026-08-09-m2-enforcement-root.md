@@ -3,6 +3,17 @@
 **Date:** 2026-08-09 · **Enforcer:** `0.2.0` · **Milestone question:** can the governed project
 avoid the verdict?
 
+> **SUPERSEDED IN PART — 2026-08-10.** The mitigation proposed below, binding a required check to
+> the app permitted to satisfy it (`integration_id` / `app_id`), was **falsified by live evidence**
+> in [M4](2026-08-10-m4-live-github.md). Every workflow in a repository — including one the pull
+> request adds — runs as the same GitHub Actions app, so the binding partitions nothing. See
+> [the supersession record](2026-08-10-m2-superseded.md) for what survives and what does not.
+>
+> **This document is deliberately not amended.** It is an accurate account of what was believed and
+> what had been demonstrated when it was written. The chain — adversarial reasoning finds a real
+> hole, proposes a plausible mitigation, a live experiment falsifies the mitigation — is the more
+> valuable artefact, and rewriting the first link would destroy it. Read what follows as history.
+
 M1 asked whether the authoritative verdict could be reproduced without interpreting it. This asks
 whether the project being judged can arrange not to be judged. Tested through negative and
 adversarial cases, because the positive case proves almost nothing — a gate that works when

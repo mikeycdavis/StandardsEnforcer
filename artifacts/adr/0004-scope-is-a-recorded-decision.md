@@ -8,11 +8,24 @@
 
 ## Context
 
-M2 established that a repository which has adopted a standards release cannot make its enforcement
-disappear through an ordinary pull request. The remaining bypass was simpler and larger than
-anything M2 addressed: never adopt at all. Nothing in the system had an opinion about a repository
-that trains models and has no `project-policy.yml`, because nothing in the system had an opinion
-about which repositories ought to be governed.
+> **Premise corrected, 2026-08-10.** As written, this section opened by asserting that M2 had
+> established that an adopted repository cannot make its enforcement disappear through an ordinary
+> pull request, and that never-adopting was therefore *the* remaining bypass. **M2 did not establish
+> that**, and live evidence in [M4](../evidence/2026-08-10-m4-live-github.md) contradicts it for the
+> GitHub Actions case — see [the supersession record](../evidence/2026-08-10-m2-superseded.md). The
+> paragraph below is restated on the true premise. Nothing else in this ADR changes: none of its
+> decisions depended on the falsified claim, and this correction neither strengthens nor weakens
+> any of them.
+
+M2 asked whether a repository which has adopted a standards release can make its enforcement
+disappear through an ordinary pull request, and its answer did not survive live testing. That
+bypass is **open**. A second bypass is simpler and larger, and is independent of it: never adopt at
+all. Nothing in the system had an opinion about a repository that trains models and has no
+`project-policy.yml`, because nothing in the system had an opinion about which repositories ought to
+be governed.
+
+The two are not alternatives and closing one does not close the other. This ADR closes the second.
+The first is M5's question and remains unanswered.
 
 The obvious closure is an ML detector, and the obvious closure is wrong. Four independent adoptions
 across MachineLearningStandards 1.0–1.4 were spent establishing that this class of detector is not

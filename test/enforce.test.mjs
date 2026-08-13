@@ -7,9 +7,12 @@
  * another route to it** — so the fidelity tests compare the enforcer's payload against a direct
  * invocation of the official CLI, field by field.
  *
- * These tests need the MachineLearningStandards repository on disk with its `v1.4.0` tag. Where it
- * is absent they skip loudly rather than passing quietly, because a suite that goes green when its
- * subject is missing is the failure this whole family of repositories exists to prevent.
+ * These tests need a real MachineLearningStandards checkout, named by `ENFORCER_ORACLE_REPO`, with
+ * the release they pin. Where it is absent they skip — and a skip is not a pass, which is why
+ * `ENFORCER_REQUIRE_ORACLE=1` exists and why `oracle-required.test.mjs` fails the suite when a run
+ * claims to be authoritative without one. A suite that goes green when its subject is missing is
+ * the failure this whole family of repositories exists to prevent, and it went green here for the
+ * whole of M1 through M3 on CI. See FE-14.
  */
 
 import test from "node:test";
@@ -24,16 +27,21 @@ import { fileURLToPath } from "node:url";
 import { enforce, runOfficialEvaluator } from "../scripts/enforce.mjs";
 import { STATE, PASSING, REQUIRES_RECORDED_DECISION, REACHABLE, exitFor, EXIT } from "../scripts/states.mjs";
 import { verifyTagResolvesTo, resolveIdentity } from "../scripts/identity.mjs";
+import { oracleAt } from "../test-support/oracle.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const MLS = "F:/Repos/MachineLearningStandards";
 const TAG = "v1.5.0";
 const CACHE = path.join(tmpdir(), "standards-enforcer-test-cache");
 
 const git = (args, cwd) => spawnSync("git", args, { encoding: "utf8", cwd, windowsHide: true });
 
-const MLS_AVAILABLE = existsSync(path.join(MLS, ".git")) && git(["rev-list", "-n", "1", TAG], MLS).status === 0;
-const SHA = MLS_AVAILABLE ? git(["rev-list", "-n", "1", TAG], MLS).stdout.trim() : null;
+// Resolved, never assumed, and never from a hardcoded path. `NEEDS_ORACLE` carries node:test's skip
+// value, so a test that cannot run reports which condition stopped it.
+const ORACLE = oracleAt(TAG);
+const MLS = ORACLE.repo;
+const MLS_AVAILABLE = ORACLE.available;
+const SHA = ORACLE.sha;
+const NEEDS_ORACLE = { skip: ORACLE.skip };
 
 async function scratch(fn) {
   const dir = await mkdtemp(path.join(tmpdir(), "enforcer-"));
@@ -127,13 +135,13 @@ test("the states the implementation cannot reach are declared, not faked", () =>
 // Identity
 // ===========================================================================
 
-test("identity · an abbreviated SHA is not an identity", { skip: !MLS_AVAILABLE && "MachineLearningStandards not on disk" }, () => {
+test("identity · an abbreviated SHA is not an identity", NEEDS_ORACLE, () => {
   const short = verifyTagResolvesTo(MLS, TAG, SHA.slice(0, 12));
   assert.equal(short.ok, false);
   assert.match(short.why, /full 40-character/);
 });
 
-test("identity · a tag pointing somewhere else is a mismatch, and the report names both", { skip: !MLS_AVAILABLE && "MachineLearningStandards not on disk" }, () => {
+test("identity · a tag pointing somewhere else is a mismatch, and the report names both", NEEDS_ORACLE, () => {
   const wrong = "0".repeat(40);
   const v = verifyTagResolvesTo(MLS, TAG, wrong);
   assert.equal(v.ok, false);
@@ -141,7 +149,7 @@ test("identity · a tag pointing somewhere else is a mismatch, and the report na
   assert.match(v.why, new RegExp(SHA));
 });
 
-test("identity · a declared identity that does not resolve produces no verdict at all", { skip: !MLS_AVAILABLE && "MachineLearningStandards not on disk" }, async () => {
+test("identity · a declared identity that does not resolve produces no verdict at all", NEEDS_ORACLE, async () => {
   const r = await enforce({ ...identity(), sha: "0".repeat(40), target: MLS });
   assert.equal(r.state, STATE.STANDARDS_IDENTITY_MISMATCH);
   assert.equal(r.passing, false);
@@ -149,7 +157,7 @@ test("identity · a declared identity that does not resolve produces no verdict 
   assert.equal(exitFor(r.state), EXIT.NOT_ENFORCEABLE);
 });
 
-test("identity · what runs is the SHA, and the materialised checkout proves it", { skip: !MLS_AVAILABLE && "MachineLearningStandards not on disk" }, () => {
+test("identity · what runs is the SHA, and the materialised checkout proves it", NEEDS_ORACLE, () => {
   const r = resolveIdentity({ repo: MLS, tag: TAG, sha: SHA, cacheRoot: CACHE });
   assert.equal(r.ok, true);
   assert.equal(git(["rev-parse", "HEAD"], r.dir).stdout.trim(), SHA);
@@ -168,7 +176,7 @@ test("identity · a non-repository is refused with git's own reason", async () =
 // Adoption
 // ===========================================================================
 
-test("adoption · a repository with no policy is NOT_ADOPTED, which is not non-compliance", { skip: !MLS_AVAILABLE && "MachineLearningStandards not on disk" }, async () => {
+test("adoption · a repository with no policy is NOT_ADOPTED, which is not non-compliance", NEEDS_ORACLE, async () => {
   await scratch(async (dir) => {
     await mkdir(path.join(dir, "src"), { recursive: true });
     await writeFile(path.join(dir, "src/train.py"), "import sklearn\n");
@@ -180,7 +188,7 @@ test("adoption · a repository with no policy is NOT_ADOPTED, which is not non-c
   });
 });
 
-test("adoption · NOT_ADOPTED does not claim the repository should have adopted", { skip: !MLS_AVAILABLE && "MachineLearningStandards not on disk" }, async () => {
+test("adoption · NOT_ADOPTED does not claim the repository should have adopted", NEEDS_ORACLE, async () => {
   // Whether a repository is in scope needs applicability detection and a human scope confirmation,
   // neither of which exists in M1. The enforcer reports what it observed and no more.
   await scratch(async (dir) => {
@@ -195,7 +203,7 @@ test("adoption · NOT_ADOPTED does not claim the repository should have adopted"
 // The oracle: reproduce the official result, by the official route
 // ===========================================================================
 
-test("oracle · MachineLearningStandards under its own v1.4.0 reproduces the recorded verdict", { skip: !MLS_AVAILABLE && "MachineLearningStandards not on disk" }, async () => {
+test("oracle · MachineLearningStandards under its own v1.4.0 reproduces the recorded verdict", NEEDS_ORACLE, async () => {
   const r = await enforce({ ...identity(), target: MLS });
   // At v1.4.0 this asserted COMPLIANT. v1.5.0 repaired the false green, and this repository declares
   // every domain rule not-applicable — so the honest official result is now NOT_EVALUATED, which its
@@ -207,7 +215,7 @@ test("oracle · MachineLearningStandards under its own v1.4.0 reproduces the rec
   assert.equal(r.standards.sha, SHA);
 });
 
-test("oracle · the enforcer's payload IS the official evaluator's output, not a recomputation", { skip: !MLS_AVAILABLE && "MachineLearningStandards not on disk" }, async () => {
+test("oracle · the enforcer's payload IS the official evaluator's output, not a recomputation", NEEDS_ORACLE, async () => {
   // The M1 claim's second half, tested directly. Run the official CLI out of the verified checkout,
   // then run the enforcer, and require the reports to agree field by field. Anything the enforcer
   // computed for itself would show up here as a difference.
@@ -227,7 +235,7 @@ test("oracle · the enforcer's payload IS the official evaluator's output, not a
     "the standards system's own exit code travels with its verdict");
 });
 
-test("oracle · a non-compliant target reports non-compliant, with the official numbers", { skip: !MLS_AVAILABLE && "MachineLearningStandards not on disk" }, async () => {
+test("oracle · a non-compliant target reports non-compliant, with the official numbers", NEEDS_ORACLE, async () => {
   await scratch(async (dir) => {
     await mkdir(path.join(dir, "src"), { recursive: true });
     await writeFile(path.join(dir, "src/train.py"), "import sklearn\nSEED = 1\n");
@@ -265,7 +273,7 @@ test("the enforcer contains no rule, no detector, and no scoring of its own", as
   }
 });
 
-test("oracle · the specimen that found the false green does not pass, and no ML field is consulted", { skip: !MLS_AVAILABLE && "MachineLearningStandards not on disk" }, async () => {
+test("oracle · the specimen that found the false green does not pass, and no ML field is consulted", NEEDS_ORACLE, async () => {
   // The exact hostile shape: a governed target with no ML work in it. Against v1.4.1 this pack
   // returned COMPLIANT with denominator.scored 0 of 46 applicable, and the enforcer would have
   // called it a pass. The defect was repaired in the authority, so this passes now because

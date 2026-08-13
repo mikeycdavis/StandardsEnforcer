@@ -27,9 +27,9 @@ import { enforce } from "../scripts/enforce.mjs";
 import { detectFootprint, footprintDigest, codeView, SURFACE } from "../scripts/footprint.mjs";
 import { resolveScope, OUTCOME } from "../scripts/scope.mjs";
 import { STATE, PASSING, REQUIRES_RECORDED_DECISION, REACHABLE, exitFor, EXIT } from "../scripts/states.mjs";
+import { oracleAt } from "../test-support/oracle.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const MLS = "F:/Repos/MachineLearningStandards";
 const TAG = "v1.4.0";
 const CACHE = path.join(tmpdir(), "standards-enforcer-test-cache");
 const TODAY = "2026-08-09";
@@ -39,8 +39,13 @@ const ID = "github:1024871";
 const STANDARD = "machine-learning";
 
 const git = (args, cwd) => spawnSync("git", args, { encoding: "utf8", cwd, windowsHide: true });
-const MLS_AVAILABLE = existsSync(path.join(MLS, ".git")) && git(["rev-list", "-n", "1", TAG], MLS).status === 0;
-const SHA = MLS_AVAILABLE ? git(["rev-list", "-n", "1", TAG], MLS).stdout.trim() : null;
+// Resolved, never assumed. This suite pins v1.4.0 while enforce and gate pin v1.5.0, which is why
+// the required-oracle guard checks every tag rather than whichever one it happens to import.
+const ORACLE = oracleAt(TAG);
+const MLS = ORACLE.repo;
+const MLS_AVAILABLE = ORACLE.available;
+const SHA = ORACLE.sha;
+const NEEDS_ORACLE = { skip: ORACLE.skip };
 
 async function scratch(fn) {
   const dir = await mkdtemp(path.join(tmpdir(), "enforcer-scope-"));
@@ -383,7 +388,7 @@ test("states · OUT_OF_SCOPE is not a standards verdict", () => {
 // ===========================================================================
 
 test("enforce · in scope and not adopted is a stronger finding than no policy file",
-  { skip: !MLS_AVAILABLE && "MachineLearningStandards not on disk" }, async () => {
+  NEEDS_ORACLE, async () => {
   await scratch(async (outside) => {
     await scratch(async (dir) => {
       await writeFile(path.join(dir, "train.py"), "import sklearn\nm.fit(X, y)\n");
@@ -409,7 +414,7 @@ test("enforce · in scope and not adopted is a stronger finding than no policy f
 });
 
 test("enforce · a recorded exclusion merges, evaluates nothing, and reads as an exclusion",
-  { skip: !MLS_AVAILABLE && "MachineLearningStandards not on disk" }, async () => {
+  NEEDS_ORACLE, async () => {
   await scratch(async (outside) => {
     await scratch(async (dir) => {
       await writeFile(path.join(dir, "triage.py"), "import openai\n");
@@ -446,7 +451,7 @@ test("enforce · a scope check without a registry path is refused rather than ha
 // ===========================================================================
 
 test("adversarial · nothing a repository writes about its own scope changes its disposition",
-  { skip: !MLS_AVAILABLE && "MachineLearningStandards not on disk" }, async () => {
+  NEEDS_ORACLE, async () => {
   // The M3 counterpart of M2's adversarial test, and the same shape of proof: the authority is held
   // outside the tree, the tree is rewritten freely, the disposition does not move.
   //

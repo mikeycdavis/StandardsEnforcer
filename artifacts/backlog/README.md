@@ -5,10 +5,10 @@
 Work on this project classified with the Extended Agile Hierarchy. Every item is a file in
 [`items/`](./items/); its YAML frontmatter is the source of truth and this page is derived from it.
 
-**11 of 18 leaf items complete — 61%**
+**12 of 20 leaf items complete — 60%**
 
 ```
-████████████████████████░░░░░░░░░░░░░░░░  61%
+████████████████████████░░░░░░░░░░░░░░░░  60%
 ```
 
 ## Status
@@ -16,10 +16,10 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 | Status | Items |
 | --- | ---: |
 | ○ Not started | 6 |
-| ◑ In progress | 6 |
+| ◑ In progress | 8 |
 | ◒ Blocked | 2 |
-| ● Complete | 12 |
-| **Total** | **26** |
+| ● Complete | 13 |
+| **Total** | **29** |
 
 ## The hierarchy
 
@@ -27,8 +27,8 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 | --- | --- | ---: | --- |
 | Theme | `TH-` | 1 | Which enduring area of value is this? |
 | Initiative | `IN-` | 1 | What outcome are we pursuing there? |
-| Epic | `EP-` | 5 | What large body of work delivers it? |
-| Feature | `FE-` | 12 | What shippable slice of that epic? |
+| Epic | `EP-` | 6 | What large body of work delivers it? |
+| Feature | `FE-` | 14 | What shippable slice of that epic? |
 | Story | `ST-` | 7 | What user-visible change, roughly one PR? |
 | Task | `TA-` | 0 | What technical step inside a story? |
 
@@ -36,15 +36,17 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 
 | Theme | Progress | Done | Remaining |
 | --- | --- | ---: | ---: |
-| [TH-01 Enforced standards compliance across the portfolio](./items/TH-01.md) | `█████████░░░░░` 61% | 11 | 7 |
+| [TH-01 Enforced standards compliance across the portfolio](./items/TH-01.md) | `████████░░░░░░` 60% | 12 | 8 |
 
 ## In flight
 
 - ◑ [EP-01](./items/EP-01.md) — Authority transport — run a pack's own evaluator under a pinned identity
 - ◑ [EP-02](./items/EP-02.md) — The enforcement root — a gate the governed pull request cannot satisfy
 - ◑ [EP-04](./items/EP-04.md) — The enforcer's own release lineage
+- ◑ [EP-06](./items/EP-06.md) — Self-assurance — this repository's own evidence must establish what it reports
 - ◑ [FE-04](./items/FE-04.md) — M4 — the enforcement root against live GitHub
 - ◒ [FE-09](./items/FE-09.md) — Make BYPASS_USED reachable
+- ◑ [FE-14](./items/FE-14.md) — A skipped oracle is not a passing integration
 - ◑ [IN-01](./items/IN-01.md) — Enforcement a governed repository cannot weaken
 - ◒ [ST-07](./items/ST-07.md) — Validate the required-workflows remedy against a real organisation ruleset
 - ◑ [TH-01](./items/TH-01.md) — Enforced standards compliance across the portfolio
@@ -55,9 +57,9 @@ _Nothing marked ready._
 
 ## Everything
 
-- ◑ **[TH-01](./items/TH-01.md)** Enforced standards compliance across the portfolio _(11/18)_
-  - ◑ **[IN-01](./items/IN-01.md)** Enforcement a governed repository cannot weaken _(11/18)_
-    - ◑ **[EP-01](./items/EP-01.md)** Authority transport — run a pack's own evaluator under a pinned identity _(7/7)_
+- ◑ **[TH-01](./items/TH-01.md)** Enforced standards compliance across the portfolio _(12/20)_
+  - ◑ **[IN-01](./items/IN-01.md)** Enforcement a governed repository cannot weaken _(12/20)_
+    - ◑ **[EP-01](./items/EP-01.md)** Authority transport — run a pack's own evaluator under a pinned identity _(8/8)_
       - ● **[FE-01](./items/FE-01.md)** M1 — run the official standards implementation and report what it said
       - ● **[FE-02](./items/FE-02.md)** M2 — contract-driven authority transport _(5/5)_
         - ● **[ST-01](./items/ST-01.md)** M2 Phase 0 — what the eight released interfaces actually are
@@ -66,6 +68,7 @@ _Nothing marked ready._
         - ● **[ST-04](./items/ST-04.md)** An executable adapter conformance boundary
         - ● **[ST-05](./items/ST-05.md)** Adapter provenance bound to the verified release
       - ● **[FE-13](./items/FE-13.md)** A cache marker is not proof of current identity
+      - ● **[FE-15](./items/FE-15.md)** Concurrent processes share a mutable cache root
     - ◑ **[EP-02](./items/EP-02.md)** The enforcement root — a gate the governed pull request cannot satisfy _(2/3)_
       - ● **[FE-03](./items/FE-03.md)** M2 — a gate is a required check, not a file
       - ◑ **[FE-04](./items/FE-04.md)** M4 — the enforcement root against live GitHub _(1/2)_
@@ -81,4 +84,6 @@ _Nothing marked ready._
       - ○ **[FE-10](./items/FE-10.md)** Reviewer identity beyond a configured list
       - ○ **[FE-11](./items/FE-11.md)** Cross-pack dependency ordering
       - ● **[FE-12](./items/FE-12.md)** Scope dispositions keyed per pack, not hardcoded to machine-learning
+    - ◑ **[EP-06](./items/EP-06.md)** Self-assurance — this repository's own evidence must establish what it reports _(0/1)_
+      - ◑ **[FE-14](./items/FE-14.md)** A skipped oracle is not a passing integration
 
