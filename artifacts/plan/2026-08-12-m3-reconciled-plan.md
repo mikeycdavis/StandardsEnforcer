@@ -141,7 +141,44 @@ available, the result was held in evidence rather than a state being invented fo
 
 Each lands as its own commit, classified as hardening rather than feature work.
 
-### 0.1 · D1 — CI is green with every subject-touching test skipped
+> ## Phase 0 checkpoint — 2026-08-13
+>
+> **All locally actionable Phase 0 defects are complete. Phase 0 is not closed.** Both halves are
+> load-bearing: an upstream dependency must not make the local work look unfinished, and local
+> completion must not be dressed up as full closure.
+>
+> | § | Defect | Item | State |
+> |---|---|---|---|
+> | 0.1 | D1 — a skipped oracle is not a passing integration | [FE-14](../backlog/items/FE-14.md) | **`IN_PROGRESS` — externally blocked.** Local work done at `29510e3`; the hosted arm cannot run. |
+> | 0.2 | D2 — a cache marker is not proof of current identity | [FE-13](../backlog/items/FE-13.md) | `COMPLETE` — `31fb5ec`, integrated `c3cb08e` |
+> | 0.2a | the concurrency residual FE-13 named | [FE-15](../backlog/items/FE-15.md) | `COMPLETE` — ADR 0006, red `15827f9`, remedy `d0ff84f` |
+> | 0.3 | D3 — a pack cannot pass when its process did not complete | [FE-16](../backlog/items/FE-16.md) | `COMPLETE` — red `670d617`, remedy `f5bbac1` |
+>
+> ### Two proofs that exist and have not executed
+>
+> Neither is a missing implementation. Both are claims whose evidence requires a machine this branch
+> cannot reach, and both are recorded as pending rather than allowed to read as complete.
+>
+> 1. **FE-14's hosted arm.** The authoritative MachineLearningStandards remote is private with **zero
+>    tags**, so the expected identities `v1.4.0 → 6bfd0789…` and `v1.5.0 → d9cffa11…` cannot be
+>    obtained by CI. Resolving this by pushing tags from here was refused: minting another
+>    repository's releases to satisfy our own gate inverts the authority model. It needs the owner to
+>    publish, plus `vars.ENFORCER_ORACLE_REMOTE`.
+> 2. **FE-16's case 5 reason.** Windows cannot produce a process with no exit code, so the
+>    `exitCode === null` **branch** has never run. Its universal property — a killed evaluator never
+>    passes — is proven on every platform; only the assertion distinguishing *contradicted* from
+>    *never arrived* waits for Linux CI.
+>
+> ### Superseded in this phase
+>
+> §0.2's **`writeFileSync` criterion is struck**, with its rationale preserved in place rather than
+> deleted. FE-13 removed the assurance dependency underneath it, so the API requirement stopped being
+> a correctness property. The marker implementation is deliberately unchanged.
+>
+> **Phase 1 may begin.** C-A and C-C are one design slice, not two: a digest with no authoritative
+> surface to describe is a digest of nothing.
+
+### 0.1 · D1 — CI is green with every subject-touching test skipped — **LOCAL WORK DONE, `29510e3`; HOSTED ARM BLOCKED**
 
 **Present state.** `F:/Repos/MachineLearningStandards` is hardcoded in `test/enforce.test.mjs:29`,
 `test/gate.test.mjs:28` and `test/scope.test.mjs:32`; each derives `MLS_AVAILABLE` and attaches
@@ -187,6 +224,20 @@ skip; a capable platform where the fixture fails goes red. Apply that discipline
 > materialisation, not continuously; and **concurrent repair has no cross-process lock.** The second
 > bears directly on [FE-15](../backlog/items/FE-15.md), whose reproduction must be re-run against
 > this design — the old one was written about a mechanism that no longer exists.
+>
+> > **Both resolved, 2026-08-13.** The reproduction *was* re-run, and the defect had changed shape:
+> > the security property held and what failed was operational isolation, so FE-15 was reclassified
+> > from false assurance to a false-negative concurrency defect. Coordinated sharing was chosen as the
+> > product direction and written down first as
+> > [ADR 0006](../adr/0006-the-cache-is-shared-and-coordination-is-not-authority.md) — *coordination
+> > decides who may write; verification decides what may run* — then falsified red at `15827f9` and
+> > remedied at `d0ff84f` with a per-release-identity lock over **the publish step only**. Clone,
+> > checkout and verification stay concurrent. FE-15 is `COMPLETE`; evidence:
+> > [2026-08-12 cache concurrency](../evidence/2026-08-12-fe15-cache-concurrency.md).
+> >
+> > **Still open, and not closed by it:** verification remains at materialisation rather than
+> > continuous — the first item in the list above is *not* discharged — and nothing addresses a cache
+> > root on a network filesystem, where `mkdir` atomicity is not guaranteed.
 >
 > Also carried across: a real MachineLearningStandards cache entry on this machine was **five files
 > short, and the old code executed it.** No exploitation is claimed.
@@ -240,7 +291,12 @@ silently absent marker. Use `writeFileSync`.
 > a historically sensible implementation choice into cargo-cult governance, and deleting the line would
 > destroy the evidence that the rationale ever existed.
 
-### 0.3 · D3 — the narrow residue
+### 0.3 · D3 — the narrow residue — **DONE, `f5bbac1`. Red first at `670d617`.**
+
+> Closed as [FE-16](../backlog/items/FE-16.md), against the five cases below. Evidence:
+> [2026-08-13 D3 exit contradiction](../evidence/2026-08-13-d3-exit-contradiction.md). Both controls
+> were mutation-checked — an independent exit-code check ordered ahead of the vocabulary check turns
+> cases 2 and 4 red — and case 5's `null` reason is **platform-pending until Linux CI**.
 
 **Extended to five cases — 2026-08-12.** The three below were the reconciliation's adjudication of
 C-D. Two more were added before the falsifier was written, and the falsifier freezes all five.
