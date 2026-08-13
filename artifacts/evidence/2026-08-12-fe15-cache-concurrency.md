@@ -167,6 +167,75 @@ could make verification pass would invalidate every arm it appears in.
 It lives in `test-support/` rather than `test/`, so `node --test` does not collect it — the same
 reason the oracle resolver moved there.
 
+## The remedy — publication is coordinated, nothing else is
+
+`15827f9` is the **pre-remedy state**, and is worth keeping addressable: one contract property
+failing while three negative controls hold. The next commit points back at it.
+
+The falsifier said where the race was, and the fix is scoped to exactly that:
+
+```text
+clone / checkout / verify staging tree      concurrent, untouched
+        ↓
+acquire per-identity publish lock
+        ↓
+re-check the destination                    verification, not lock-ownership inference
+        ↓
+publish, or accept an entry that already verifies
+        ↓
+release
+```
+
+**The re-check is the part that earns the lock.** A process may spend a second cloning and verifying
+while another publishes a perfectly good entry for the same identity. Under the lock it looks again;
+if what it finds satisfies `checkoutIsExactly`, it discards its own staging tree and uses the
+published entry rather than needlessly replacing a directory someone may be executing from. Holding
+the lock is why it is safe to *look* now — `checkoutIsExactly` remains the only thing that decides
+whether what was found may be used.
+
+A directory is the lock, because `mkdir` is atomic. A holder that dies leaves it behind, so a lock
+older than `staleMs` is reclaimable — safe **because** reclaiming grants nothing: the reclaiming
+process still verifies before using, so a wrongly-reclaimed lock costs redundant work and cannot
+produce a wrong result. Waiting is bounded; a timeout returns a retryable failure and never
+permission to proceed.
+
+### Result
+
+```text
+✔ arm 1   two processes, same identity, shared root      green 5/5   (was RED 3/3)
+✔ arm 2   a tampered verified entry is not trusted       green 5/5
+✔ arm 2b  a real checkout of a different commit          green 5/5
+✔ arm 3   two different identities materialise together  green 5/5
+```
+
+Arm 3 staying green is the load-bearing one: unrelated releases still overlap in time, so the fix did
+not buy determinism by serialising the cache.
+
+```text
+full suite, serial      189 tests · 188 pass · 0 fail · 1 skipped
+full suite, parallel    188 pass · 0 fail, twice
+two concurrent suites   A: 188 pass · 0 fail    B: 188 pass · 0 fail
+```
+
+The last line is the original FE-15 symptom — the run that produced
+`STANDARDS_IDENTITY_MISMATCH` — now clean. Raw:
+[`falsifier-green-after.txt`](2026-08-12-fe15-cache-concurrency-raw/falsifier-green-after.txt),
+[`concurrent-suites-after-A.txt`](2026-08-12-fe15-cache-concurrency-raw/concurrent-suites-after-A.txt),
+[`concurrent-suites-after-B.txt`](2026-08-12-fe15-cache-concurrency-raw/concurrent-suites-after-B.txt).
+
+The one skip is still ADR 0005 case 7b, symlink escape on `EPERM`. **Not** "all identity tests pass".
+
+### Not closed by this
+
+- Verification is at materialisation, not continuous. A tree altered between the check and the
+  evaluator's read is still not caught; that needs the evaluator to run against a tree nothing else
+  can write to.
+- The completion marker is still written through `spawnSync(node -e …)`, whose failure mode is a
+  silently absent marker. `writeFileSync` would make it throwable. Untouched here because it is not
+  this defect, and folding it in would put an unrelated change under this evidence.
+- The lock is process-local coordination on one filesystem. Nothing here addresses a cache root
+  shared over a network filesystem, where `mkdir` atomicity is not guaranteed.
+
 ## The question this does not answer
 
 The remedy depends on something this reproduction cannot establish:

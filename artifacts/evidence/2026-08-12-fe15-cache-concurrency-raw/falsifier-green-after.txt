@@ -1,0 +1,12 @@
+✔ arm 1 · two processes materialising the same identity both complete, and neither invalidates the other (1521.6839ms)
+✔ arm 2 · a tampered entry is not trusted, however the entry came to be there (1003.3146ms)
+✔ arm 2b · the same holds for a real checkout of a different commit (1029.1415ms)
+✔ arm 3 · two different identities materialise concurrently, not one after the other (1172.2299ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4772.7429

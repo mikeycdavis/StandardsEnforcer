@@ -5,10 +5,10 @@
 Work on this project classified with the Extended Agile Hierarchy. Every item is a file in
 [`items/`](./items/); its YAML frontmatter is the source of truth and this page is derived from it.
 
-**11 of 20 leaf items complete — 55%**
+**12 of 20 leaf items complete — 60%**
 
 ```
-██████████████████████░░░░░░░░░░░░░░░░░░  55%
+████████████████████████░░░░░░░░░░░░░░░░  60%
 ```
 
 ## Status
@@ -16,10 +16,9 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 | Status | Items |
 | --- | ---: |
 | ○ Not started | 6 |
-| ◔ Ready | 1 |
 | ◑ In progress | 7 |
 | ◒ Blocked | 2 |
-| ● Complete | 12 |
+| ● Complete | 13 |
 | **Total** | **28** |
 
 ## The hierarchy
@@ -37,7 +36,7 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 
 | Theme | Progress | Done | Remaining |
 | --- | --- | ---: | ---: |
-| [TH-01 Enforced standards compliance across the portfolio](./items/TH-01.md) | `████████░░░░░░` 55% | 11 | 9 |
+| [TH-01 Enforced standards compliance across the portfolio](./items/TH-01.md) | `████████░░░░░░` 60% | 12 | 8 |
 
 ## In flight
 
@@ -53,13 +52,13 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 
 ## Ready to pick up
 
-- ◔ [FE-15](./items/FE-15.md) — Concurrent processes share a mutable cache root
+_Nothing marked ready._
 
 ## Everything
 
-- ◑ **[TH-01](./items/TH-01.md)** Enforced standards compliance across the portfolio _(11/20)_
-  - ◑ **[IN-01](./items/IN-01.md)** Enforcement a governed repository cannot weaken _(11/20)_
-    - ◑ **[EP-01](./items/EP-01.md)** Authority transport — run a pack's own evaluator under a pinned identity _(7/9)_
+- ◑ **[TH-01](./items/TH-01.md)** Enforced standards compliance across the portfolio _(12/20)_
+  - ◑ **[IN-01](./items/IN-01.md)** Enforcement a governed repository cannot weaken _(12/20)_
+    - ◑ **[EP-01](./items/EP-01.md)** Authority transport — run a pack's own evaluator under a pinned identity _(8/9)_
       - ● **[FE-01](./items/FE-01.md)** M1 — run the official standards implementation and report what it said
       - ● **[FE-02](./items/FE-02.md)** M2 — contract-driven authority transport _(5/5)_
         - ● **[ST-01](./items/ST-01.md)** M2 Phase 0 — what the eight released interfaces actually are
@@ -69,7 +68,7 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
         - ● **[ST-05](./items/ST-05.md)** Adapter provenance bound to the verified release
       - ● **[FE-13](./items/FE-13.md)** A cache marker is not proof of current identity
       - ◑ **[FE-14](./items/FE-14.md)** A skipped oracle is not a passing integration
-      - ◔ **[FE-15](./items/FE-15.md)** Concurrent processes share a mutable cache root
+      - ● **[FE-15](./items/FE-15.md)** Concurrent processes share a mutable cache root
     - ◑ **[EP-02](./items/EP-02.md)** The enforcement root — a gate the governed pull request cannot satisfy _(2/3)_
       - ● **[FE-03](./items/FE-03.md)** M2 — a gate is a required check, not a file
       - ◑ **[FE-04](./items/FE-04.md)** M4 — the enforcement root against live GitHub _(1/2)_
