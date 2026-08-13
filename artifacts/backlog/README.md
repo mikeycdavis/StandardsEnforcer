@@ -15,8 +15,8 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 
 | Status | Items |
 | --- | ---: |
-| ○ Not started | 6 |
-| ◑ In progress | 8 |
+| ○ Not started | 5 |
+| ◑ In progress | 9 |
 | ◒ Blocked | 2 |
 | ● Complete | 13 |
 | **Total** | **29** |
@@ -45,6 +45,7 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 - ◑ [EP-04](./items/EP-04.md) — The enforcer's own release lineage
 - ◑ [EP-06](./items/EP-06.md) — Self-assurance — this repository's own evidence must establish what it reports
 - ◑ [FE-04](./items/FE-04.md) — M4 — the enforcement root against live GitHub
+- ◑ [FE-06](./items/FE-06.md) — Decide which line becomes authoritative, and then the disposition of main
 - ◒ [FE-09](./items/FE-09.md) — Make BYPASS_USED reachable
 - ◑ [FE-14](./items/FE-14.md) — A skipped oracle is not a passing integration
 - ◑ [IN-01](./items/IN-01.md) — Enforcement a governed repository cannot weaken
@@ -76,7 +77,7 @@ _Nothing marked ready._
         - ◒ **[ST-07](./items/ST-07.md)** Validate the required-workflows remedy against a real organisation ruleset
     - ● **[EP-03](./items/EP-03.md)** Scope — whether a standard governs a repository is a recorded decision
     - ◑ **[EP-04](./items/EP-04.md)** The enforcer's own release lineage _(0/1)_
-      - ○ **[FE-06](./items/FE-06.md)** Decide which line becomes authoritative, and then the disposition of main
+      - ◑ **[FE-06](./items/FE-06.md)** Decide which line becomes authoritative, and then the disposition of main
     - ○ **[EP-05](./items/EP-05.md)** Reach beyond one repository, one platform, one standard _(1/6)_
       - ○ **[FE-07](./items/FE-07.md)** Repository discovery across an organisation
       - ○ **[FE-08](./items/FE-08.md)** A second platform adapter
