@@ -19,7 +19,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { ORACLE_REQUIRED, ORACLE_REPO, ORACLE_TAGS, ORACLE_STATE, oracleAt } from "./oracle.mjs";
+import { ORACLE_REQUIRED, ORACLE_REPO, ORACLE_TAGS, ORACLE_STATE, oracleAt } from "../test-support/oracle.mjs";
 
 test("oracle · a run that claims to be authoritative has an authoritative oracle", () => {
   if (!ORACLE_REQUIRED) {

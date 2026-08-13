@@ -27,7 +27,7 @@ import { fileURLToPath } from "node:url";
 import { enforce, runOfficialEvaluator } from "../scripts/enforce.mjs";
 import { STATE, PASSING, REQUIRES_RECORDED_DECISION, REACHABLE, exitFor, EXIT } from "../scripts/states.mjs";
 import { verifyTagResolvesTo, resolveIdentity } from "../scripts/identity.mjs";
-import { oracleAt } from "./oracle.mjs";
+import { oracleAt } from "../test-support/oracle.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TAG = "v1.5.0";

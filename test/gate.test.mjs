@@ -23,7 +23,7 @@ import { fileURLToPath } from "node:url";
 import { enforce } from "../scripts/enforce.mjs";
 import { assessGate, isPinnedWorkflowRef, GITHUB_ACTIONS_APP_ID } from "../scripts/gate.mjs";
 import { STATE, exitFor, EXIT } from "../scripts/states.mjs";
-import { oracleAt } from "./oracle.mjs";
+import { oracleAt } from "../test-support/oracle.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TAG = "v1.5.0";

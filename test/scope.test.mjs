@@ -27,7 +27,7 @@ import { enforce } from "../scripts/enforce.mjs";
 import { detectFootprint, footprintDigest, codeView, SURFACE } from "../scripts/footprint.mjs";
 import { resolveScope, OUTCOME } from "../scripts/scope.mjs";
 import { STATE, PASSING, REQUIRES_RECORDED_DECISION, REACHABLE, exitFor, EXIT } from "../scripts/states.mjs";
-import { oracleAt } from "./oracle.mjs";
+import { oracleAt } from "../test-support/oracle.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TAG = "v1.4.0";
