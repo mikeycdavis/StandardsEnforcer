@@ -1,0 +1,18 @@
+✔ a cached tree moved to a different commit is not accepted on the strength of its marker (1384.0203ms)
+✔ the working tree of a cached checkout may not diverge from the commit it claims (1072.872ms)
+✔ a marker naming a different SHA than the entry it marks is not evidence (791.8152ms)
+✔ an empty marker is not evidence (828.0672ms)
+✔ the completion marker is not written into the tree it certifies (736.5057ms)
+✔ an untracked file added to a cached checkout is not tolerated (1117.0776ms)
+✔ a rejected cache entry is reported, not silently rebuilt (1185.3693ms)
+✔ repair is verified by the same check, so it cannot become the soft path (1020.4741ms)
+✔ a marked directory that is not a checkout at all establishes no identity (973.8485ms)
+✔ a cache entry belonging to another run's authority is not reachable by marker alone (1120.6366ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 10280.8117

@@ -152,7 +152,7 @@ Two pieces of durable state exist on disk, and neither is a database:
 
 | Store | Location | Purpose | Written by |
 |---|---|---|---|
-| **Checkout cache** | `<cacheRoot>/<40-hex-sha>/`, default `<tmpdir>/standards-enforcer-cache` | A materialised standards tree, content-addressed by commit. A `.enforcer-complete` marker file distinguishes a finished entry from a truncated one; a partial entry is deleted and rebuilt rather than reused | `materialise()` in `scripts/identity.mjs` |
+| **Checkout cache** | `<cacheRoot>/<40-hex-sha>/`, default `<tmpdir>/standards-enforcer-cache` | A materialised standards tree, content-addressed by commit. A sibling `<sha>.complete` marker distinguishes a finished entry from a truncated one — *beside* the entry, never inside it, so the tree stays byte-identical to the commit. **The marker is not evidence of identity:** every hit is re-verified against the commit before use, and an entry that fails is discarded and rebuilt (FE-13) | `materialise()` in `scripts/identity.mjs` |
 | **Scope registry** | A JSON file in a *different* repository — path supplied by `--scope-registry` | The governed population's scope dispositions, keyed by immutable platform identity. **Never inside the repository it governs**; `loadRegistry()` refuses that outright | Humans and their tooling, outside this repository. The enforcer only reads it |
 
 The registry's shape is documented by example in
@@ -270,15 +270,27 @@ resolve consistently before anything executes.
   `git rev-parse <tag>` specifically to diagnose the common mistake — the declared SHA being the
   annotated tag object rather than the commit — and names it, because every tagged pack in the C0
   inventory was recorded that way.
-- `materialise(repo, sha, cacheRoot)` — `git clone --no-checkout --no-hardlinks` into
-  `<cacheRoot>/<sha>`, then `git checkout --detach <sha>`. Detaching onto the SHA rather than the tag
-  means a tag moved between verification and execution cannot change what executes. A
-  `.enforcer-complete` marker is written last; without it the entry is rebuilt.
+- `checkoutIsExactly(dir, sha)` — is this directory, right now, that commit? Three questions in the
+  order that keeps their answers distinguishable: is there a repository here, is `HEAD` the commit,
+  and does `git status --porcelain` come back empty. The third is not decoration — an edited file
+  leaves `HEAD` untouched and changes what executes.
+- `materialise(repo, sha, cacheRoot)` — `git clone --no-checkout --no-hardlinks` into a per-process
+  staging directory, then `git checkout --detach <sha>`, then `checkoutIsExactly`, then rename into
+  `<cacheRoot>/<sha>`. Detaching onto the SHA rather than the tag means a tag moved between
+  verification and execution cannot change what executes. The `<sha>.complete` marker is written
+  last; without it the entry is rebuilt. **A cache hit is re-verified by the same check before it is
+  returned** — an entry that fails is discarded and rebuilt, and the reason travels back as
+  `repaired` rather than vanishing. Staging plus rename is what keeps repair from deleting a tree a
+  concurrent run is executing from.
 - `resolveIdentity({repo, tag, sha, cacheRoot})` — the composition. Two outcomes only, and in
-  particular no "close enough".
+  particular no "close enough". The filesystem calls are wrapped so a fault is reported as a reason
+  rather than thrown, because an exception would be a third outcome.
 
-The third check — that the *materialised* checkout's HEAD is the SHA — is not redundant with the
-first. One asks what the tag points at; the other establishes what is about to run.
+The third check — that the *materialised* checkout is the SHA — is not redundant with the first. One
+asks what the tag points at; the other establishes what is about to run. It runs on **every**
+execution, including cached ones: it used to run once, at population time, after which a marker file
+stood in for it, which made the marker an artifact asserting the right thing rather than evidence
+that the thing was true. Caching may avoid reacquisition; it may never substitute for verification.
 
 ### The enforcement root — `scripts/gate.mjs` (191 lines)
 

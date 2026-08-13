@@ -38,6 +38,43 @@ the first time only one of them moves.
 
 ---
 
+## 0.4.1 — 2026-08-12
+
+**A cache marker stops standing in for identity verification.**
+
+`materialise()` returned as soon as its completion marker existed, without re-establishing that the
+cached tree was still the pinned commit. Step 3 of the identity model — *the materialised checkout is
+that SHA* — therefore ran once, at population time, and never again. Every run after the first
+executed whatever was at `<cacheRoot>/<sha>/` on the strength of a file recording that the directory
+had been verified in the past. **That is a false green in the identity model, which is the one thing
+this repository exists to prevent** ([FE-13](artifacts/backlog/items/FE-13.md)).
+
+Patch, not minor: the public contract — state vocabulary, exit codes, result envelope, CLI arguments —
+is untouched. What changed is that a guarantee already claimed is now actually enforced.
+
+- **Every cache hit is re-verified.** `checkoutIsExactly(dir, sha)` asks whether there is a repository
+  there, whether `HEAD` is the commit, and whether `git status --porcelain` is empty. The tree check
+  is load-bearing: an edited file leaves `HEAD` correct and executes different code.
+- **A failing entry is discarded and rebuilt**, then verified by the identical check, so repair cannot
+  become a softer path than the one it replaces. The reason is returned as `repaired` rather than
+  discarded — a content-addressed entry cannot go stale by itself, so a rejection always means
+  something.
+- **The completion marker moved out of the checkout**, `<cacheRoot>/<sha>/.enforcer-complete` →
+  `<cacheRoot>/<sha>.complete`. A marker inside the tree is a file the enforcer added to the authority
+  it is about to run, and it would have required a permanent exception in the clean-tree check. Old
+  entries are not migrated; each fails verification once and is rebuilt.
+- **Repair builds into per-process staging and renames into place**, and the filesystem mutations
+  report faults instead of throwing. Deleting a rejected entry in place raced with concurrent runs
+  sharing a cache root, and an exception is a third outcome this module does not have.
+
+A materialised MachineLearningStandards entry on the development machine was found with five files
+deleted from it — the defect biting outside its own fixture. No exploitation is claimed and nothing
+establishes how it happened; what is established is that the previous implementation ran it anyway.
+
+**Not closed by this release:** verification happens at materialisation, not continuously, and two
+concurrent runs can still repair the same identity without a cross-process lock. Both are recorded in
+[the evidence](artifacts/evidence/2026-08-12-fe13-cache-identity.md).
+
 ## 0.4.0 — 2026-08-10
 
 **Breaking. The enforcer stops knowing what a verdict means.**

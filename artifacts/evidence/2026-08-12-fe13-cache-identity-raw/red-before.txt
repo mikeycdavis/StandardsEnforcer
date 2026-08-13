@@ -1,0 +1,98 @@
+✖ a cached tree moved to a different commit is not accepted on the strength of its marker (899.6176ms)
+✖ the working tree of a cached checkout may not diverge from the commit it claims (797.4972ms)
+✔ a marker naming a different SHA than the directory it sits in is not evidence (782.7591ms)
+✔ an empty marker is not evidence (733.7582ms)
+✖ a marked directory that is not a checkout at all establishes no identity (715.1074ms)
+✖ a cache entry belonging to another run's authority is not reachable by marker alone (895.0572ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 2
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4881.0333
+
+✖ failing tests:
+
+test at test\identity-cache.test.mjs:106:1
+✖ a cached tree moved to a different commit is not accepted on the strength of its marker (899.6176ms)
+  AssertionError [ERR_ASSERTION]: cache hit over a moved HEAD: reported success for a tree that is not the approved authority
+  + actual - expected
+  
+  + '4b612f6bb1b676fabeb5fc87bcac6591121d3b1a'
+  - '733cdb55b5f04c2bcf6c4370872bf5ef7b22a75f'
+  
+      at identityEstablishedOrRefused (file:///F:/Repos/StandardsEnforcer/test/identity-cache.test.mjs:95:10)
+      at file:///F:/Repos/StandardsEnforcer/test/identity-cache.test.mjs:120:5
+      at twoReleases (file:///F:/Repos/StandardsEnforcer/test/identity-cache.test.mjs:69:18)
+      at async TestContext.<anonymous> (file:///F:/Repos/StandardsEnforcer/test/identity-cache.test.mjs:110:3)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: '4b612f6bb1b676fabeb5fc87bcac6591121d3b1a',
+    expected: '733cdb55b5f04c2bcf6c4370872bf5ef7b22a75f',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\identity-cache.test.mjs:124:1
+✖ the working tree of a cached checkout may not diverge from the commit it claims (797.4972ms)
+  AssertionError [ERR_ASSERTION]: a cache hit handed back a working tree that does not match the commit it claims to be
+  + actual - expected
+  
+  + '9.9.9-tampered\n'
+  - '1.0.0\n'
+  
+      at file:///F:/Repos/StandardsEnforcer/test/identity-cache.test.mjs:135:14
+      at async twoReleases (file:///F:/Repos/StandardsEnforcer/test/identity-cache.test.mjs:69:12)
+      at async TestContext.<anonymous> (file:///F:/Repos/StandardsEnforcer/test/identity-cache.test.mjs:127:3)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: '9.9.9-tampered\n',
+    expected: '1.0.0\n',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\identity-cache.test.mjs:180:1
+✖ a marked directory that is not a checkout at all establishes no identity (715.1074ms)
+  AssertionError [ERR_ASSERTION]: marked directory with no repository: reported success for a directory that is not a checkout, so no identity can be established from it
+      at identityEstablishedOrRefused (file:///F:/Repos/StandardsEnforcer/test/identity-cache.test.mjs:91:10)
+      at file:///F:/Repos/StandardsEnforcer/test/identity-cache.test.mjs:190:5
+      at twoReleases (file:///F:/Repos/StandardsEnforcer/test/identity-cache.test.mjs:69:18)
+      at async TestContext.<anonymous> (file:///F:/Repos/StandardsEnforcer/test/identity-cache.test.mjs:183:3)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at test\identity-cache.test.mjs:194:1
+✖ a cache entry belonging to another run's authority is not reachable by marker alone (895.0572ms)
+  AssertionError [ERR_ASSERTION]: entry filed under another identity's name: reported success for a tree that is not the approved authority
+  + actual - expected
+  
+  + '25f00a27fa7e0520601621bb23d9ff1dfa25f0d6'
+  - '39496762f16b2cef8a782e4dadc2e08dba25e50d'
+  
+      at identityEstablishedOrRefused (file:///F:/Repos/StandardsEnforcer/test/identity-cache.test.mjs:95:10)
+      at file:///F:/Repos/StandardsEnforcer/test/identity-cache.test.mjs:209:5
+      at async twoReleases (file:///F:/Repos/StandardsEnforcer/test/identity-cache.test.mjs:69:12)
+      at async TestContext.<anonymous> (file:///F:/Repos/StandardsEnforcer/test/identity-cache.test.mjs:198:3)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: '25f00a27fa7e0520601621bb23d9ff1dfa25f0d6',
+    expected: '39496762f16b2cef8a782e4dadc2e08dba25e50d',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

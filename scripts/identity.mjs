@@ -12,20 +12,51 @@
  *
  *   1. the tag exists in the standards repository and resolves to the stated SHA;
  *   2. a tree is materialised at that SHA, in a cache keyed by the SHA;
- *   3. the materialised checkout's HEAD is that SHA.
+ *   3. the materialised checkout is that SHA — on every run, including cached ones.
  *
  * Step 3 is not redundant with step 1. Step 1 asks what the tag currently points at; step 3
  * establishes what is about to run. A tag moved between the two would fail here.
+ *
+ * STEP 3 RUNS EVERY TIME, AND THAT IS THE WHOLE OF FE-13. It used to run once, at population time,
+ * after which the presence of a marker file was allowed to stand for it. That made the marker an
+ * artifact asserting the right thing — which is precisely what the paragraph above says is not
+ * evidence that the thing is true. A cache entry lives under `tmpdir()`, outside any repository, and
+ * nothing protects it between runs; a tree that was this commit yesterday is not thereby this commit
+ * now. Caching may avoid reacquisition. It may never substitute for verification.
+ *
+ * WHAT "IS THAT SHA" MEANS HERE. `rev-parse HEAD` establishes the commit and not the files: an edited
+ * working tree keeps the right HEAD and runs different code, and the reproduction for FE-13 observed
+ * exactly that. So the check is HEAD *and* a clean tree, which is why the completion marker was moved
+ * out of the checkout — a marker inside it is itself a modification, and an invariant with a
+ * permanent exception carved into it is not one.
  *
  * The source repository is never mutated. No `git worktree`, no checkout in place — the enforcer
  * reads it and clones out of it.
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import path from "node:path";
 
 const FULL_SHA = /^[0-9a-f]{40}$/;
+
+/**
+ * Run a filesystem mutation and report its failure rather than throwing it.
+ *
+ * This module's contract is that a caller gets a directory that is provably an identity, or a reason
+ * it is not — and an exception is a third outcome. It escapes the caller's error handling entirely
+ * and, in a governance tool, an unhandled fault is exactly the shape of thing INV-E1 exists to stop
+ * being mistaken for anything else. Concurrent runs sharing a cache root make these calls genuinely
+ * fallible, so the discipline has to be real.
+ */
+function attempt(fn) {
+  try {
+    fn();
+    return { ok: true, why: null };
+  } catch (e) {
+    return { ok: false, why: e?.message ?? String(e) };
+  }
+}
 
 function git(args, cwd) {
   const r = spawnSync("git", args, { encoding: "utf8", cwd, windowsHide: true, maxBuffer: 64 * 1024 * 1024 });
@@ -82,41 +113,124 @@ export function verifyTagResolvesTo(repo, tag, sha) {
 }
 
 /**
+ * The completion marker for a cache entry, kept beside the checkout rather than inside it.
+ *
+ * Outside on purpose. The tree must be byte-identical to the commit for `checkoutIsExactly` to be a
+ * flat assertion, and a marker written into the checkout would be a file the enforcer itself added to
+ * the authority it is about to execute.
+ */
+function markerFor(cacheRoot, sha) {
+  return path.join(cacheRoot, `${sha}.complete`);
+}
+
+/**
+ * Is this directory, right now, exactly the commit it is supposed to be?
+ *
+ * Three questions, in the order that makes their answers distinguishable: is there a repository here
+ * at all, is its HEAD the commit, and does the tree match that commit. The third is not decoration —
+ * an edited file leaves HEAD untouched and changes what executes, so HEAD alone would leave the same
+ * hole one level down.
+ *
+ * `why` names which of the three failed, because "the cached authority is not what you approved" and
+ * "the cache directory is not a checkout" call for different actions.
+ */
+export function checkoutIsExactly(dir, sha) {
+  if (!existsSync(path.join(dir, ".git"))) {
+    return { ok: false, why: `${dir} is not a git checkout, so nothing there establishes an identity` };
+  }
+  const head = git(["rev-parse", "HEAD"], dir);
+  if (!head.ok) return { ok: false, why: `the checkout's HEAD could not be read (${head.why})` };
+  if (head.out !== sha) return { ok: false, why: `the checkout is at ${head.out}, not ${sha}` };
+
+  const tree = git(["status", "--porcelain"], dir);
+  if (!tree.ok) return { ok: false, why: `the checkout's working tree could not be inspected (${tree.why})` };
+  if (tree.out !== "") {
+    const paths = tree.out.split("\n");
+    const sample = paths[0].trim();
+    return {
+      ok: false,
+      why:
+        `the checkout is at ${sha} but its working tree is not: ${paths.length} path(s) differ, ` +
+        `starting with "${sample}". HEAD names a commit; it does not promise the files match it`,
+    };
+  }
+  return { ok: true, why: null };
+}
+
+/**
  * Materialise the standards implementation at a SHA, in a cache keyed by that SHA.
  *
  * Content-addressed on purpose: two runs naming the same SHA get the same tree, and a cache entry
  * cannot be stale, because its name is what it contains. A partially written entry is removed and
  * rebuilt rather than reused, since a truncated checkout would run a subset of the implementation
  * and report a verdict from it.
+ *
+ * A cache hit is a candidate, never a conclusion. The entry is verified before it is handed back, and
+ * an entry that fails is discarded and rebuilt from the source repository rather than reported as a
+ * failure: the identity is what must hold, and re-establishing it is not the same as excusing it. The
+ * rebuild is verified by the identical check, so repair cannot become its own soft path — if the
+ * fresh checkout does not verify either, nothing is returned.
+ *
+ * `repaired` carries the reason a hit was rejected, so a discarded cache entry is reportable rather
+ * than silent. Content-addressing means a rejected entry is always evidence of something: the name
+ * could not have gone stale on its own.
  */
 export function materialise(repo, sha, cacheRoot) {
   const dest = path.join(cacheRoot, sha);
-  const marker = path.join(dest, ".enforcer-complete");
+  const marker = markerFor(cacheRoot, sha);
+  let repaired = null;
 
-  if (existsSync(marker)) return { ok: true, dir: dest, cached: true, why: null };
-  if (existsSync(dest)) rmSync(dest, { recursive: true, force: true });
-  mkdirSync(cacheRoot, { recursive: true });
-
-  const cloned = git(["clone", "--quiet", "--no-checkout", "--no-hardlinks", repo, dest]);
-  if (!cloned.ok) return { ok: false, dir: null, cached: false, why: `clone failed: ${cloned.why}` };
-
-  // Detach onto the SHA rather than the tag. What runs is decided by the commit, so that a tag
-  // moved between verification and execution cannot change what executes.
-  const checkedOut = git(["checkout", "--detach", "--quiet", sha], dest);
-  if (!checkedOut.ok) {
-    rmSync(dest, { recursive: true, force: true });
-    return { ok: false, dir: null, cached: false, why: `checkout ${sha} failed: ${checkedOut.why}` };
+  if (existsSync(marker) && existsSync(dest)) {
+    const current = checkoutIsExactly(dest, sha);
+    if (current.ok) return { ok: true, dir: dest, cached: true, repaired: null, why: null };
+    repaired = current.why;
   }
 
-  const head = git(["rev-parse", "HEAD"], dest);
-  if (!head.ok || head.out !== sha) {
-    rmSync(dest, { recursive: true, force: true });
-    return { ok: false, dir: null, cached: false, why: `the materialised checkout is at ${head.out ?? "an unknown commit"}, not ${sha}` };
-  }
+  // Build somewhere else and swap it in. A rejected entry may be in use by a concurrent run, and
+  // deleting the directory another process is executing from would replace one false green with an
+  // outright fault. Staging is per-process, so two runs repairing the same identity cannot collide
+  // mid-clone.
+  const staging = path.join(cacheRoot, `.staging-${sha}-${process.pid}`);
+  const swept = attempt(() => {
+    rmSync(staging, { recursive: true, force: true });
+    mkdirSync(cacheRoot, { recursive: true });
+  });
+  if (!swept.ok) return { ok: false, dir: null, cached: false, repaired, why: `the cache could not be prepared: ${swept.why}` };
 
-  spawnSync(process.execPath, ["-e", `require('fs').writeFileSync(${JSON.stringify(marker)}, ${JSON.stringify(sha)})`], { windowsHide: true });
-  if (!existsSync(marker)) return { ok: false, dir: null, cached: false, why: "the cache entry could not be marked complete" };
-  return { ok: true, dir: dest, cached: false, why: null };
+  try {
+    const cloned = git(["clone", "--quiet", "--no-checkout", "--no-hardlinks", repo, staging]);
+    if (!cloned.ok) return { ok: false, dir: null, cached: false, repaired, why: `clone failed: ${cloned.why}` };
+
+    // Detach onto the SHA rather than the tag. What runs is decided by the commit, so that a tag
+    // moved between verification and execution cannot change what executes.
+    const checkedOut = git(["checkout", "--detach", "--quiet", sha], staging);
+    if (!checkedOut.ok) return { ok: false, dir: null, cached: false, repaired, why: `checkout ${sha} failed: ${checkedOut.why}` };
+
+    const fresh = checkoutIsExactly(staging, sha);
+    if (!fresh.ok) return { ok: false, dir: null, cached: false, repaired, why: `the materialised checkout failed verification: ${fresh.why}` };
+
+    const published = attempt(() => {
+      rmSync(marker, { force: true });
+      rmSync(dest, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+      renameSync(staging, dest);
+    });
+    if (!published.ok) {
+      // Losing the swap is not automatically a failure: another run may have published a good entry
+      // for this identity in the meantime. That entry is checked exactly as any other would be —
+      // deferring to it without verification would be the original defect wearing a different hat.
+      const rival = existsSync(dest) ? checkoutIsExactly(dest, sha) : { ok: false, why: published.why };
+      if (!rival.ok) {
+        return { ok: false, dir: null, cached: false, repaired, why: `the verified checkout could not be published: ${published.why}` };
+      }
+      return { ok: true, dir: dest, cached: true, repaired, why: null };
+    }
+
+    spawnSync(process.execPath, ["-e", `require('fs').writeFileSync(${JSON.stringify(marker)}, ${JSON.stringify(sha)})`], { windowsHide: true });
+    if (!existsSync(marker)) return { ok: false, dir: null, cached: false, repaired, why: "the cache entry could not be marked complete" };
+    return { ok: true, dir: dest, cached: false, repaired, why: null };
+  } finally {
+    attempt(() => rmSync(staging, { recursive: true, force: true }));
+  }
 }
 
 /**
@@ -128,7 +242,7 @@ export function resolveIdentity({ repo, tag, sha, cacheRoot }) {
   if (!verified.ok) return { ok: false, dir: null, why: verified.why, resolved: verified.resolved };
 
   const built = materialise(repo, sha, cacheRoot);
-  if (!built.ok) return { ok: false, dir: null, why: built.why, resolved: verified.resolved };
+  if (!built.ok) return { ok: false, dir: null, why: built.why, resolved: verified.resolved, repaired: built.repaired };
 
-  return { ok: true, dir: built.dir, cached: built.cached, why: null, resolved: sha };
+  return { ok: true, dir: built.dir, cached: built.cached, repaired: built.repaired, why: null, resolved: sha };
 }
