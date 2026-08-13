@@ -125,3 +125,26 @@ of the guarantee, and it is why the shortcut existed rather than a reason to kee
   evaluator's read would not be caught. Closing that needs the evaluator to run against a tree nothing
   else can write to, which is a different piece of work and is not done here.
 - The concurrent-repair window above.
+
+## Provenance limitation — the red source was not preserved
+
+Recorded because it is a real weakness in this evidence chain, and because the alternative on offer was
+worse.
+
+The pre-remedy falsifier **was executed and observed failing**: four of six cases, output preserved
+verbatim in [`red-before.txt`](./2026-08-12-fe13-cache-identity-raw/red-before.txt). What was not
+preserved is its **source**. The six-test file was never committed while red, and the ten-case suite in
+`test/identity-cache.test.mjs` was written against the fix — it is a *successor*, not the historical
+red artifact, and two of its case names differ from the six.
+
+**The six-test source is therefore not recoverable**, and it is deliberately not being reconstructed.
+Re-deriving a file from `red-before.txt` now would produce a new artifact wearing the date of an old
+one, which is worse provenance than saying plainly what was lost.
+
+What this costs, stated exactly: FE-13's process requirement — *freeze the reproduction before
+designing the remedy* — was met in **execution** and not in **the record**. The engineering acceptance
+property is unaffected; only the durability of its first step is.
+
+The bridge that does survive is the case table above: each of the four observed failures names a
+behaviour, and each behaviour has a successor case in the ten. That mapping is what supports the claim
+that the same behaviours are now green — **not** any claim that the two suites are the same file.
