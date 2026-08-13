@@ -1,0 +1,54 @@
+{
+  "ok": false,
+  "registryInvalid": false,
+  "ratchet": {
+    "ok": false,
+    "findings": [
+      {
+        "code": "POPULATION_EMPTY",
+        "why": "the registered population is empty — 0 repositories × 4 packs — so the ratchet holds over nothing. Every cell that exists in the world is outside the governed population, which is the condition this control exists to make visible rather than the condition of having satisfied it",
+        "repositories": 0,
+        "packs": 4
+      }
+    ]
+  },
+  "packs": [
+    {
+      "contractId": "betting",
+      "name": "BettingStandards",
+      "sourceRef": "BettingStandards@8e9487e754a341cee783e0a1887df040b6cda304:standards-adapter.json",
+      "tag": null,
+      "sha": null
+    },
+    {
+      "contractId": "innovation",
+      "name": "InnovationStandards",
+      "sourceRef": "InnovationStandards@036f1f38190ef355ff461d89bf903271fc61f04d:standards-adapter.json",
+      "tag": null,
+      "sha": null
+    },
+    {
+      "contractId": "machine-learning",
+      "name": "MachineLearningStandards",
+      "sourceRef": "MachineLearningStandards@e6f00edda2adb1fb358a1ca581ff45ccc8b8285b:standards-adapter.json",
+      "tag": null,
+      "sha": null
+    },
+    {
+      "contractId": "mathematics",
+      "name": "MathematicsStandards",
+      "sourceRef": "MathematicsStandards@7976938c067ab9541dea7ad51226826d364c58fc:standards-adapter.json",
+      "tag": null,
+      "sha": null
+    }
+  ],
+  "repositories": [],
+  "cells": [],
+  "counts": {
+    "repositories": 0,
+    "packs": 4,
+    "cells": 0,
+    "observed": 0,
+    "byOutcome": {}
+  }
+}

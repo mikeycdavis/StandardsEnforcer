@@ -1,0 +1,18 @@
+Portfolio: 0 cells — 0 registered repositories × 4 registered packs
+           0 of 0 cells had an observable working copy
+
+      0  review-required
+      0  registry-invalid
+      0  in-scope   (governed; this run evaluated nothing)
+      0  out-of-scope
+
+
+Ratchet: 1 finding. The baseline is edited by a human; this tool never writes it.
+  POPULATION_EMPTY
+      the registered population is empty — 0 repositories × 4 packs — so the ratchet holds over nothing. Every cell that exists in the world is outside the governed population, which is the condition this control exists to make visible rather than the condition of having satisfied it
+
+This is an applicability report, not a compliance result. No standard was evaluated here,
+and the exit code reports the ratchet — not whether this portfolio is in good order.
+The population is the REGISTERED one: a repository nobody registered has no cell at all,
+and finding those is repository discovery, which this enforcer does not do.
+exit=4

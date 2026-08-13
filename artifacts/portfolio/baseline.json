@@ -1,0 +1,22 @@
+{
+  "$comment": [
+    "THE RATCHET. Every cell in the registered population is enumerated here, including the unknown",
+    "ones, because a sparse baseline lists what is known -- so anything unknown is absent, so absence",
+    "is permission. See ADR 0008.",
+    "",
+    "`cells` is empty because the registered repository population is empty. That does NOT make this a",
+    "satisfied ratchet: checkRatchet reports POPULATION_EMPTY and the run exits non-zero, because a",
+    "control that holds over nothing is a false green rather than a clean one.",
+    "",
+    "EDITED BY A HUMAN, ALWAYS. There is no --write, no --update-baseline and no regenerate switch",
+    "anywhere in this enforcer, and test/ratchet.test.mjs asserts that against the source. The reason is",
+    "transplanted from PredictionStandards/scripts/integrity.mjs: the first response to a red build",
+    "would be to run it.",
+    "",
+    "Each cell records the EXCLUSION RULES for that repository x pack -- the glob and its reason, as",
+    "configuration. It does not record what those rules matched. Ratcheting match counts would go red",
+    "every time a vendored tree grew by two files, and ADR 0007 already recorded where that leads."
+  ],
+  "schemaVersion": "1.0.0",
+  "cells": []
+}

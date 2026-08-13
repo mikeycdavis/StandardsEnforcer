@@ -161,6 +161,30 @@ entry's evidence basis with:
 node scripts/footprint.mjs <dir>
 ```
 
+## The portfolio
+
+A cell is *repository × standards pack*, keyed by **immutable repository identity × the contract
+identity the pack declares about itself** — never a display name, a directory name, or a registry
+spelling ([ADR 0008](artifacts/adr/0008-the-cell-identity-key-and-the-total-ratchet.md)). Registering
+a pack is transcribing what it declares, so the roster key must equal its `contract.id`.
+
+```bash
+node scripts/portfolio.mjs --scope-registry=artifacts/portfolio/registry.json \
+                           --baseline=artifacts/portfolio/baseline.json [--repos-root=<dir>]
+```
+
+Two questions, one run: the **ratchet** asks whether the population changed without a governance
+event, the **matrix** asks what the population currently says. The exit code answers the first. The
+baseline is edited by a human — there is no `--write`, and no flag that reduces the cell count
+without reducing the population.
+
+**The first real run reports `0 cells — 0 registered repositories × 4 registered packs`, and exits
+`4`.** That is the honest state and not a defect: repository identities are issued by the platform
+and obtaining them is discovery, which this enforcer does not do; and five of the nine packs here
+declare no contract identity to transcribe. A control that holds over nothing fails closed rather
+than passing. See
+[`2026-08-13-portfolio-first-matrix.md`](artifacts/evidence/2026-08-13-portfolio-first-matrix.md).
+
 ## What this does not do yet
 
 Stated plainly, because an enforcer that overstates its reach is worse than none.
@@ -169,9 +193,11 @@ Stated plainly, because an enforcer that overstates its reach is worse than none
   semantics are written from documented responses and have never been exercised against a real
   ruleset. This is the weakest link in the system and the prerequisite for calling it
   production-ready; M2 named it and M3 did not discharge it.
-- **No repository discovery.** The registry answers what was decided about a repository it is asked
-  about. Enumerating an organisation and noticing one that was never assessed at all is a different
-  problem and is not built.
+- **No repository discovery, and it is now the binding limit.** The registry answers what was decided
+  about a repository it is asked about. Enumerating an organisation and noticing one that was never
+  assessed is a different problem and is not built — which is why the registered repository
+  population is currently **empty** and every repository on this machine sits outside the governed
+  population entirely. The ratchet is total over the *registered* population, not over the world.
 - **No reviewer identity beyond a configured list.** `authorisedReviewers` is the narrow trust source
   scope needs. Real human-attestation identity — review provenance, CODEOWNERS, approvals — is a
   separate claim and deserves its own adversarial tests rather than a ride on these.
@@ -189,6 +215,10 @@ scripts/enforce.mjs     the CLI, and the only place a standards system is invoke
 scripts/identity.mjs    tag + SHA verification, and the content-addressed checkout cache
 scripts/gate.mjs        what makes an enforcement root a root; platform-agnostic
 scripts/scope.mjs       who decided this repository is governed, and whether that still holds
+scripts/population.mjs  which cells exist at all: repository identity x pack contract identity
+scripts/ratchet.mjs     the population may change, but not quietly. No write path, on purpose
+scripts/matrix.mjs      every cell resolved, including the ugly ones. Evaluates nothing
+scripts/portfolio.mjs   the portfolio CLI
 scripts/footprint.mjs   ML evidence detection. Deliberately incapable of deciding anything
 scripts/platform/       adapters. GitHub today; the boundary exists for the next one
 scripts/states.mjs      the state vocabulary, the exit contract, and INV-E1
@@ -201,6 +231,7 @@ artifacts/adr/          decisions
 artifacts/plan/         the live forward-looking plan; see AGENTS.md §5
 artifacts/evidence/     what was actually run, and what it produced
 artifacts/backlog/      tracked work; README.md there is generated, never hand-edited
+artifacts/portfolio/    the real scope registry and the ratchet baseline. Edited by a human
 ```
 
 ## Decisions
@@ -212,6 +243,7 @@ artifacts/backlog/      tracked work; README.md there is generated, never hand-e
 - [0005](artifacts/adr/0005-adapter-provenance.md) — the governed repository supplies evidence; the pinned release supplies authority
 - [0006](artifacts/adr/0006-the-cache-is-shared-and-coordination-is-not-authority.md) — the cache is shared on purpose, and a lock is not evidence
 - [0007](artifacts/adr/0007-the-review-surface-is-the-whole-repository.md) — the review surface is the whole tracked repository, minus reasoned exclusions
+- [0008](artifacts/adr/0008-the-cell-identity-key-and-the-total-ratchet.md) — a cell is repository identity × pack contract identity, and the ratchet over them is total
 
 ## Evidence
 

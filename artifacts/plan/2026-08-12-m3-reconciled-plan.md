@@ -488,7 +488,27 @@ reviewed would manufacture evidence** and is forbidden.
 - EngineeringStandards' disposition can leave evidence and enter the enforcement path — the concrete
   case that motivated FE-12.
 
-### 1.6 · The ratchet
+### 1.6 · The ratchet — **DONE. [ADR 0008](../adr/0008-the-cell-identity-key-and-the-total-ratchet.md) first, then FE-19.**
+
+> **What this section did not specify, and had to be settled before any of it could be built: the
+> cell identity key.** A total ratchet needs a population, and a population needs a key. Until this
+> slice the key leaked in from the invocation, and FE-12 closed recording the residue — *"`--standard`
+> is unvalidated beyond presence; a typo and a genuinely unreviewed pack look the same."* Harmless one
+> cell at a time; not harmless once cells are enumerated, because a misspelling retires one and mints
+> another with no governance event. Cells are now keyed on **immutable repository identity ×
+> transcribed pack contract identity**, the roster key must equal `contract.id`, and a `sourceRef`
+> records which commit the identity was read out of.
+>
+> **FE-12's finding is retained, not overturned.** The ratchet reads the *transcribed* identity and
+> never opens a pack, so a malformed or unreachable adapter cannot erase a recorded decision — which
+> is what the seven seam tests protect.
+>
+> **A seventh fail-closed condition was added by the first real run: `POPULATION_EMPTY`.** Every check
+> this section names passes vacuously over zero cells, so the first run of a control built to make
+> absence expensive exited zero. The same false green this repository already has on record.
+>
+> **Acceptance criteria met**, all three, plus the negative control this section did not ask for:
+> matched-file growth beneath an unchanged exclusion rule must **not** go red.
 
 **Total, not sparse.** Every cell is enumerated including unknown ones, so a repository or pack added
 to the world without a baseline edit is `ENFORCEMENT_ERROR` rather than a permissive default. A
@@ -521,7 +541,26 @@ artifact*, not about the standard.
 - A file added under an excluded glob **that matches a signal** **does** invalidate.
 - No freshness decision reads `footprintDigest`.
 
-### 1.8 · The matrix
+### 1.8 · The matrix — **DONE, FE-20. The first snapshot is smaller than this section predicted, and nothing is hidden.**
+
+> **CLI divergence, recorded rather than silently taken.** The tool is `scripts/portfolio.mjs`, not
+> `scope.mjs status` / `enforce.mjs portfolio`: `enforce.mjs`'s argument contract requires
+> `--standards/--tag/--sha` for a single target, and M1's invocation had to stay byte-identical. No
+> semantic moved.
+>
+> **The ~400-cell expectation was not met, and the reason is the finding.** The real first matrix is
+> `0 cells — 0 registered repositories × 4 registered packs`. Four hundred unreviewed cells would be a
+> portfolio entered and not reviewed; this is a portfolio **not entered**. The repository axis cannot
+> be populated without immutable platform identities that only the platform issues — directory name,
+> root-commit SHA and remote URL were each considered and refused — and obtaining real ones is
+> repository discovery, which this slice excludes. Five of nine packs declare no contract identity and
+> are recorded as unregistrable rather than omitted.
+>
+> **The criterion this section wrote — "materially fewer means cells are being hidden" — is therefore
+> the one thing that needed care.** Nothing is hidden: the absence of a filter is asserted against the
+> source, and the run reports the size of the registered population beside its results so that a small
+> tidy matrix cannot read as a governed portfolio. Full account in
+> [`2026-08-13-portfolio-first-matrix.md`](../evidence/2026-08-13-portfolio-first-matrix.md).
 
 ```bash
 node scripts/scope.mjs propose --repo=<id|path> --pack=<id> [--json]

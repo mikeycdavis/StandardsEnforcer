@@ -5,10 +5,10 @@
 Work on this project classified with the Extended Agile Hierarchy. Every item is a file in
 [`items/`](./items/); its YAML frontmatter is the source of truth and this page is derived from it.
 
-**14 of 22 leaf items complete — 64%**
+**16 of 24 leaf items complete — 67%**
 
 ```
-██████████████████████████░░░░░░░░░░░░░░  64%
+███████████████████████████░░░░░░░░░░░░░  67%
 ```
 
 ## Status
@@ -18,8 +18,8 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 | ○ Not started | 6 |
 | ◑ In progress | 7 |
 | ◒ Blocked | 2 |
-| ● Complete | 16 |
-| **Total** | **31** |
+| ● Complete | 18 |
+| **Total** | **33** |
 
 ## The hierarchy
 
@@ -28,7 +28,7 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 | Theme | `TH-` | 1 | Which enduring area of value is this? |
 | Initiative | `IN-` | 1 | What outcome are we pursuing there? |
 | Epic | `EP-` | 5 | What large body of work delivers it? |
-| Feature | `FE-` | 17 | What shippable slice of that epic? |
+| Feature | `FE-` | 19 | What shippable slice of that epic? |
 | Story | `ST-` | 7 | What user-visible change, roughly one PR? |
 | Task | `TA-` | 0 | What technical step inside a story? |
 
@@ -36,7 +36,7 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 
 | Theme | Progress | Done | Remaining |
 | --- | --- | ---: | ---: |
-| [TH-01 Enforced standards compliance across the portfolio](./items/TH-01.md) | `█████████░░░░░` 64% | 14 | 8 |
+| [TH-01 Enforced standards compliance across the portfolio](./items/TH-01.md) | `█████████░░░░░` 67% | 16 | 8 |
 
 ## In flight
 
@@ -56,8 +56,8 @@ _Nothing marked ready._
 
 ## Everything
 
-- ◑ **[TH-01](./items/TH-01.md)** Enforced standards compliance across the portfolio _(14/22)_
-  - ◑ **[IN-01](./items/IN-01.md)** Enforcement a governed repository cannot weaken _(14/22)_
+- ◑ **[TH-01](./items/TH-01.md)** Enforced standards compliance across the portfolio _(16/24)_
+  - ◑ **[IN-01](./items/IN-01.md)** Enforcement a governed repository cannot weaken _(16/24)_
     - ◑ **[EP-01](./items/EP-01.md)** Authority transport — run a pack's own evaluator under a pinned identity _(9/10)_
       - ● **[FE-01](./items/FE-01.md)** M1 — run the official standards implementation and report what it said
       - ● **[FE-02](./items/FE-02.md)** M2 — contract-driven authority transport _(5/5)_
@@ -75,8 +75,10 @@ _Nothing marked ready._
       - ◑ **[FE-04](./items/FE-04.md)** M4 — the enforcement root against live GitHub _(1/2)_
         - ● **[ST-06](./items/ST-06.md)** Establish live whether an Actions-bound required check is spoofable
         - ◒ **[ST-07](./items/ST-07.md)** Validate the required-workflows remedy against a real organisation ruleset
-    - ● **[EP-03](./items/EP-03.md)** Scope — whether a standard governs a repository is a recorded decision _(1/1)_
+    - ● **[EP-03](./items/EP-03.md)** Scope — whether a standard governs a repository is a recorded decision _(3/3)_
       - ● **[FE-18](./items/FE-18.md)** The reviewed surface is the freshness authority, not the signal-kind set
+      - ● **[FE-19](./items/FE-19.md)** The ratchet is total, and cells are keyed by identity rather than by spelling
+      - ● **[FE-20](./items/FE-20.md)** The portfolio matrix reports every cell, including the ugly ones
     - ◑ **[EP-04](./items/EP-04.md)** The enforcer's own release lineage _(1/2)_
       - ○ **[FE-06](./items/FE-06.md)** Decide the authoritative disposition of every live line relative to main
       - ● **[FE-17](./items/FE-17.md)** The front door advertises a state model the code removed

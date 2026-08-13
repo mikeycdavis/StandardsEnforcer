@@ -1,0 +1,70 @@
+{
+  "$comment": [
+    "THE REAL SCOPE REGISTRY for this portfolio, as opposed to artifacts/scope-registry.example.json,",
+    "which documents the shape with fictional entries.",
+    "",
+    "It is committed here, in StandardsEnforcer, because a registry must live where the repositories it",
+    "governs cannot write to it. None of the repositories registered below is this one.",
+    "",
+    "`standards` is the PACK ROSTER, and registration is transcription (ADR 0008). The map key must",
+    "equal `contract.id`, which is the identity the pack declares in its own standards-adapter.json,",
+    "and `sourceRef` names the commit that identity was read out of. A registry may register a pack; it",
+    "may not rename one. Nothing here is normalised, because normalising `machineLearning` into",
+    "`machine-learning` would be this enforcer deciding what a pack is called -- and a representation",
+    "mismatch nobody was watching is exactly the false green FE-12 found.",
+    "",
+    "FIVE PACKS IN THIS PORTFOLIO ARE ABSENT, AND THAT IS RECORDED RATHER THAN TIDIED AWAY.",
+    "EngineeringStandards, FinancialStandards, HealthAndFitnessAndNutritionStandards,",
+    "PredictionStandards and UIUXDesignStandards publish no standards-adapter.json, so they declare no",
+    "contract identity, so there is nothing to transcribe. Registering them under their directory name",
+    "would key every one of their cells on a spelling no pack agreed to. They are unregistrable today,",
+    "and a pack missing from the matrix must not look like a pack missing from the world.",
+    "",
+    "`repositories` IS EMPTY, AND THAT IS THE FINDING RATHER THAN AN OVERSIGHT. An entry is keyed by an",
+    "immutable platform identity -- GitHub's numeric repository id or node id -- which only the platform",
+    "can issue. Obtaining them for the ~60 repositories on this machine means enumerating an",
+    "organisation, which is repository discovery, which this enforcer does not do (FE-07). Inventing a",
+    "local identity instead would key the whole portfolio on something rename-safe by accident: a root",
+    "commit collides across forks, a path is not an identity, and a directory name is the failure ADR",
+    "0004 settled.",
+    "",
+    "So the honest state of applicability governance on 2026-08-13 is: four packs registered, zero",
+    "repositories registered, zero cells. The ratchet reports POPULATION_EMPTY rather than passing over",
+    "nothing. See artifacts/evidence/2026-08-13-portfolio-first-matrix.md."
+  ],
+  "schemaVersion": "1.0.0",
+  "authorisedReviewers": [
+    "mikeycdavis@gmail.com"
+  ],
+  "standards": {
+    "betting": {
+      "name": "BettingStandards",
+      "contract": {
+        "id": "betting",
+        "sourceRef": "BettingStandards@8e9487e754a341cee783e0a1887df040b6cda304:standards-adapter.json"
+      }
+    },
+    "innovation": {
+      "name": "InnovationStandards",
+      "contract": {
+        "id": "innovation",
+        "sourceRef": "InnovationStandards@036f1f38190ef355ff461d89bf903271fc61f04d:standards-adapter.json"
+      }
+    },
+    "machine-learning": {
+      "name": "MachineLearningStandards",
+      "contract": {
+        "id": "machine-learning",
+        "sourceRef": "MachineLearningStandards@e6f00edda2adb1fb358a1ca581ff45ccc8b8285b:standards-adapter.json"
+      }
+    },
+    "mathematics": {
+      "name": "MathematicsStandards",
+      "contract": {
+        "id": "mathematics",
+        "sourceRef": "MathematicsStandards@7976938c067ab9541dea7ad51226826d364c58fc:standards-adapter.json"
+      }
+    }
+  },
+  "repositories": {}
+}
