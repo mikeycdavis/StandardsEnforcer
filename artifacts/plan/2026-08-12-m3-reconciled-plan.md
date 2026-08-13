@@ -219,22 +219,58 @@ silently absent marker. Use `writeFileSync`.
   corrupt marker metadata; a directory that exists and proves nothing about (repository, tag, SHA).
 - A cache entry mutated after marking is **not served**.
 - An untouched warm entry **is** served — the fix must not silently disable caching.
-- The marker is written with `writeFileSync`.
+- ~~The marker is written with `writeFileSync`.~~ **Superseded — 2026-08-12. See below.**
 - No result reports `verified: true` on the strength of a marker alone.
+
+> **Superseded acceptance criterion — marker creation must use `writeFileSync`.**
+>
+> The criterion was written against the earlier threat model, in which a failed marker write could
+> silently leave a state that was later trusted. FE-13 removed the assurance dependency underneath it:
+> marker absence is checked (`identity.mjs:340`), a missing marker returns `ok: false`, marker presence
+> gates only the warm-path shortcut and never establishes identity, and `checkoutIsExactly` remains the
+> sole authority on whether an entry may be used. A failed marker write now costs work rather than
+> creating false assurance.
+>
+> The specific API requirement is therefore **no longer necessary for correctness**. Changing it may
+> still be worthwhile for cost and clarity — `spawnSync(node -e …)` starts a whole Node process per
+> cache miss and discards its error — but that is outside Phase 0 assurance closure and is not a
+> blocker for declaring Phase 0's local work exhausted.
+>
+> Recorded rather than deleted: keeping a mandatory criterion after its rationale has disappeared turns
+> a historically sensible implementation choice into cargo-cult governance, and deleting the line would
+> destroy the evidence that the rationale ever existed.
 
 ### 0.3 · D3 — the narrow residue
 
+**Extended to five cases — 2026-08-12.** The three below were the reconciliation's adjudication of
+C-D. Two more were added before the falsifier was written, and the falsifier freezes all five.
+
 ```text
-passing === true  && exitCode !== 0    contradictory        → ENFORCEMENT_ERROR
-passing === false && exitCode !== 0    normal; pack said no → EVALUATED, exit 1
-passing === true  && exitCode === 0    normal               → EVALUATED, exit 0
+1  declared passing  && exitCode === 0     normal                   → EVALUATED, exit 0
+2  declared failing  && exitCode !== 0     normal; the pack said no → EVALUATED, exit 1
+3  declared passing  && exitCode !== 0     contradictory evidence   → ENFORCEMENT_ERROR
+4  undeclared status && exitCode !== 0     vocabulary error FIRST   → ENFORCEMENT_ERROR
+5  declared passing  && exitCode === null  completion not evidenced → ENFORCEMENT_ERROR
 ```
+
+**Case 4 is about order.** Both conditions hold at once, and the vocabulary check must win: `passing`
+is not computable from a status the contract never declared, so "the status contradicts the exit code"
+is not a statement that run is in a position to make.
+
+**Cases 3 and 5 stay separate in the implementation**, even though `exitCode !== 0` catches both. They
+are different findings — 3 is evidence that contradicts itself, 5 is evidence that is missing — and
+both must prevent a passing result while remaining distinguishable to a reader. Handle `null`
+explicitly, then nonzero explicitly. The code should communicate the authority model rather than
+merely produce the correct boolean.
 
 **Acceptance criteria**
 
-- Arm 1 produces `ENFORCEMENT_ERROR` with a detail naming the contradiction.
-- Arm 2 is untouched and still reaches `EVALUATED` — this is the arm proving the fix did not become
-  an exit-code interpreter.
+- Cases 3 and 5 produce `ENFORCEMENT_ERROR`, with details that differ from each other.
+- Cases 1 and 2 are untouched and still reach `EVALUATED` — case 2 is the arm proving the fix did not
+  become an exit-code interpreter.
+- Case 4 still names the undeclared status, proving the new logic was not ordered ahead of the
+  vocabulary check.
+- No case may depend on **which** nonzero code was returned.
 - `exitCodes` is **not** added to the adapter contract.
 - No enforcer source names a native exit-code meaning.
 
