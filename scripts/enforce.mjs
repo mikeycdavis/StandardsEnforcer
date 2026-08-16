@@ -183,12 +183,12 @@ function isSymbolicLink(p) {
  * `validate` because `evaluate` failed, because a subcommand that happens to succeed may be
  * answering a different question — `check` exists in two packs and means something else in both.
  */
-export function runOfficialEvaluator(standardsDir, { target, governedRoot } = {}) {
-  if (typeof target !== "string" || typeof governedRoot !== "string") {
+export function runOfficialEvaluator(standardsDir, { target, policyPath } = {}) {
+  if (typeof target !== "string" || typeof policyPath !== "string") {
     // Both are paths, so a positional signature let them be swapped or silently collapsed into one
     // value. Named and required, because the whole point of {policy} is that it is NOT derivable
     // from {target}: see the binding below.
-    throw new TypeError("runOfficialEvaluator requires both { target } and { governedRoot }");
+    throw new TypeError("runOfficialEvaluator requires both { target } and { policyPath }");
   }
   let loaded;
   try {
@@ -212,20 +212,30 @@ export function runOfficialEvaluator(standardsDir, { target, governedRoot } = {}
   // "evaluate the subject against the subject's policy" — the only reading under which its verdict is
   // about the target at all.
   //
-  // {policy} is resolved against `governedRoot`, NEVER against `target`. The two coincide today at
-  // the only production call site, and joining POLICY_FILE onto `target` would pass every test that
-  // exists — right up to the first pack whose evaluation subject is not a repository root. Financial
-  // is exactly that pack: its subject is an analysis document (finding H), so the collapsed form
-  // yields `analysis.md/project-policy.yml`, a path that cannot exist. That defect would surface as a
-  // pack integration failure long after this contract was declared sound, which is why the separation
-  // is enforced here rather than left to the caller's discipline.
+  // {policy} is RECEIVED, never reconstructed. This seam does not know what a policy file is called
+  // and must not learn: it takes the exact path its caller already resolved, and binds that.
   //
-  // The anti-drift property that motivated deriving it still holds, and now holds for the right
-  // reason: `governedRoot` is the same value `enforce` joins POLICY_FILE onto when it checks for
-  // adoption, so the contract is handed the same file the enforcer read.
+  // The invariant that buys is stronger than the one it replaces. Deriving `path.join(governedRoot,
+  // POLICY_FILE)` here made the enforcer read one path and hand the pack a second one that happened
+  // to be equal — an equality that held only while both sides joined the same constant onto the same
+  // root, and that nothing outside a reader's attention kept true. Now:
+  //
+  //     the policy whose presence established adoption is the exact policy handed to the authority
+  //
+  // There is one path, resolved once, at the adoption boundary in `enforce`. Note what that leaves
+  // local: FinancialStandards' own `init` treats project-policy.yml AND project-policy.yaml as
+  // evidence of adoption, so the marker set this repository recognises is narrower than the
+  // authority's. That is a real defect, it lives at the discovery site rather than here, and it is
+  // filed separately — the point of this signature is that fixing it never has to touch this seam.
+  //
+  // What does NOT change is the separation this binding exists for. {policy} is still not derivable
+  // from {target}: Financial's subject is a doc/dir analysis selection, not necessarily a repository
+  // root (finding H, as qualified by artifacts/evidence/2026-08-16-financial-policy-interface.md), so
+  // a collapsed form would hand it `<root>/analysis.md/project-policy.yml` — a path below a regular
+  // file, which cannot exist. Two values in, two values bound, neither computed from the other.
   let argv;
   try {
-    argv = bindArguments(contract, { "{target}": target, "{policy}": path.join(governedRoot, POLICY_FILE) });
+    argv = bindArguments(contract, { "{target}": target, "{policy}": policyPath });
   } catch (e) {
     return { ok: false, why: e.message, exitCode: null, report: null, contract };
   }
@@ -411,9 +421,14 @@ export async function enforce({
       { standards, gate: gateReport, scope: scopeReport, governed });
   }
 
-  // `enforce`'s subject IS the governed root — it enforces against a repository. They are passed
+  // `enforce`'s subject IS the governed root — it enforces against a repository. The policy is passed
   // separately anyway, so that the day a caller evaluates a subpath, the policy does not follow it.
-  const run = runOfficialEvaluator(identity.dir, { target, governedRoot: target });
+  //
+  // `policyPath` is the value resolved above and proved to exist by the guard above. It is handed on
+  // rather than recomputed: this line is the whole of "the policy whose presence established adoption
+  // is the exact policy handed to the authority", and it is also the single place a future discovery
+  // change has to reach.
+  const run = runOfficialEvaluator(identity.dir, { target, policyPath });
   if (!run.ok) {
     return result(STATE.ENFORCEMENT_ERROR, run.why, { standards, gate: gateReport, scope: scopeReport });
   }

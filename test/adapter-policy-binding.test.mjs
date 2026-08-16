@@ -112,7 +112,7 @@ test("policy · the declared binding supplies the GOVERNED repository's policy",
   const packDir = await pack();
   const targetDir = await governed();
   try {
-    const r = runOfficialEvaluator(packDir, { target: targetDir, governedRoot: targetDir });
+    const r = runOfficialEvaluator(packDir, { target: targetDir, policyPath: path.join(targetDir, "project-policy.yml") });
     assert.equal(r.ok, true, r.why ?? "");
     assert.equal(r.report.policyWasSupplied, true);
     assert.equal(r.report.usedPolicy, path.join(targetDir, "project-policy.yml"));
@@ -141,7 +141,7 @@ test("policy · a subject below the governed root does not drag the policy path 
   const subject = path.join(rootDir, "analysis.md");
   await writeFile(subject, "# analysis\n");
   try {
-    const r = runOfficialEvaluator(packDir, { target: subject, governedRoot: rootDir });
+    const r = runOfficialEvaluator(packDir, { target: subject, policyPath: path.join(rootDir, "project-policy.yml") });
 
     assert.equal(r.ok, true, r.why ?? "");
     assert.equal(r.report.subject, subject, "the pack must be pointed at the document, not the root");
@@ -175,7 +175,7 @@ test("policy · without the binding the pack silently evaluates its OWN policy, 
   const packDir = await pack(declared);
   const targetDir = await governed();
   try {
-    const r = runOfficialEvaluator(packDir, { target: targetDir, governedRoot: targetDir });
+    const r = runOfficialEvaluator(packDir, { target: targetDir, policyPath: path.join(targetDir, "project-policy.yml") });
 
     assert.equal(r.ok, true, "the point is that nothing errors");
     assert.equal(r.report.status, "COMPLIANT", "and that the verdict looks like a pass");
@@ -191,6 +191,77 @@ test("policy · without the binding the pack silently evaluates its OWN policy, 
     await rm(packDir, { recursive: true, force: true });
     await rm(targetDir, { recursive: true, force: true });
   }
+});
+
+// --- the policy is received, not reconstructed ---------------------------------------------------
+
+/**
+ * The seam binds the path it was GIVEN, whatever that path is called.
+ *
+ * This is the architectural property, and it is deliberately proved with a filename the enforcer
+ * would never construct. A seam that rebuilt `join(root, "project-policy.yml")` passes every other
+ * test in this file — they all use a policy that happens to be spelled that way — and fails only
+ * here. FinancialStandards' own `init` accepts `project-policy.yaml` as evidence of adoption
+ * (FinancialStandards@3627c6f:scripts/init.mjs:71) and its `check` places no filename restriction on
+ * `--policy` at all, so the alternative spelling is a real governed shape rather than an invented one.
+ *
+ * Note what this does NOT claim: that the enforcer discovers `.yaml` policies. It does not — its
+ * adoption marker set is narrower than the authority's, which is a separate recorded defect. What is
+ * proved here is that the defect is confined to the discovery site, because this seam cannot
+ * reintroduce a filename assumption no matter what discovery later hands it.
+ */
+test("policy · the seam binds the exact path supplied, not one it rebuilds from a filename", async () => {
+  const packDir = await pack();
+  const rootDir = await governed();
+  // Neither `project-policy.yml` nor beneath the subject: no reconstruction can produce it.
+  const elsewhere = await mkdtemp(path.join(tmpdir(), "policy-elsewhere-"));
+  const supplied = path.join(elsewhere, "project-policy.yaml");
+  await writeFile(supplied, 'project: "TheGovernedRepository"\n');
+  try {
+    const r = runOfficialEvaluator(packDir, { target: rootDir, policyPath: supplied });
+
+    assert.equal(r.ok, true, r.why ?? "");
+    assert.equal(r.report.policyWasSupplied, true);
+    assert.equal(r.report.usedPolicy, supplied, "the pack must receive the caller's path verbatim");
+
+    // The three paths a reconstruction would have produced instead, each excluded by name.
+    assert.notEqual(r.report.usedPolicy, path.join(rootDir, "project-policy.yml"));
+    assert.notEqual(r.report.usedPolicy, path.join(rootDir, "project-policy.yaml"));
+    assert.notEqual(r.report.usedPolicy, path.join(packDir, "project-policy.yml"));
+  } finally {
+    await rm(packDir, { recursive: true, force: true });
+    await rm(rootDir, { recursive: true, force: true });
+    await rm(elsewhere, { recursive: true, force: true });
+  }
+});
+
+/**
+ * STRUCTURAL: the seam has no filename to mutate, and `enforce` hands over the path it tested.
+ *
+ * The behavioural test above shows the current code binds what it is given. This one shows it CANNOT
+ * do otherwise — that there is no policy-filename constant in the seam for a future edit to reach,
+ * and that the adoption guard and the invocation are the same binding rather than two computations
+ * that agree. Written structurally because the property being defended is "one path, resolved once",
+ * and an equality assertion between two reconstructions is exactly the weaker proof this replaced.
+ */
+test("policy · the invoked policy IS the one whose presence established adoption", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const src = await readFile(new URL("../scripts/enforce.mjs", import.meta.url), "utf8");
+
+  const seam = src.slice(src.indexOf("export function runOfficialEvaluator"));
+  const body = seam.slice(0, seam.indexOf("\n}\n") + 1);
+  assert.equal(body.includes("POLICY_FILE"), false,
+    "the evaluator seam must not name a policy filename — discovery belongs at the adoption boundary");
+  assert.equal(/governedRoot/u.test(body), false,
+    "and must not retain a root it could rejoin a filename onto");
+
+  // One resolution, guarded, then handed on under the same name.
+  assert.ok(/const policyPath = path\.join\(target, POLICY_FILE\);/u.test(src),
+    "the single resolution site should still be the adoption boundary in enforce()");
+  assert.ok(/if \(!existsSync\(policyPath\)\)/u.test(src),
+    "adoption is decided by that exact path");
+  assert.ok(/runOfficialEvaluator\(identity\.dir, \{ target, policyPath \}\)/u.test(src),
+    "and that exact path — not a recomputation of it — is what the authority receives");
 });
 
 // --- argv form is the pack's to declare, not the enforcer's to normalise -------------------------
@@ -218,7 +289,7 @@ test("policy · the `=` form is rejected by the pack rather than quietly repaire
   const packDir = await pack(declared);
   const targetDir = await governed();
   try {
-    const r = runOfficialEvaluator(packDir, { target: targetDir, governedRoot: targetDir });
+    const r = runOfficialEvaluator(packDir, { target: targetDir, policyPath: path.join(targetDir, "project-policy.yml") });
     // The enforcer substituted faithfully and the pack refused the form. Both halves matter: the
     // enforcer must not rewrite a declared argument, and a pack that cannot read it must fail loudly.
     assert.equal(r.ok, false);
@@ -233,7 +304,7 @@ test("policy · {target} and {policy} are not conflated", async () => {
   const packDir = await pack();
   const targetDir = await governed();
   try {
-    const r = runOfficialEvaluator(packDir, { target: targetDir, governedRoot: targetDir });
+    const r = runOfficialEvaluator(packDir, { target: targetDir, policyPath: path.join(targetDir, "project-policy.yml") });
     assert.equal(r.report.subject, targetDir);
     assert.notEqual(r.report.subject, r.report.usedPolicy, "the subject is not its own governing policy");
   } finally {
