@@ -24,9 +24,9 @@ derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/
 | Status | Items |
 | --- | ---: |
 | ○ Not started | 7 |
-| ◑ In progress | 7 |
+| ◑ In progress | 8 |
 | ◒ Blocked | 2 |
-| ● Complete | 18 |
+| ● Complete | 17 |
 | **Total** | **34** |
 
 ## The hierarchy
@@ -48,6 +48,7 @@ derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/
 
 ## In flight
 
+- ◑ [EP-01](./items/EP-01.md) — Authority transport — run a pack's own evaluator under a pinned identity
 - ◑ [EP-02](./items/EP-02.md) — The enforcement root — a gate the governed pull request cannot satisfy
 - ◑ [EP-04](./items/EP-04.md) — The enforcer's own release lineage
 - ◑ [EP-06](./items/EP-06.md) — Self-assurance — this repository's own evidence must establish what it reports
@@ -66,7 +67,7 @@ _Nothing marked ready._
 
 - ◑ **[TH-01](./items/TH-01.md)** Enforced standards compliance across the portfolio _(16/25)_
   - ◑ **[IN-01](./items/IN-01.md)** Enforcement a governed repository cannot weaken _(16/25)_
-    - ● **[EP-01](./items/EP-01.md)** Authority transport — run a pack's own evaluator under a pinned identity _(8/9)_
+    - ◑ **[EP-01](./items/EP-01.md)** Authority transport — run a pack's own evaluator under a pinned identity _(8/9)_
       - ● **[FE-01](./items/FE-01.md)** M1 — run the official standards implementation and report what it said
       - ● **[FE-02](./items/FE-02.md)** M2 — contract-driven authority transport _(5/5)_
         - ● **[ST-01](./items/ST-01.md)** M2 Phase 0 — what the eight released interfaces actually are
