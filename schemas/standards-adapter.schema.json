@@ -9,8 +9,8 @@
   "properties": {
     "$schema": { "type": "string" },
     "schemaVersion": {
-      "description": "Matched exactly. An unrecognised version is ENFORCEMENT_ERROR, never a best-effort read — the enforcer must not guess what a contract it does not understand is asking for.",
-      "const": "1.0.0"
+      "description": "Matched exactly against the set this enforcer implements. An unrecognised version is ENFORCEMENT_ERROR, never a best-effort read — the enforcer must not guess what a contract it does not understand is asking for. The version is not a label: it selects which placeholders may appear in `evaluation.arguments`. 1.0.0 admits {target} alone; 1.1.0 additionally admits {policy}. A 1.0.0 contract using {policy} is a violation and not an implicit upgrade, because widening what 1.0.0 admits would retroactively change the meaning of every contract already released under it — and a pack cannot re-release history. A 1.1.0 contract is correctly unreadable to an enforcer built before 1.1.0 existed: that enforcer rejects it on this field rather than dropping the binding it cannot perform.",
+      "enum": ["1.0.0", "1.1.0"]
     },
     "standard": {
       "type": "object",
@@ -35,7 +35,7 @@
           "pattern": "^[^/\\\\][^\\\\]*$"
         },
         "arguments": {
-          "description": "The authoritative verdict invocation, literally. FORCED BY the divergence in every dimension at once: the verdict subcommand is `validate` in Engineering, Betting, Mathematics and Innovation, `check` in Financial and Health, and `evaluate` in MachineLearning; the target is positional in some and `--dir=<path>` in others; and Financial takes `--policy <path>` space-separated where others use `=`. No aliasing, preference ordering or discovery may be inferred from this array — `check` exists in Betting and Innovation and answers a DIFFERENT question in both, executing cleanly and returning a verdict-shaped object, so a pack that does not name its verdict command literally cannot be invoked safely.",
+          "description": "The authoritative verdict invocation, literally. FORCED BY the divergence in every dimension at once: the verdict subcommand is `validate` in Engineering, Betting, Mathematics and Innovation, `check` in Financial and Health, and `evaluate` in MachineLearning; the target is positional in some and `--dir=<path>` in others; and Financial takes `--policy <path>` space-separated where others use `=`. No aliasing, preference ordering or discovery may be inferred from this array — `check` exists in Betting and Innovation and answers a DIFFERENT question in both, executing cleanly and returning a verdict-shaped object, so a pack that does not name its verdict command literally cannot be invoked safely. The {policy} placeholder, admitted from schemaVersion 1.1.0, is FORCED BY FinancialStandards: its `check` resolves an absent `--policy` to the standards pack's OWN project-policy.yml, so pointed at a target it audits the target's documents against Financial's policy, labels the report `\"project\": \"FinancialStandards\"`, and exits 0 — a confident verdict about the wrong thing, recorded as finding F of artifacts/evidence/2026-08-09-interface-inventory.md. {target} cannot express it: {target} names the subject being evaluated, {policy} names the governing policy, and a contract that conflated them would evaluate the subject against itself. Financial's form is `--policy <path>` as two argv elements; a contract declaring `--policy={policy}` would be rejected by Financial's own parser as an unknown flag, so the array is the exact argv and the enforcer never joins, splits or reorders it.",
           "type": "array",
           "minItems": 1,
           "items": { "type": "string" },

@@ -220,7 +220,7 @@ test("oracle · the enforcer's payload IS the official evaluator's output, not a
   // then run the enforcer, and require the reports to agree field by field. Anything the enforcer
   // computed for itself would show up here as a difference.
   const id = resolveIdentity({ repo: MLS, tag: TAG, sha: SHA, cacheRoot: CACHE });
-  const direct = runOfficialEvaluator(id.dir, MLS);
+  const direct = runOfficialEvaluator(id.dir, { target: MLS, policyPath: path.join(MLS, "project-policy.yml") });
   const viaEnforcer = await enforce({ ...identity(), target: MLS });
 
   assert.equal(direct.ok, true);
@@ -249,7 +249,7 @@ test("oracle · a non-compliant target reports non-compliant, with the official 
     assert.equal(exitFor(r.state, r.passing), EXIT.NOT_PASSING);
 
     const id = resolveIdentity({ repo: MLS, tag: TAG, sha: SHA, cacheRoot: CACHE });
-    const direct = runOfficialEvaluator(id.dir, dir);
+    const direct = runOfficialEvaluator(id.dir, { target: dir, policyPath: path.join(dir, "project-policy.yml") });
     assert.deepEqual(r.report.results, direct.report.results);
   });
 });

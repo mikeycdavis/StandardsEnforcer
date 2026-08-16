@@ -41,15 +41,81 @@ export const SCHEMA_PATH = path.join(HERE, "..", "..", "schemas", "standards-ada
 export const ADAPTER_FILENAME = "standards-adapter.json";
 
 /**
- * Substitutions the enforcer performs. A placeholder outside this set is a hard violation rather than
- * a value passed through literally: `--policy={policy}` in a contract the enforcer does not implement
- * would reach the pack's CLI as the eleven characters `{policy}`, and a pack that treats an unreadable
- * policy path as "no policy" would then evaluate against the wrong one and answer confidently.
+ * Substitutions the enforcer performs, per schema version. A placeholder outside the set its version
+ * admits is a hard violation rather than a value passed through literally: `--policy={policy}` in a
+ * contract the enforcer does not implement would reach the pack's CLI as the eleven characters
+ * `{policy}`, and a pack that treats an unreadable policy path as "no policy" would then evaluate
+ * against the wrong one and answer confidently.
  *
- * Adding a placeholder is a schemaVersion change, because a contract using it is unreadable to every
- * enforcer built before it.
+ * WHY THIS IS KEYED BY VERSION rather than being one growing list. Adding a placeholder to a flat set
+ * would silently widen what 1.0.0 means: a declaration released months ago as 1.0.0 would begin to be
+ * read as permitting a binding no enforcer of its era could perform. The version a pack stamped is a
+ * statement about which enforcers can read it, and that statement has to keep holding after this file
+ * changes. So 1.0.0 admits exactly what it always admitted, and a pack needing {policy} must say
+ * 1.1.0 — thereby declaring itself unreadable to older enforcers, which is the truthful outcome
+ * because they cannot perform the binding and would otherwise silently drop it.
+ *
+ * The flat `PLACEHOLDERS` export is deliberately removed rather than aliased to 1.0.0's set. A caller
+ * asking for a version-independent list is asking a question that no longer has one answer, and
+ * answering it with 1.0.0's set would be right only until it was not.
  */
-export const PLACEHOLDERS = Object.freeze(["{target}"]);
+export const PLACEHOLDERS_BY_VERSION = Object.freeze({
+  "1.0.0": Object.freeze(["{target}"]),
+  "1.1.0": Object.freeze(["{target}", "{policy}"]),
+});
+
+/** The versions this enforcer implements. Anything else is rejected, never partially interpreted. */
+export const SUPPORTED_SCHEMA_VERSIONS = Object.freeze(Object.keys(PLACEHOLDERS_BY_VERSION));
+
+/**
+ * What a declaration at this version may use.
+ *
+ * An unrecognised version yields an empty set, so every placeholder in the declaration is reported.
+ * The schema has already rejected the version itself; reporting the bindings as well tells the author
+ * what that version would have had to admit, rather than leaving them one error at a time.
+ */
+export function placeholdersFor(schemaVersion) {
+  return PLACEHOLDERS_BY_VERSION[schemaVersion] ?? [];
+}
+
+/**
+ * Bind a validated contract's declared argv, substituting each admitted placeholder.
+ *
+ * Substitution lives here rather than in the enforcer because which placeholders exist is protocol,
+ * and the protocol has one home. Spelling `{policy}` in two modules is how the enforcer ends up
+ * substituting a binding the contract layer does not admit, or admitting one it cannot substitute.
+ *
+ * ONE PASS, NOT A CHAIN. Chained `replaceAll` calls re-read their own output, so a target path
+ * containing the literal characters `{policy}` would be expanded by the next call in the chain. A
+ * single regex pass consumes each placeholder exactly once and never revisits a substituted value.
+ * Contrived as that input is, the chain form is wrong in a way that only shows up on a path nobody
+ * would think to test, and the single pass costs nothing.
+ *
+ * A MISSING BINDING RAISES. If a version admits a placeholder the caller supplied no value for, that
+ * is a defect in this repository, not a fact about the pack — and the failure mode it would otherwise
+ * produce is the one this module exists to prevent: the placeholder reaching the pack's CLI as
+ * literal text, where a pack that reads an unusable path as "not specified" answers confidently
+ * against its own default.
+ */
+export function bindArguments(contract, values) {
+  const admitted = placeholdersFor(contract?.schemaVersion);
+
+  const unbound = admitted.filter((placeholder) => values?.[placeholder] === undefined);
+  if (unbound.length > 0) {
+    throw new AdapterContractError(
+      `the enforcer admits ${unbound.join(", ")} at schemaVersion ` +
+        `${JSON.stringify(contract?.schemaVersion)} but supplied no value for it. A placeholder that ` +
+        `is admitted and unbound would be passed to the pack literally.`,
+      unbound,
+    );
+  }
+
+  const args = contract?.evaluation?.arguments ?? [];
+  if (admitted.length === 0) return [...args];
+
+  const pattern = new RegExp(admitted.map((p) => p.replace(/[\\^$.*+?()[\]{}|]/gu, "\\$&")).join("|"), "gu");
+  return args.map((argument) => argument.replace(pattern, (found) => values[found]));
+}
 
 const PLACEHOLDER_PATTERN = /\{[^}]*\}/gu;
 
@@ -119,15 +185,33 @@ export function validateAdapter(declaration) {
     violations.push(...entrypointViolations(evaluation.entrypoint));
   }
 
+  // Read from the declaration, not from the newest version this enforcer knows. A contract stamped
+  // 1.0.0 is held to 1.0.0's bindings even though 1.1.0 exists, so that publishing a new version here
+  // cannot change the meaning of a declaration a pack already released.
+  const declaredVersion = declaration?.schemaVersion;
+  const allowed = placeholdersFor(declaredVersion);
+
   if (Array.isArray(evaluation?.arguments)) {
     evaluation.arguments.forEach((argument, i) => {
       if (typeof argument !== "string") return;
       for (const found of argument.match(PLACEHOLDER_PATTERN) ?? []) {
-        if (!PLACEHOLDERS.includes(found)) {
+        if (!allowed.includes(found)) {
+          const admittedBy = Object.entries(PLACEHOLDERS_BY_VERSION)
+            .filter(([, set]) => set.includes(found))
+            .map(([version]) => version);
+
           violations.push(
             `$.evaluation.arguments[${i}] uses the placeholder ${found}, which the enforcer does not ` +
-              `substitute. It would be passed to the pack literally. Known placeholders: ` +
-              `${PLACEHOLDERS.join(", ")}.`,
+              `substitute at schemaVersion ${JSON.stringify(declaredVersion)}. It would be passed to ` +
+              `the pack literally. Admitted here: ${allowed.length > 0 ? allowed.join(", ") : "(none)"}.` +
+              // Naming the version that would admit it turns "rejected" into an instruction. Without
+              // this, a pack author's next move is to guess, and the likely guess — deleting the
+              // binding — is the failure the binding exists to prevent.
+              (admittedBy.length > 0
+                ? ` ${found} is admitted from schemaVersion ${admittedBy.join(", ")}; declaring that ` +
+                  `version is the fix, and it correctly makes this contract unreadable to enforcers ` +
+                  `that predate the binding rather than letting them drop it.`
+                : ""),
           );
         }
       }
