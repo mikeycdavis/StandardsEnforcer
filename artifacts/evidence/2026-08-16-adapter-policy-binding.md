@@ -10,9 +10,10 @@
 > the subject only works while the subject is a repository root, and released FinancialStandards
 > accepts a document or directory analysis selection that need not be one.
 >
-> The merged mechanism does not derive the path at all. `enforce()` resolves it once at the adoption
-> boundary, proves it exists, and hands that exact value on; the seam binds what it is given and
-> contains no policy filename. The invariant is:
+> The merged mechanism still derives the path — once, and not here. `enforce()` computes
+> `path.join(target, POLICY_FILE)` at the adoption boundary, proves it exists, and hands that exact
+> value on. What is gone is the *second* derivation: the seam binds what it is given, does not know
+> what a policy file is called, and contains no policy filename. The invariant is:
 >
 > > the policy whose presence established adoption is the exact policy handed to the authority
 >
