@@ -168,10 +168,35 @@ fi
 
 # An existing PR is updated by the push that just happened. Creating a second would be wrong, and
 # rewriting the first one's body would destroy whatever a human put there.
+#
+# But the body's verification block names the commit that was head when the PR was opened, and the
+# head has just moved past it. Leaving it alone would make the pull request assert that a commit
+# which is no longer the head was the verified one — a stale verification claim on the artefact
+# whose whole purpose is to carry a fresh one. So the new result is added as a comment: additive,
+# so nothing a human wrote is touched, and the newest verification is the newest comment.
 if EXISTING="$(gh pr view "$BRANCH" --json url --jq .url 2>/dev/null)" && [ -n "$EXISTING" ]; then
+  TMP_COMMENT="$(mktemp)"
+  cat > "$TMP_COMMENT" <<EOF
+Re-verified after a push to this branch.
+
+\`\`\`
+Verified commit: $HEAD_AFTER
+Result:          PASS
+Environment:     Docker (containerised local pipeline, \`scripts/ci.sh\`)
+Checks:          environment, no-install-invariant, oracle-readiness, test-suite
+\`\`\`
+
+The verification block in the description names the commit that was head when this pull request was
+opened. **This comment supersedes it.** Local Docker verification only — not a GitHub Actions result.
+EOF
+  gh pr comment "$BRANCH" --body-file "$TMP_COMMENT" >/dev/null 2>&1 \
+    || echo 'Could not add the verification comment; the description may name an older commit.'
+  rm -f "$TMP_COMMENT"
+
   echo
   green 'A pull request already exists and now points at the verified commit:'
   echo "  $EXISTING"
+  echo "  verified $HEAD_AFTER (recorded as a comment)"
   exit 0
 fi
 

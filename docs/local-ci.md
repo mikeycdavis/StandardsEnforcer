@@ -188,6 +188,7 @@ verify this is a git repository
 | `-Draft` / `--draft` | Open the pull request as a draft. |
 | `-Base` / `--base=` | Base branch. Defaults to the remote's own default branch, asked rather than assumed. |
 | `-Title`, `-Body`, `-BodyFile` / `--title=`, `--body=`, `--body-file=` | Your PR content. The verification block is **appended**; your text is never replaced. |
+| *(no option)* | On a branch whose PR already exists, nothing is created and the description is not rewritten. The new result is added as a **comment**, because the block in the description names the commit that was head when the PR was opened and the head has since moved — leaving it alone would make the PR assert a stale verification. The newest verification is the newest comment. |
 | `-Remote` / `--remote=` | Defaults to `origin`. |
 | `-AllowDirty` / `--allow-dirty` | Proceed with uncommitted changes present. They are still neither tested nor pushed. |
 

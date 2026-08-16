@@ -230,11 +230,42 @@ if ($LASTEXITCODE -ne 0) {
 
 # An existing PR is updated by the push that just happened. Creating a second one would be wrong,
 # and overwriting the first one's body would destroy whatever a human wrote in it.
+#
+# But the body's verification block names the commit that was verified when the PR was opened, and
+# the head has just moved past it. Leaving it there would make the pull request assert that a
+# commit which is no longer the head was the verified one — a stale verification claim on the
+# artefact whose whole purpose is to carry a fresh one. So the new result is added as a comment:
+# additive, so nothing a human wrote is touched, and the newest verification is the newest comment.
 $existing = (& gh pr view $Branch --json url --jq .url 2>$null)
 if ($LASTEXITCODE -eq 0 -and $existing) {
+    $tmpComment = Join-Path ([System.IO.Path]::GetTempPath()) "pr-verify-$PID.md"
+    Set-Content -Path $tmpComment -Encoding UTF8 -Value @"
+Re-verified after a push to this branch.
+
+``````
+Verified commit: $HeadAfter
+Result:          PASS
+Environment:     Docker (containerised local pipeline, ``scripts/ci.ps1``)
+Checks:          environment, no-install-invariant, oracle-readiness, test-suite
+``````
+
+The verification block in the description names the commit that was head when this pull request was
+opened. **This comment supersedes it.** Local Docker verification only — not a GitHub Actions result.
+"@
+    try {
+        & gh pr comment $Branch --body-file $tmpComment *> $null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host 'Could not add the verification comment; the description may name an older commit.' -ForegroundColor Yellow
+        }
+    }
+    finally {
+        Remove-Item -Force $tmpComment -ErrorAction SilentlyContinue
+    }
+
     Write-Host ''
-    Write-Host "A pull request already exists and now points at the verified commit:" -ForegroundColor Green
+    Write-Host 'A pull request already exists and now points at the verified commit:' -ForegroundColor Green
     Write-Host "  $existing"
+    Write-Host "  verified $HeadAfter (recorded as a comment)"
     exit 0
 }
 
