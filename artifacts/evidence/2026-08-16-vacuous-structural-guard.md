@@ -66,6 +66,25 @@ scope inside the seam and threw `ReferenceError` — seven tests red for a reaso
 property. Discarded, and recorded here because a falsifier that fails everything proves nothing
 about the specific guard.)*
 
+### And in the container, which is the environment the claim was about
+
+A host measurement would leave the important half unproven: the defect was that the guard was
+vacuous *in authoritative CI*, whose image is built from `git archive` — the CRLF bytes themselves.
+So the same mutation was committed and run through `scripts/ci.ps1`, network-isolated, oracle
+mounted read-only:
+
+```text
+e0fd512  repaired, unmutated     LOCAL CI PASS   276 passed, 0 failed, 0 skipped
+61b7faa  repaired, mutated       LOCAL CI FAIL   273 passed, 3 failed, 0 skipped
+           not ok 44 - policy · a subject below the governed root does not drag the policy path …
+           not ok 46 - policy · the seam binds the exact path supplied, not one it rebuilds …
+           not ok 47 - policy · the invoked policy IS the one whose presence established adoption
+```
+
+**Test 47 is the assertion that had never run.** In this same container, before the repair, it was
+one of the 276 reported `ok`. `61b7faa` was a throwaway commit for this measurement and was reset;
+it is named here so the run is identifiable, not because it exists on any branch.
+
 ## What was affected, and what was not
 
 The distinction matters, because the mechanism was never wrong:
