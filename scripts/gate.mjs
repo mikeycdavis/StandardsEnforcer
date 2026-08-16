@@ -63,7 +63,16 @@ export function isPinnedWorkflowRef(ref) {
  * `{ ok, why, checks: [{ context, appId, source, enforcement }] }`. Nothing here knows what GitHub
  * is; the adapter does.
  *
- * Returns `{ verdict, why, detail }` where verdict is `"rooted"`, `"missing"` or `"invalid"`.
+ * Returns `{ verdict, why, detail }` where verdict is one of four, and the last three are three
+ * different propositions rather than three shades of failure:
+ *
+ *     rooted       something the pull request cannot reach requires the right check
+ *     missing      the host answered, and nothing there requires it
+ *     invalid      the host answered, and what it described does not root anything
+ *     unreadable   the host did not answer, so neither of the above was established
+ *
+ * `missing` and `invalid` are claims about a configuration that was observed. `unreadable` is the
+ * absence of an observation, and collapsing it into either would report knowledge nobody has.
  */
 export function assessGate(platform, { repo, branch, expectedCheck, trustedWorkflowRef, requireOrganisationRoot = false }) {
   if (!expectedCheck) {
@@ -85,7 +94,14 @@ export function assessGate(platform, { repo, branch, expectedCheck, trustedWorkf
   if (!answer || answer.ok !== true) {
     // The platform could not tell us. That is an unknown about enforcement, and INV-E1 forbids
     // resolving an unknown in the permissive direction.
-    return { verdict: "invalid", why: answer?.why ?? "the platform did not answer", detail: {} };
+    //
+    // Its own verdict rather than "invalid" — the correction this release makes. "Invalid" asserts
+    // the configuration was READ AND FOUND WRONG; a host that would not answer supplied no
+    // configuration to find anything about. Both refuse and both exit 4, so nothing was failing, but
+    // the enforcer was stating a proposition it had not established, and a reader sent to fix a
+    // misconfiguration that may not exist looks in the wrong place for a problem that is a
+    // credential, a permission, or an outage.
+    return { verdict: "unreadable", why: answer?.why ?? "the platform did not answer", detail: {} };
   }
 
   const checks = answer.checks ?? [];
