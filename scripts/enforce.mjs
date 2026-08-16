@@ -54,6 +54,29 @@ export const SCHEMA_VERSION = "0.4.0";
 /** The file whose presence is adoption. Absence is not non-compliance; it is a different state. */
 const POLICY_FILE = "project-policy.yml";
 
+// --- process completion ---------------------------------------------------------------------------
+//
+// TWO OBSERVATIONS, NEVER ONE. `spawnSync` reports an exit code OR a terminating signal, and only one
+// of them exists per run: a signalled process has `status === null`, because no exit code was ever
+// produced. Collapsing that into a number would invent evidence — reporting 1 for SIGKILL tells an
+// operator the evaluator decided something, when it was killed. Both travel, and the absence of an
+// exit code stays representable.
+//
+// Measured rather than assumed. FE-16's red replay found a SIGKILLed evaluator arriving here as
+// `{ status: null, signal: "SIGKILL" }` on Linux and as `{ status: 1, signal: null }` on Windows —
+// the same defect wearing two faces, and the reason the Windows arm is not a safe platform to
+// conclude from. See artifacts/evidence/2026-08-16-fe16-red-replay.md.
+
+const completionOf = (r) => ({ exitCode: r.status ?? null, signal: r.signal ?? null });
+
+/** No process ran at all: the contract, the entrypoint or the binding failed before a spawn. */
+const NO_COMPLETION = { exitCode: null, signal: null };
+
+/** One clause for a message. Deliberately different words for the two conditions. */
+function describeCompletion(c) {
+  return c.signal !== null ? `was terminated by ${c.signal} rather than exiting` : `exited ${c.exitCode}`;
+}
+
 // ---------------------------------------------------------------------------
 // The one place the standards system is invoked.
 // ---------------------------------------------------------------------------
@@ -194,14 +217,15 @@ export function runOfficialEvaluator(standardsDir, { target, policyPath } = {}) 
   try {
     loaded = loadAdapter(standardsDir);
   } catch (e) {
-    return { ok: false, why: e.message, exitCode: null, report: null, contract: null };
+    return { ok: false, kind: "contract", why: e.message, completion: NO_COMPLETION, report: null, contract: null };
   }
   const { contract, entrypoint } = loaded;
   if (!existsSync(entrypoint)) {
     return {
       ok: false,
+      kind: "entrypoint",
       why: `the contract names ${contract.evaluation.entrypoint}, which is not in the pinned release`,
-      exitCode: null,
+      completion: NO_COMPLETION,
       report: null,
       contract,
     };
@@ -215,10 +239,14 @@ export function runOfficialEvaluator(standardsDir, { target, policyPath } = {}) 
   // {policy} is RECEIVED, never reconstructed. This seam does not know what a policy file is called
   // and must not learn: it takes the exact path its caller already resolved, and binds that.
   //
-  // The invariant that buys is stronger than the one it replaces. Deriving `path.join(governedRoot,
-  // POLICY_FILE)` here made the enforcer read one path and hand the pack a second one that happened
-  // to be equal — an equality that held only while both sides joined the same constant onto the same
-  // root, and that nothing outside a reader's attention kept true. Now:
+  // The invariant that buys is stronger than the one it replaces. Rebuilding the path here, by
+  // joining a filename constant onto the governed root, made the enforcer read one path and hand the
+  // pack a second one that happened to be equal — an equality that held only while both sides joined
+  // the same constant onto the same root, and that nothing outside a reader's attention kept true.
+  //
+  // The identifiers for that old form are deliberately not written here: test/adapter-policy-binding
+  // scans this function's text for them, and prose naming them is indistinguishable from code doing
+  // it. Now:
   //
   //     the policy whose presence established adoption is the exact policy handed to the authority
   //
@@ -237,7 +265,7 @@ export function runOfficialEvaluator(standardsDir, { target, policyPath } = {}) 
   try {
     argv = bindArguments(contract, { "{target}": target, "{policy}": policyPath });
   } catch (e) {
-    return { ok: false, why: e.message, exitCode: null, report: null, contract };
+    return { ok: false, kind: "binding", why: e.message, completion: NO_COMPLETION, report: null, contract };
   }
   const r = spawnSync(process.execPath, [entrypoint, ...argv], {
     encoding: "utf8",
@@ -245,24 +273,119 @@ export function runOfficialEvaluator(standardsDir, { target, policyPath } = {}) 
     windowsHide: true,
   });
   if (r.error) {
-    return { ok: false, why: `the evaluator could not be run (${r.error.message})`, exitCode: null, report: null, contract };
+    return { ok: false, kind: "spawn", why: `the evaluator could not be run (${r.error.message})`, completion: NO_COMPLETION, report: null, contract };
   }
+  const completion = completionOf(r);
   if (!r.stdout || !r.stdout.trim()) {
-    const reason = (r.stderr || "").trim().split("\n")[0] || `the evaluator exited ${r.status} and printed nothing`;
-    return { ok: false, why: reason, exitCode: r.status, report: null, contract };
+    const reason =
+      (r.stderr || "").trim().split("\n")[0] ||
+      `the evaluator ${describeCompletion(completion)} and printed nothing`;
+    return { ok: false, kind: "no-output", why: reason, completion, report: null, contract };
   }
   let report;
   try {
     report = JSON.parse(r.stdout);
   } catch {
-    return { ok: false, why: "the evaluator did not return JSON", exitCode: r.status, report: null, contract };
+    return { ok: false, kind: "malformed-output", why: "the evaluator did not return JSON", completion, report: null, contract };
   }
-  return { ok: true, why: null, exitCode: r.status, report, contract };
+  // Parsed output travels back WITH the completion, and is judged in `enforce`. The seam reports what
+  // happened; whether a passing status contradicts a failed process is an enforcement decision, and
+  // making it requires the pack's declared passing set, which lives one level up.
+  return { ok: true, kind: null, why: null, completion, report, contract };
 }
 
 // ---------------------------------------------------------------------------
 // Enforcement.
 // ---------------------------------------------------------------------------
+
+/**
+ * Is this run's authority result trustworthy, and if not, precisely why?
+ *
+ * THE WHOLE ORDERING, IN ONE PLACE, AS DATA. `enforce` maps the answer onto a state and adds context;
+ * it makes no part of this decision itself. Separated because the decision must be testable against a
+ * real spawned evaluator without also standing up an identity, a gate and a scope registry — and
+ * because an ordering spread across seven `return`s inside a 90-line function is an ordering nobody
+ * can see.
+ *
+ * SEVEN REFUSALS, EACH KEEPING ITS OWN DIAGNOSIS. They all converge on ENFORCEMENT_ERROR, because
+ * none of them establishes an authority — but an operator fixes them in seven different places, so
+ * `failure` and the message stay distinct rather than being funnelled into "the evaluator failed":
+ *
+ *     contract | entrypoint | binding   no process ran at all
+ *     spawn                             the process could not start
+ *     no-output                         it ran and said nothing
+ *     malformed-output                  it said something unparseable
+ *     undeclared-status                 it declared a status its own contract does not list
+ *     signalled                         it was killed; what it printed is an unfinished run
+ *     contradicted-completion           it claims to have PASSED and did not complete normally
+ *
+ * The order matters and is not alphabetical: each step needs what the one before it established. The
+ * completion checks come last because they need the declared status and the pack's passing set —
+ * "did it contradict itself" is unanswerable before you know what it claimed.
+ */
+export function trustworthiness(run) {
+  if (!run.ok) return { refused: true, failure: run.kind, why: run.why, status: null };
+
+  const status = run.report?.status;
+  if (typeof status !== "string" || !run.contract.result.statuses.includes(status)) {
+    // A status its own contract does not declare is an unknown, and INV-E1 says an unknown is not a
+    // pass — even when the unknown looks reassuring. The test is membership of THIS release's
+    // declared vocabulary, never of any list held here.
+    return {
+      refused: true,
+      failure: "undeclared-status",
+      why: `the standards release returned the status ${JSON.stringify(status)}, which its own contract does not declare`,
+      status: null,
+    };
+  }
+
+  // The whole of the enforcer's opinion about the verdict: is this status in the set the pack itself
+  // declared passing. No other field of the report is consulted — not a score, not a summary count,
+  // not a denominator — and test/authority-boundary.test.mjs is what keeps that true.
+  const passing = run.contract.result.passing.includes(status);
+
+  // A SIGNAL IS ALWAYS ABNORMAL, FOR EVERY STATUS. Whatever the process printed, it did not finish
+  // deciding, and a partial answer is an unknown. Checked for passing and non-passing alike:
+  // "NON_COMPLIANT, and then something killed the evaluator" is not a non-compliance finding either,
+  // and treating it as one would let a killed run produce a citable verdict.
+  if (run.completion.signal !== null) {
+    return {
+      refused: true,
+      failure: "signalled",
+      why:
+        `the evaluator printed the status ${JSON.stringify(status)} and then ` +
+        `${describeCompletion(run.completion)}, which is an unfinished run rather than an answer`,
+      status,
+    };
+  }
+
+  // THE CONTRADICTION, AND ONLY THE CONTRADICTION. A nonzero exit is not an error here — it is how
+  // real authorities report real verdicts. Measured against this main: MachineLearningStandards at
+  // 27d4b61 exits 2 while declaring NOT_EVALUATED with parseable JSON, correctly, and a rule of the
+  // form "nonzero is an enforcement error" would convert that legitimate evaluation into a failure
+  // and break a pack behaving exactly as its contract says.
+  //
+  // What cannot stand is a release asserting in one breath that the subject PASSED and that its own
+  // process did not complete. Both cannot be true, and INV-E1 does not permit the reassuring half to
+  // be the one that survives.
+  //
+  // NO MEANING IS ATTACHED TO WHICH nonzero code occurred. 1 and 42 are identical for gating and
+  // differ only in the evidence carried beside the refusal.
+  if (passing && run.completion.exitCode !== 0) {
+    return {
+      refused: true,
+      failure: "contradicted-completion",
+      why:
+        `the evaluator declared ${JSON.stringify(status)}, which its own contract lists as passing, and ` +
+        `then ${describeCompletion(run.completion)} — the release contradicted itself, so nothing here ` +
+        "establishes a pass",
+      status,
+    };
+  }
+
+  return { refused: false, failure: null, why: null, status, passing };
+}
+
 
 /**
  * Route a gate verdict to an enforcement state.
@@ -463,30 +586,27 @@ export async function enforce({
   // is the exact policy handed to the authority", and it is also the single place a future discovery
   // change has to reach.
   const run = runOfficialEvaluator(identity.dir, { target, policyPath });
-  if (!run.ok) {
-    return result(STATE.ENFORCEMENT_ERROR, run.why, { standards, gate: gateReport, scope: scopeReport });
+  const trust = trustworthiness(run);
+
+  if (trust.refused) {
+    return result(STATE.ENFORCEMENT_ERROR, trust.why,
+      { standards, gate: gateReport, scope: scopeReport,
+        failure: trust.failure, standardsProcess: run.completion,
+        standardsExitCode: run.completion.exitCode,
+        // Whatever evidence there was is kept. A refusal that discards the pack's own words leaves an
+        // operator with the enforcer's opinion and nothing to check it against.
+        ...(run.report ? { report: run.report } : {}),
+        ...(trust.status ? { authority: { standard: run.contract.standard.id, status: trust.status } } : {}) });
   }
 
-  const status = run.report?.status;
-  if (typeof status !== "string" || !run.contract.result.statuses.includes(status)) {
-    // The evaluator returned a status its own contract does not declare. That is an unknown, and
-    // INV-E1 says an unknown is not a pass — even when the unknown looks reassuring. Note the test
-    // is membership of THIS release's declared vocabulary, not of any list held here.
-    return result(STATE.ENFORCEMENT_ERROR,
-      `the standards release returned the status ${JSON.stringify(status)}, which its own contract does not declare`,
-      { standards, gate: gateReport, scope: scopeReport, standardsExitCode: run.exitCode, report: run.report });
-  }
-
-  // The whole of the enforcer's opinion about the verdict: is this status in the set the pack itself
-  // declared passing. No other field of the report is consulted — not a score, not a summary count,
-  // not a denominator — and test/authority-boundary.test.mjs is what keeps that true.
-  const passing = run.contract.result.passing.includes(status);
+  const { status, passing } = trust;
 
   return result(STATE.EVALUATED, describe(status, passing), {
     standards,
     gate: gateReport,
     scope: scopeReport,
-    standardsExitCode: run.exitCode,
+    standardsProcess: run.completion,
+    standardsExitCode: run.completion.exitCode,
     // The native answer, kept as data rather than promoted into the enforcer's state machine.
     authority: { standard: run.contract.standard.id, status },
     // Verbatim. The enforcer reports what the standards said; it does not summarise it into a

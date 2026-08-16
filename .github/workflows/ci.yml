@@ -71,6 +71,10 @@ jobs:
           # would still report green, which is the defect ST-08 was filed against. Set here as well
           # as in compose.ci.yml because both runners claim the same authority.
           ENFORCER_REQUIRE_SYMLINKS: '1'
+          # Same argument for signals: `ubuntu-latest` delivers them, and FE-16's signalled-evaluator
+          # case is the one establishing that "no exit code existed" stays representable. Windows
+          # cannot run that arm at all, so a hosted Linux runner is where it has to be asserted.
+          ENFORCER_REQUIRE_SIGNALS: '1'
           CI_OUT_DIR: ${{ runner.temp }}/local-ci
           CI_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
           CI_BRANCH: ${{ github.head_ref || github.ref_name }}

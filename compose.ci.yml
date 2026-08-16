@@ -59,6 +59,12 @@ services:
       # symlink support would silently return all four to skipping; under this flag it goes red
       # instead. See test-support/capabilities.mjs and ST-08.
       ENFORCER_REQUIRE_SYMLINKS: "1"
+      # And that a process here can be terminated by a signal, so FE-16's signalled-evaluator refusal
+      # runs rather than skipping. A SEPARATE switch from the one above on purpose: this workstation
+      # has symlinks under developer mode and no signals at all, so an environment can honestly have
+      # one and not the other, and one combined flag would force the next capability to be weakened
+      # for everybody. See test-support/capabilities.mjs and artifacts/evidence/2026-08-16-fe16-red-replay.md.
+      ENFORCER_REQUIRE_SIGNALS: "1"
       CI_OUT_DIR: /out
       CI_COMMIT: ${CI_COMMIT:?set by scripts/ci.*}
       CI_BRANCH: ${CI_BRANCH:?set by scripts/ci.*}

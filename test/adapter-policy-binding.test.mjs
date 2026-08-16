@@ -246,10 +246,26 @@ test("policy · the seam binds the exact path supplied, not one it rebuilds from
  */
 test("policy · the invoked policy IS the one whose presence established adoption", async () => {
   const { readFile } = await import("node:fs/promises");
-  const src = await readFile(new URL("../scripts/enforce.mjs", import.meta.url), "utf8");
+  // NORMALISED, AND THE NORMALISATION IS LOAD-BEARING. This test shipped in PR #2 slicing on the
+  // literal "\n}\n". `core.autocrlf=true` here and .mjs carries no `text eol=lf` attribute, so both
+  // the working tree and — decisively — the `git archive` the CI image is built from carry CRLF.
+  // `indexOf` returned -1, `slice(0, 0)` produced an EMPTY body, and both assertions below ran
+  // against "" in every environment, authoritative container CI included. Measured rather than
+  // deduced: against an archived `main`, `body.length` was 0.
+  //
+  // A structural guard that reports nothing is the ST-08 defect wearing a different hat, and it was
+  // in the very commit claiming this seam was "asserted structurally".
+  const src = (await readFile(new URL("../scripts/enforce.mjs", import.meta.url), "utf8")).replace(/\r\n/gu, "\n");
 
   const seam = src.slice(src.indexOf("export function runOfficialEvaluator"));
-  const body = seam.slice(0, seam.indexOf("\n}\n") + 1);
+  const end = seam.indexOf("\n}\n");
+  // The guard's own liveness, asserted before anything it guards. Whatever breaks the slice in
+  // future — a renamed function, a reformatted brace, another line-ending surprise — it fails here
+  // saying so, instead of silently asserting about nothing.
+  assert.ok(end > 0, "the seam body could not be located, so the assertions below would prove nothing");
+  const body = seam.slice(0, end + 1);
+  assert.ok(body.includes("bindArguments"), "the located text is not the evaluator seam");
+
   assert.equal(body.includes("POLICY_FILE"), false,
     "the evaluator seam must not name a policy filename — discovery belongs at the adoption boundary");
   assert.equal(/governedRoot/u.test(body), false,

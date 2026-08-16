@@ -225,7 +225,7 @@ done_stage
 # named tests. Nothing below reads a count to decide anything.
 stage "test-suite"
 say "\$ npm test   (ENFORCER_REQUIRE_ORACLE=1, ENFORCER_ORACLE_REPO=$ORACLE)"
-say "             (ENFORCER_REQUIRE_SYMLINKS=${ENFORCER_REQUIRE_SYMLINKS:-unset})"
+say "             (ENFORCER_REQUIRE_SYMLINKS=${ENFORCER_REQUIRE_SYMLINKS:-unset}, ENFORCER_REQUIRE_SIGNALS=${ENFORCER_REQUIRE_SIGNALS:-unset})"
 say ""
 set +e
 npm test 2>&1 | tee "$TEST_LOG"

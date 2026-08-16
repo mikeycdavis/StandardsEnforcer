@@ -39,6 +39,7 @@
  * this is what lets that principle stand while the gap it leaves gets closed.
  */
 
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -46,6 +47,15 @@ import process from "node:process";
 
 /** Whether this run claims the environment can create symlinks. */
 export const SYMLINKS_REQUIRED = process.env.ENFORCER_REQUIRE_SYMLINKS === "1";
+
+/**
+ * Whether this run claims a child process here can be terminated by a signal.
+ *
+ * A SEPARATE SWITCH FROM THE ONE ABOVE, ON PURPOSE. An environment may honestly have one capability
+ * and not the other, and a single combined flag would force whoever adds the third to weaken it for
+ * everybody. Two flags cost one line each; one flag costs the next capability its honesty.
+ */
+export const SIGNALS_REQUIRED = process.env.ENFORCER_REQUIRE_SIGNALS === "1";
 
 /**
  * Can this environment create a symlink at all?
@@ -106,5 +116,75 @@ export function unmetSymlinkRequirement({ required = SYMLINKS_REQUIRED, probe = 
     "that held — case 7b was correct, committed, never run, and failed the first time an " +
     "environment could execute it. Run this suite where symlinks can be created, or do not claim " +
     "the run exercised link containment."
+  );
+}
+
+// --- signals -------------------------------------------------------------------------------------
+//
+// THE SAME SHAPE, FOR A DIFFERENT CAPABILITY, AND THE SPECIMEN IS AGAIN ON RECORD. FE-16's red
+// replay measured a SIGKILLed evaluator returning `exitCode: null` with a declared passing status,
+// and the enforcer reporting it as a pass. On Windows that arm cannot run at all: the platform has
+// no signals, `process.kill(self, "SIGKILL")` produced `status 1, signal null`, and the case would
+// skip forever on the machine most of this work happens on.
+//
+// Note what the replay also established, because it is the reason this is a requirement rather than
+// a nicety: the Windows collapse lands the case on the nonzero-exit arm, which is itself a false
+// pass. The platform that cannot demonstrate the signal defect is not protected from it — so the
+// signal arm must be exercised *somewhere*, and that somewhere has to be asserted.
+//
+//     ENFORCER_REQUIRE_SIGNALS=1  +  capability unavailable  → the suite fails, reason named
+//     unset                       +  capability unavailable  → skip, and it says NOT exercised
+//
+// See artifacts/evidence/2026-08-16-fe16-red-replay.md.
+
+/**
+ * Can a child process here be terminated by a signal?
+ *
+ * Answered by killing one and looking, never by naming the platform. `process.platform === "win32"`
+ * would be a restatement of an assumption; this is a measurement, and it is the same measurement the
+ * replay took. The child also arms a timer, so a process that somehow survives its own SIGKILL does
+ * not exit cleanly and get mistaken for a signalled one.
+ */
+export function probeSignals() {
+  const r = spawnSync(
+    process.execPath,
+    ["-e", 'process.kill(process.pid, "SIGKILL"); setTimeout(() => {}, 5000);'],
+    { encoding: "utf8", windowsHide: true },
+  );
+  if (r.signal) return { available: true, why: null };
+  return {
+    available: false,
+    why:
+      "a child that killed itself with SIGKILL was not reported as signalled — this platform " +
+      `returned status ${JSON.stringify(r.status ?? null)} and signal ${JSON.stringify(r.signal ?? null)}`,
+  };
+}
+
+/** The skip value for one signal-dependent case, or `false` when it must run. */
+export function signalSkip(caseId, probe = probeSignals) {
+  if (probe().available) return false;
+  return (
+    `signals are not delivered on this platform; case ${caseId} was NOT exercised. ` +
+    "The nonzero-completion arm still runs here, but a signalled evaluator has not been refused."
+  );
+}
+
+/**
+ * The requirement's verdict: `null` when the claim holds, otherwise why it does not.
+ *
+ * Both parameters are injectable for the same reason `unmetSymlinkRequirement`'s are: the failing arm
+ * must be reachable from a test on a platform that cannot produce the real condition. A guard whose
+ * failure has never executed is the defect this file exists to refuse.
+ */
+export function unmetSignalRequirement({ required = SIGNALS_REQUIRED, probe = probeSignals } = {}) {
+  if (!required) return null;
+  const { available, why } = probe();
+  if (available) return null;
+  return (
+    "ENFORCER_REQUIRE_SIGNALS=1 was set, so this run asserts a child here can be terminated by a " +
+    "signal, and therefore that FE-16's signalled-evaluator refusal was exercised. It cannot: " +
+    `${why}\n\n` +
+    "That case is one of the two halves of the process-completion boundary; the other is the " +
+    "nonzero-exit contradiction. A run claiming authority over both must actually execute both."
   );
 }
