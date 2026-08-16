@@ -80,9 +80,28 @@ test("backlog · the tracker is claimed to be derived, and says how it is checke
 // Mutations — one per derived figure
 // -------------------------------------------------------------------------------------------
 
+/**
+ * The synthetic ids below are reserved, and this is what makes the reservation real.
+ *
+ * Every specimen in this file used to be "the next free number" — `IN-02`, `EP-07`, `FE-16`,
+ * `ST-11`, `TA-01`. That works exactly until the backlog allocates one, at which point the mutation
+ * collides with a real item and the suite fails with `duplicate id`, naming neither the cause nor
+ * the fix. It has now happened twice: `FE-16` went to the process-completion work, and `ST-11` to
+ * the vacuous-guard repair, which is what surfaced it.
+ *
+ * `-90` and above is therefore reserved for specimens, and asserted here to be unallocated. A future
+ * author who reaches ST-89 gets a failure that says what to do rather than a puzzle to solve.
+ */
+test("model · the ids reserved for mutation specimens are not allocated to real items", () => {
+  const taken = RECORDS.map((r) => r.data.id).filter((id) => /-9\d$/u.test(id ?? ""));
+  assert.deepEqual(taken, [],
+    "a real backlog item has taken an id reserved for this file's synthetic specimens; renumber " +
+    "the item, or move the specimens further out and update this guard with them");
+});
+
 test("mutation · a changed item count is caught", () => {
   const { problems, kinds } = underMutation((_records, { add }) =>
-    add({ id: "ST-11", type: "story", title: "An item nobody counted", parent: "EP-06", status: "NOT_STARTED" }),
+    add({ id: "ST-90", type: "story", title: "An item nobody counted", parent: "EP-06", status: "NOT_STARTED" }),
   );
   assert.deepEqual(problems, []);
   assert.ok(kinds.includes("status-total"), `total not caught: ${kinds}`);
@@ -113,11 +132,11 @@ test("mutation · each status count is caught", () => {
 
 test("mutation · each hierarchy type count is caught", () => {
   for (const [type, id, parent] of [
-    ["initiative", "IN-02", "TH-01"],
-    ["epic", "EP-07", "IN-01"],
-    ["feature", "FE-16", "EP-04"],
-    ["story", "ST-11", "FE-04"],
-    ["task", "TA-01", "ST-09"],
+    ["initiative", "IN-90", "TH-01"],
+    ["epic", "EP-90", "IN-01"],
+    ["feature", "FE-90", "EP-04"],
+    ["story", "ST-90", "FE-04"],
+    ["task", "TA-90", "ST-09"],
   ]) {
     const { problems, kinds } = underMutation((_r, { add }) =>
       add({ id, type, title: `A ${type} the hierarchy table does not know about`, parent, status: "NOT_STARTED" }),
@@ -140,7 +159,7 @@ test("mutation · the leaf count and the completion percentage are caught", () =
   // A new child under an item that already had one: the leaf set grows, the completed count does
   // not, and 12/23 (52%) becomes 12/24 (50%).
   const { problems, kinds } = underMutation((_r, { add }) =>
-    add({ id: "FE-16", type: "feature", title: "A second child under EP-04", parent: "EP-04", status: "NOT_STARTED" }),
+    add({ id: "FE-90", type: "feature", title: "A second child under EP-04", parent: "EP-04", status: "NOT_STARTED" }),
   );
   assert.deepEqual(problems, []);
   assert.ok(kinds.includes("leaf-completion"), `leaf ratio not caught: ${kinds}`);
