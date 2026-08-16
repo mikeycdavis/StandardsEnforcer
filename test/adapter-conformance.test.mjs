@@ -21,7 +21,10 @@ import {
   readAdapter,
   AdapterContractError,
   SCHEMA_PATH,
-  PLACEHOLDERS,
+  PLACEHOLDERS_BY_VERSION,
+  SUPPORTED_SCHEMA_VERSIONS,
+  placeholdersFor,
+  bindArguments,
 } from "../scripts/contracts/adapter.mjs";
 import { validate, assertSchemaSupported, SchemaError } from "../scripts/contracts/jsonschema.mjs";
 
@@ -164,9 +167,15 @@ test("the doubled-brace near-miss is caught as an unknown placeholder, not merel
 const MUTATIONS = {
   "an invented top-level key": [(d) => (d.evaluatuion = d.evaluation), "not a property"],
   "an invented nested key": [(d) => (d.result.passingStatuses = ["COMPLIANT"]), "not a property"],
+  // The example was "1.1.0" until that version was implemented, at which point this mutation stopped
+  // being one and the suite said so. Moved to a version that is genuinely unimplemented rather than
+  // deleted: the property under test is that an unknown version is refused outright, and that
+  // property did not change when the known set grew. The expectation moved from "must be exactly" to
+  // "must be one of" for the same reason — the field became an enum, so that is the sentence the
+  // validator now produces.
   "a schemaVersion the enforcer does not implement": [
-    (d) => (d.schemaVersion = "1.1.0"),
-    "must be exactly",
+    (d) => (d.schemaVersion = "2.0.0"),
+    "must be one of",
   ],
   "no schemaVersion at all": [(d) => delete d.schemaVersion, "required and absent"],
   "no arguments": [(d) => delete d.evaluation.arguments, "required and absent"],
@@ -259,8 +268,12 @@ test("a missing declaration is a contract failure too", () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test("the known placeholder set is exactly {target}", () => {
-  // Pinned rather than derived. Adding a placeholder makes every contract using it unreadable to
-  // every enforcer built before it, which is a schemaVersion change and should be hard to do quietly.
-  assert.deepEqual([...PLACEHOLDERS], ["{target}"]);
+test("the placeholder set of each schema version is pinned", () => {
+  // Pinned rather than derived, per version. Adding a placeholder makes every contract using it
+  // unreadable to every enforcer built before it, which is a schemaVersion change and should be hard
+  // to do quietly. Pinning 1.0.0 separately is the load-bearing half: it is what fails if a later
+  // binding is ever added to the version packs have already released under.
+  assert.deepEqual([...PLACEHOLDERS_BY_VERSION["1.0.0"]], ["{target}"]);
+  assert.deepEqual([...PLACEHOLDERS_BY_VERSION["1.1.0"]], ["{target}", "{policy}"]);
+  assert.deepEqual([...SUPPORTED_SCHEMA_VERSIONS], ["1.0.0", "1.1.0"]);
 });
