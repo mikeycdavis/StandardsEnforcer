@@ -1,24 +1,32 @@
 # Backlog
 
-<!-- GENERATED FILE - do not edit by hand. Re-run the backlog script after changing anything in items/. -->
+<!--
+  NOT a generated file, and it no longer claims to be. This page is written by hand; every
+  mechanical claim on it — the counts, the percentages, the progress tuples, the in-flight list and
+  the tree — is recomputed from items/*.md and checked against this file by
+  test/backlog-tracker.test.mjs on every authoritative CI run.
+
+  Change an item, then run `node scripts/backlog.mjs` to be told which figures moved (ST-10).
+-->
 
 Work on this project classified with the Extended Agile Hierarchy. Every item is a file in
-[`items/`](./items/); its YAML frontmatter is the source of truth and this page is derived from it.
+[`items/`](./items/); its YAML frontmatter is the source of truth, and the figures on this page are
+derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/backlog.mjs).
 
-**12 of 23 leaf items complete — 52%**
+**13 of 23 leaf items complete — 57%**
 
 ```
-█████████████████████░░░░░░░░░░░░░░░░░░░  52%
+███████████████████████░░░░░░░░░░░░░░░░░  57%
 ```
 
 ## Status
 
 | Status | Items |
 | --- | ---: |
-| ○ Not started | 8 |
+| ○ Not started | 7 |
 | ◑ In progress | 8 |
 | ◒ Blocked | 2 |
-| ● Complete | 14 |
+| ● Complete | 15 |
 | **Total** | **32** |
 
 ## The hierarchy
@@ -36,7 +44,7 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 
 | Theme | Progress | Done | Remaining |
 | --- | --- | ---: | ---: |
-| [TH-01 Enforced standards compliance across the portfolio](./items/TH-01.md) | `███████░░░░░░░` 52% | 12 | 11 |
+| [TH-01 Enforced standards compliance across the portfolio](./items/TH-01.md) | `████████░░░░░░` 57% | 13 | 10 |
 
 ## In flight
 
@@ -57,8 +65,8 @@ _Nothing marked ready._
 
 ## Everything
 
-- ◑ **[TH-01](./items/TH-01.md)** Enforced standards compliance across the portfolio _(12/23)_
-  - ◑ **[IN-01](./items/IN-01.md)** Enforcement a governed repository cannot weaken _(12/23)_
+- ◑ **[TH-01](./items/TH-01.md)** Enforced standards compliance across the portfolio _(13/23)_
+  - ◑ **[IN-01](./items/IN-01.md)** Enforcement a governed repository cannot weaken _(13/23)_
     - ● **[EP-01](./items/EP-01.md)** Authority transport — run a pack's own evaluator under a pinned identity _(8/8)_
       - ● **[FE-01](./items/FE-01.md)** M1 — run the official standards implementation and report what it said
       - ● **[FE-02](./items/FE-02.md)** M2 — contract-driven authority transport _(5/5)_
@@ -84,9 +92,9 @@ _Nothing marked ready._
       - ○ **[FE-10](./items/FE-10.md)** Reviewer identity beyond a configured list
       - ○ **[FE-11](./items/FE-11.md)** Cross-pack dependency ordering
       - ● **[FE-12](./items/FE-12.md)** Scope dispositions keyed per pack, not hardcoded to machine-learning
-    - ◑ **[EP-06](./items/EP-06.md)** Self-assurance — this repository's own evidence must establish what it reports _(0/3)_
+    - ◑ **[EP-06](./items/EP-06.md)** Self-assurance — this repository's own evidence must establish what it reports _(1/3)_
       - ◑ **[FE-14](./items/FE-14.md)** A skipped oracle is not a passing integration
       - ○ **[ST-08](./items/ST-08.md)** Authoritative container CI must assert the symlink capability it depends on
-      - ○ **[ST-10](./items/ST-10.md)** The backlog tracker claims to be derived, and no executable derivation exists
+      - ● **[ST-10](./items/ST-10.md)** The backlog tracker claims to be derived, and no executable derivation exists
     - ○ **[ST-09](./items/ST-09.md)** scripts/ci.sh fails under Git Bash on Windows
 
