@@ -227,6 +227,39 @@ export function runOfficialEvaluator(standardsDir, target) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Route a gate verdict to an enforcement state.
+ *
+ * Three refusals carrying three different propositions, which are not interchangeable:
+ *
+ *     missing      the host answered; nothing there requires the check    GATE_MISSING
+ *     invalid      the host answered; what it described roots nothing     GATE_CONFIG_INVALID
+ *     unreadable   the host did not answer, so neither was established    ENFORCEMENT_ERROR
+ *
+ * `unreadable` used to arrive as `invalid`, which made the enforcer assert a configuration defect it
+ * had never observed. The exit code was already right; the proposition was not, and it sends a reader
+ * to fix a misconfiguration when the problem is a credential, a permission or an outage.
+ *
+ * `{ state: null }` means "rooted" — the only verdict that continues.
+ *
+ * EXPORTED, AND A TABLE RATHER THAN A CHAIN, because the code this replaced was a chain of `if`s that
+ * fell THROUGH to `rooted: true` for anything it did not recognise. Adding a fourth verdict in
+ * gate.mjs — this release added one — would silently have rooted the gate on an answer the enforcer
+ * did not understand: a fail-open in the one component whose whole job is to refuse, introduced by
+ * editing a different file. An unrecognised verdict now fails closed, and it is exported so that
+ * property is testable without giving `enforce` an injection point that exists only for tests.
+ */
+export function gateStateFor(verdict) {
+  const KNOWN = {
+    rooted: null,
+    missing: STATE.GATE_MISSING,
+    invalid: STATE.GATE_CONFIG_INVALID,
+    unreadable: STATE.ENFORCEMENT_ERROR,
+  };
+  if (Object.hasOwn(KNOWN, verdict)) return { state: KNOWN[verdict], recognised: true };
+  return { state: STATE.ENFORCEMENT_ERROR, recognised: false };
+}
+
+/**
  * @param passing  Supplied only for `EVALUATED`, where it comes from the pack's declared passing set.
  *                 Every other state derives it from `PASSING`, which is a closed enumeration of
  *                 enforcement states — so a state nobody listed cannot pass by omission.
@@ -317,11 +350,12 @@ export async function enforce({
       return result(STATE.ENFORCEMENT_ERROR, `no adapter for platform "${gate.platform}"`, { standards });
     }
     const assessed = assessGate(impl, gate);
-    if (assessed.verdict === "missing") {
-      return result(STATE.GATE_MISSING, assessed.why, { standards, gate: { checked: true, rooted: false, ...assessed.detail } });
-    }
-    if (assessed.verdict === "invalid") {
-      return result(STATE.GATE_CONFIG_INVALID, assessed.why, { standards, gate: { checked: true, rooted: false, ...assessed.detail } });
+    const routed = gateStateFor(assessed.verdict);
+    if (routed.state !== null) {
+      const why = routed.recognised
+        ? assessed.why
+        : `the gate assessment returned "${assessed.verdict}", which this enforcer does not implement`;
+      return result(routed.state, why, { standards, gate: { checked: true, rooted: false, ...assessed.detail } });
     }
     gateReport = { checked: true, rooted: true, ...assessed.detail };
   }

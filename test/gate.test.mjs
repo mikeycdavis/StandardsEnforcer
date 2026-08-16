@@ -20,7 +20,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { enforce } from "../scripts/enforce.mjs";
+import { enforce, gateStateFor } from "../scripts/enforce.mjs";
 import { assessGate, isPinnedWorkflowRef, GITHUB_ACTIONS_APP_ID } from "../scripts/gate.mjs";
 import { STATE, exitFor, EXIT } from "../scripts/states.mjs";
 import { oracleAt } from "../test-support/oracle.mjs";
@@ -179,8 +179,92 @@ test("gate · the trusted workflow is checked before the platform is even asked"
 
 test("gate · a platform that cannot answer does not report the gate as missing", () => {
   const g = assessGate(externalPlatform([], { ok: false, why: "gh: not authenticated" }), gateArgs());
-  assert.equal(g.verdict, "invalid", "an unknown resolved as 'missing' would be a guess; as a pass it would be worse");
+  assert.equal(g.verdict, "unreadable", "an unknown resolved as 'missing' would be a guess; as a pass it would be worse");
   assert.match(g.why, /not authenticated/);
+});
+
+/**
+ * The three-way boundary, which is the whole of this correction.
+ *
+ * Until now the first and third rows below produced the same verdict, and therefore the same state.
+ * Both exit 4, so nothing failed — but `GATE_CONFIG_INVALID` asserts the configuration was READ AND
+ * FOUND WRONG, and a platform that would not answer supplied no configuration to find anything about.
+ * The enforcer was stating a proposition it had not established, which is INV-E1's direction even
+ * where the exit code happens to be right.
+ *
+ * Written as one table rather than three separate tests because the property IS the separation: any
+ * two of these collapsing into one verdict is the defect, and a table makes that impossible to
+ * reintroduce by editing a single case.
+ */
+test("gate · known-absent, known-wrong and unreadable are three different answers", () => {
+  const cases = [
+    {
+      what: "nothing on the branch requires the expected check",
+      platform: externalPlatform([]),
+      verdict: "missing",
+      because: "the host answered, and what it said was that this check is not required",
+    },
+    {
+      what: "the check is required but bound to nothing, so the pull request can satisfy it",
+      platform: externalPlatform([{ context: CHECK, appId: null, source: "repository", enforcement: "active" }]),
+      verdict: "invalid",
+      because: "the host answered, and the configuration it described roots nothing",
+    },
+    {
+      what: "the host would not answer",
+      platform: externalPlatform([], { ok: false, why: "gh: HTTP 403 rulesets" }),
+      verdict: "unreadable",
+      because: "nothing was observed, so neither absence nor invalidity was established",
+    },
+  ];
+
+  const seen = new Map();
+  for (const c of cases) {
+    const g = assessGate(c.platform, gateArgs());
+    assert.equal(g.verdict, c.verdict, `${c.what} — ${c.because}`);
+    assert.ok(!seen.has(g.verdict), `${c.what} collapsed onto: ${seen.get(g.verdict)}`);
+    seen.set(g.verdict, c.what);
+  }
+  assert.equal(seen.size, 3, "three distinct propositions must produce three distinct verdicts");
+});
+
+test("gate · every verdict routes to a state, and an unrecognised one fails closed", () => {
+  // Found by making the correction, not by reading the code. The routing in enforce.mjs was a chain
+  // of `if`s that fell THROUGH to `rooted: true` for anything it did not recognise — so adding a
+  // fourth verdict in gate.mjs, which this release does, would have rooted the gate on an answer the
+  // enforcer did not understand. A fail-open in the one component whose whole job is to refuse,
+  // introduced by editing a different file.
+  assert.equal(gateStateFor("rooted").state, null, "rooted is the only verdict that continues");
+  assert.equal(gateStateFor("missing").state, STATE.GATE_MISSING);
+  assert.equal(gateStateFor("invalid").state, STATE.GATE_CONFIG_INVALID);
+  assert.equal(gateStateFor("unreadable").state, STATE.ENFORCEMENT_ERROR);
+
+  for (const unknown of ["provisionally-rooted", "", null, undefined, "ROOTED", "rooted "]) {
+    const r = gateStateFor(unknown);
+    assert.equal(r.recognised, false, `${JSON.stringify(unknown)} must not be recognised`);
+    assert.equal(r.state, STATE.ENFORCEMENT_ERROR);
+    assert.notEqual(r.state, null, `${JSON.stringify(unknown)} must never continue to evaluation`);
+    assert.equal(exitFor(r.state, false), EXIT.NOT_ENFORCEABLE);
+  }
+
+  // `rooted` is the only null, so no future verdict can reach evaluation by resembling it.
+  const continuing = ["rooted", "missing", "invalid", "unreadable"].filter((v) => gateStateFor(v).state === null);
+  assert.deepEqual(continuing, ["rooted"]);
+});
+
+test("gate · unreadability is not softer than invalidity — both refuse, for different reasons", () => {
+  // Guards the DIRECTION of the correction. Routing an unknown to a more permissive answer would be
+  // the failure this change exists to prevent; the point is accuracy about which proposition holds,
+  // never leniency. Neither may ever be "rooted", and both must say what stopped them.
+  const unreadable = assessGate(externalPlatform([], { ok: false, why: "gh: HTTP 403" }), gateArgs());
+  const invalid = assessGate(
+    externalPlatform([{ context: CHECK, appId: null, source: "repository", enforcement: "active" }]),
+    gateArgs(),
+  );
+  for (const g of [unreadable, invalid]) {
+    assert.notEqual(g.verdict, "rooted");
+    assert.ok(typeof g.why === "string" && g.why.length > 0, "a refusal must say what stopped it");
+  }
 });
 
 test("gate · no expected check name configured is invalid, not satisfied", () => {
@@ -364,4 +448,41 @@ test("a half-configured gate is refused rather than half-checked", () => {
   ], { encoding: "utf8" });
   assert.equal(r.status, EXIT.NOT_ENFORCEABLE);
   assert.match(r.stderr, /half-configured gate is not a gate/);
+});
+
+/**
+ * The `unmeasured` mechanism, exercised directly.
+ *
+ * A platform may answer with a check it genuinely read while declaring which rooting properties it
+ * did not measure. `assessGate` must refuse — not because anything failed, but because the answer is
+ * incomplete in a way that matters: a requirement matched by name alone is satisfiable by the pull
+ * request's own workflow.
+ *
+ * Tested against a synthetic platform rather than through a producer, because it is a property of
+ * `assessGate` and must survive any particular producer's contract. The governance corpus reached
+ * this path until that producer was found not to serialize check identity at all; without this test
+ * the guard would have become uncovered code the moment its only caller stopped using it.
+ */
+test("unmeasured · a platform that names what it did not measure is refused, not accepted", () => {
+  const named = (unmeasured) => ({
+    name: "partial",
+    requiredChecks: () => ({
+      ok: true,
+      checks: [{ context: "standards", appId: null, source: "repository", enforcement: "active" }],
+      workflows: [],
+      ...(unmeasured ? { unmeasured } : {}),
+    }),
+  });
+  const args = { repo: "o/r", branch: "main", expectedCheck: "standards" };
+
+  const refused = assessGate(named(["app-binding", "workflow-pinning"]), args);
+  assert.equal(refused.verdict, "unreadable", "an incomplete answer is an unknown, not a defect");
+  assert.notEqual(refused.verdict, "invalid", "nothing established that the unmeasured properties fail");
+  assert.deepEqual(refused.detail.unmeasured, ["app-binding", "workflow-pinning"]);
+  for (const p of ["app-binding", "workflow-pinning"]) assert.match(refused.why, new RegExp(p));
+
+  // The discriminator: the SAME answer without the declaration is judged on its merits, and an
+  // unbound requirement is a defect rather than an unknown. So `unmeasured` is what is doing the
+  // work here, not the shape of the check.
+  assert.equal(assessGate(named(null), args).verdict, "invalid");
 });
