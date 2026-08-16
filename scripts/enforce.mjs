@@ -30,7 +30,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, lstatSync, realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -75,18 +75,102 @@ const POLICY_FILE = "project-policy.yml";
 export function loadAdapter(standardsDir) {
   const file = path.join(standardsDir, ADAPTER_FILENAME);
   const contract = readAdapter(file); // throws AdapterContractError; validated against the schema
-  const entrypoint = path.resolve(standardsDir, contract.evaluation.entrypoint);
-  // The static containment check lives in the conformance boundary; this is the resolved half, which
-  // a static check cannot do because it cannot know about a symlink. Bytes verified are bytes
-  // executed, and a path that leaves the verified tree breaks that on its own.
-  const inside = path.relative(standardsDir, entrypoint);
-  if (inside.startsWith("..") || path.isAbsolute(inside)) {
+  const declared = contract.evaluation.entrypoint;
+  const entrypoint = path.resolve(standardsDir, declared);
+
+  // HALF ONE — LEXICAL. Catches `../../etc/passwd` without the named file having to exist, which is
+  // what lets a release declaring an escape be refused even when it ships nothing at that path.
+  if (!isInside(standardsDir, entrypoint)) {
     throw new AdapterContractError(
-      `${contract.evaluation.entrypoint} resolves outside the verified checkout, to ${entrypoint}`,
-      [inside],
+      `${declared} resolves outside the verified checkout, to ${entrypoint}`,
+      [path.relative(standardsDir, entrypoint)],
     );
   }
-  return { contract, entrypoint };
+
+  // HALF TWO — FILESYSTEM-RESOLVED. A path can be entirely well-formed lexically and still land
+  // somewhere else, because *any* segment of it may be a link. So this resolves the whole path
+  // rather than inspecting the final component: a symlinked parent directory escapes just as
+  // effectively as a symlinked file, and checking only the filename would miss it.
+  //
+  // `path.resolve` cannot establish this. It is a string operation and never touches the
+  // filesystem. This comment previously claimed the resolved half was performed here; it was not,
+  // and case 7b of adapter-provenance.test.mjs executed foreign bytes for as long as that was
+  // true. The claim and the code are now the same claim.
+  //
+  // The root is canonicalised too, and that is not belt-and-braces: on macOS the temporary
+  // directories these checkouts live in are reached through a link (`/tmp` -> `/private/tmp`), so
+  // comparing a canonical entrypoint against a lexical root would report every ordinary entrypoint
+  // as an escape.
+  let realRoot;
+  try {
+    realRoot = realpathSync(standardsDir);
+  } catch (e) {
+    throw new AdapterContractError(
+      `the verified checkout at ${standardsDir} could not be resolved (${e.code ?? e.message}), so ` +
+        `nothing can be established as being inside it`,
+      [declared],
+    );
+  }
+
+  let realEntrypoint;
+  try {
+    realEntrypoint = realpathSync(entrypoint);
+  } catch (e) {
+    if (e.code === "ENOENT" && !isSymbolicLink(entrypoint)) {
+      // Simply absent — no link involved, nothing unresolved. Not an escape, and a different
+      // operator problem: `runOfficialEvaluator` reports it as "the contract names X, which is not
+      // in the pinned release". Preserved deliberately, because collapsing the two would send a
+      // reader to the wrong fix.
+      return { contract, entrypoint };
+    }
+    // A link that is present and does not resolve. Refused by name rather than allowed to fall
+    // through as absence: where it would have pointed is *unknown*, and INV-E1 does not permit an
+    // unknown enforcement condition to be treated as an acceptable one.
+    throw new AdapterContractError(
+      `${declared} is a link that does not resolve (${e.code ?? e.message}), so the bytes it names ` +
+        `cannot be established as part of the verified checkout`,
+      [declared],
+    );
+  }
+
+  if (!isInside(realRoot, realEntrypoint)) {
+    throw new AdapterContractError(
+      `${declared} resolves through the filesystem to ${realEntrypoint}, which is outside the ` +
+        `verified checkout at ${realRoot}. The bytes verified are the bytes executed, and a link ` +
+        `that leaves the verified tree breaks that on its own`,
+      [declared],
+    );
+  }
+
+  // The canonical path is what gets returned, so the path that is spawned is the exact path whose
+  // containment was established — rather than one that would traverse the links a second time.
+  return { contract, entrypoint: realEntrypoint };
+}
+
+/**
+ * Is `candidate` a path strictly inside `root`?
+ *
+ * Separator-aware, and deliberately not a string prefix: `/pack` is a prefix of `/packages/evil`,
+ * and a `..foo` directory begins with `..` while escaping nothing. Both are the kind of near-miss
+ * that makes a containment check look present and behave absent.
+ *
+ * Both arguments must already be canonical where the caller cares about links — comparing a
+ * canonical path against a lexical one answers a question about neither.
+ */
+function isInside(root, candidate) {
+  const rel = path.relative(root, candidate);
+  if (rel === "") return false; // the root is not a file inside itself
+  if (path.isAbsolute(rel)) return false; // a different root, or a different drive on Windows
+  return rel !== ".." && !rel.startsWith(`..${path.sep}`);
+}
+
+/** Does a link exist at this path, whether or not it resolves? `existsSync` follows links and cannot say. */
+function isSymbolicLink(p) {
+  try {
+    return lstatSync(p).isSymbolicLink();
+  } catch {
+    return false;
+  }
 }
 
 /**
