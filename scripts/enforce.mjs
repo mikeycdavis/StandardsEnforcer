@@ -43,7 +43,7 @@ import { detectFootprint } from "./footprint.mjs";
 import { resolveScope, OUTCOME } from "./scope.mjs";
 import { githubPlatform } from "./platform/github.mjs";
 import { STATE, PASSING, REQUIRES_RECORDED_DECISION, exitFor } from "./states.mjs";
-import { readAdapter, AdapterContractError, ADAPTER_FILENAME } from "./contracts/adapter.mjs";
+import { readAdapter, bindArguments, AdapterContractError, ADAPTER_FILENAME } from "./contracts/adapter.mjs";
 
 const PLATFORMS = { github: githubPlatform };
 
@@ -200,7 +200,20 @@ export function runOfficialEvaluator(standardsDir, target) {
       contract,
     };
   }
-  const argv = contract.evaluation.arguments.map((a) => a.replaceAll("{target}", target));
+  // {policy} is the GOVERNED repository's policy, never the pack's own. FinancialStandards resolves an
+  // absent `--policy` to its own project-policy.yml and reports confidently against it (finding F,
+  // artifacts/evidence/2026-08-09-interface-inventory.md), so a pack declaring this binding is saying
+  // "evaluate the subject against the subject's policy" — the only reading under which its verdict is
+  // about the target at all.
+  //
+  // Derived here from `target` and POLICY_FILE rather than passed in, so the path a contract is given
+  // and the path `enforce` reads for adoption below cannot drift into being two different files.
+  let argv;
+  try {
+    argv = bindArguments(contract, { "{target}": target, "{policy}": path.join(target, POLICY_FILE) });
+  } catch (e) {
+    return { ok: false, why: e.message, exitCode: null, report: null, contract };
+  }
   const r = spawnSync(process.execPath, [entrypoint, ...argv], {
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
