@@ -128,6 +128,34 @@ export function assessGate(platform, { repo, branch, expectedCheck, trustedWorkf
     };
   }
 
+  // Properties this source did not look at.
+  //
+  // ABSENCE OF A MEASUREMENT IS NOT A MEASUREMENT OF ABSENCE, and the two are one field apart here:
+  // `appId: null` below means "looked, and nothing was bound", which is a configuration defect. A
+  // source that never read app binding has established nothing about it, and reporting that as the
+  // same defect would invent a finding.
+  //
+  // FORCED BY an external governance evidence producer that matches the required check by context
+  // name and reads neither app binding nor required-workflow pinning. Its aggregate says GOVERNED,
+  // and every property below — the ones M4 proved are what actually make a gate a gate — is simply
+  // outside what it measured. Treating that aggregate as a root would accept the spoofable
+  // configuration ST-06 demonstrated live.
+  //
+  // Only properties evaluated BELOW this line may be declared here. Presence, absence and
+  // enforcement mode are decided above, so a source that cannot measure those cannot answer at all.
+  const unmeasured = Array.isArray(answer.unmeasured) ? answer.unmeasured : [];
+  if (unmeasured.length > 0) {
+    return {
+      verdict: "unreadable",
+      why:
+        `"${expectedCheck}" is required and active on ${repo}@${branch}, but this evidence did not measure ` +
+        `${unmeasured.join(", ")}. A requirement matched by name alone is satisfiable by the pull request's own ` +
+        `workflow, so name presence does not establish an enforcement root — and nothing here establishes that ` +
+        `the unmeasured properties fail either`,
+      detail: { unmeasured, required: named.map((c) => c.context) },
+    };
+  }
+
   // Name-only matching is the spoofable case: a pull request can add a workflow that emits a check
   // with this exact name and satisfy the requirement with its own green tick.
   const bound = active.filter((c) => c.appId !== null && c.appId !== undefined);
