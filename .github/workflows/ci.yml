@@ -66,6 +66,11 @@ jobs:
         env:
           ENFORCER_REQUIRE_ORACLE: '1'
           ENFORCER_ORACLE_REPO: ${{ github.workspace }}/.oracle
+          # `ubuntu-latest` can create symlinks. Asserted rather than assumed: if that ever stops
+          # being true the ADR 0005 link-containment cases would go back to skipping and this job
+          # would still report green, which is the defect ST-08 was filed against. Set here as well
+          # as in compose.ci.yml because both runners claim the same authority.
+          ENFORCER_REQUIRE_SYMLINKS: '1'
           CI_OUT_DIR: ${{ runner.temp }}/local-ci
           CI_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
           CI_BRANCH: ${{ github.head_ref || github.ref_name }}

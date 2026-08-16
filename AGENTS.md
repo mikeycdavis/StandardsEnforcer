@@ -32,10 +32,12 @@ you the wrong answer confidently.
 5. **Current plans** — `artifacts/plan/`, date-prefixed. The live one is
    [`2026-08-12-m3-reconciled-plan.md`](artifacts/plan/2026-08-12-m3-reconciled-plan.md).
    `artifacts/project-plan-breakdown/` is the decomposition surface EngineeringStandards requires and
-   is **intentionally empty**: `standards init` creates it empty because scaffolding template
-   sections over existing code is fabricated history, and `planning.breakdown-directory` is left
-   failing rather than satisfied dishonestly. Do not populate it to make a rule green. Reading only
-   that directory would tell you this project has no plan, which is false.
+   **does not exist here** — corrected 2026-08-16; it previously claimed to be "intentionally empty",
+   which asserted a filesystem state that was not the case. `planning.breakdown-directory` is
+   therefore **failing, deliberately**: scaffolding template sections over existing code is fabricated
+   history, so the rule is left red rather than satisfied dishonestly. Do not create it — empty or
+   populated — to make a rule green. Reading only that directory would tell you this project has no
+   plan, which is false; the live plan is the one named above.
 6. **Decision records** — `artifacts/adr/`.
 
 Adoption workflow, commands, and the audit/validate distinction: `<standards-repo>/INSTRUCTIONS.md`.
@@ -85,7 +87,7 @@ substitute for reading the standards it points at.
 | Working branch | `<branch>` |
 | Install | **none — this repository has no dependencies, and `ci/checks.sh` asserts it** |
 | Build | none — plain ESM, run directly by Node |
-| Test | `npm test` (add `ENFORCER_REQUIRE_ORACLE=1` and `ENFORCER_ORACLE_REPO=<checkout>` to run the authoritative integration surface) |
+| Test | `npm test` (add `ENFORCER_REQUIRE_ORACLE=1` and `ENFORCER_ORACLE_REPO=<checkout>` to run the authoritative integration surface; `ENFORCER_REQUIRE_SYMLINKS=1` to assert the link-containment cases ran rather than skipped — set by CI, and expected to fail on a Windows workstation without the privilege) |
 | Full CI | `.\scripts\ci.ps1` / `./scripts/ci.sh` — the complete pipeline, in Docker |
 | Submit a PR | `.\scripts\submit-pr.ps1` / `./scripts/submit-pr.sh` — verified against the exact commit |
 | Validate standards | `<command>` |
