@@ -1,0 +1,12 @@
+# The CI container executes ci/checks.sh directly. A CRLF checkout on a Windows developer machine
+# makes the shebang unparseable inside a Linux container, and the failure ("bad interpreter") names
+# neither the file nor the cause. These line endings are therefore not a style preference.
+*.sh            text eol=lf
+ci/checks.sh    text eol=lf
+
+# PowerShell is invoked by the host shell, which is fine with either, but keeping the platform
+# convention avoids a whole-file diff the first time somebody edits one in a Windows editor.
+*.ps1           text eol=crlf
+
+# Generated renders of docs/*.mmd. Marked binary so a diff does not bury a review in path data.
+*.svg           -text

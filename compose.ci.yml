@@ -1,0 +1,60 @@
+# The CI environment as a composition.
+#
+# This repository has no database and no service dependencies, so today there is exactly one
+# service. The file exists in this shape anyway because it is the extension point: a repository
+# that adds Postgres, SQL Server, Redis or a browser grid adds it here, gives it a real
+# `healthcheck`, and adds `depends_on: { condition: service_healthy }` to `ci`. Nothing in
+# scripts/ci.* needs to change to pick that up — see docs/local-ci.md, "Adding a service".
+#
+# Every value that could collide between repositories or between concurrent runs is injected by
+# scripts/ci.*, and every one of them is required (`:?`) rather than defaulted. A default here
+# would be a silent wrong answer: a compose file that runs against *some* oracle is worse than one
+# that refuses to run.
+
+name: ${CI_PROJECT:?set by scripts/ci.* — unique per repository and run}
+
+services:
+  ci:
+    build:
+      # The staged export of the exact commit under test, not the working tree. scripts/ci.*
+      # produces it with `git archive`.
+      context: ${CI_CONTEXT:?set by scripts/ci.* — the staged source directory}
+      dockerfile: ci/Dockerfile
+    image: ${CI_IMAGE:?set by scripts/ci.* — tagged with the commit under test}
+    init: true
+
+    # CI is untrusted code execution: the suite clones repositories, writes fixtures and spawns
+    # child processes. It has no legitimate reason to reach the network, so it cannot. This also
+    # proves the run is genuinely hermetic — a check that quietly depended on fetching something
+    # would fail here rather than on somebody else's machine.
+    network_mode: none
+
+    # No new privileges, and the writable surface is only what the run needs. The source at /work
+    # is baked into the image; /tmp is where the suite builds its fixtures.
+    security_opt:
+      - no-new-privileges:true
+
+    volumes:
+      # The authoritative standards oracle. Read-only, and exactly one directory: this is the
+      # narrowest mount that satisfies the required-oracle guard. It is never written to — the
+      # suite clones *out* of it into container-local temporary directories.
+      - type: bind
+        source: ${CI_ORACLE_PATH:?set by scripts/ci.* — the authoritative standards checkout}
+        target: /oracle
+        read_only: true
+
+      # Where the run writes its machine-readable result. Also narrow, also a single directory,
+      # and gitignored on the host.
+      - type: bind
+        source: ${CI_OUT_PATH:?set by scripts/ci.* — artifacts/local-ci}
+        target: /out
+        read_only: false
+
+    environment:
+      ENFORCER_REQUIRE_ORACLE: "1"
+      ENFORCER_ORACLE_REPO: /oracle
+      CI_OUT_DIR: /out
+      CI_COMMIT: ${CI_COMMIT:?set by scripts/ci.*}
+      CI_BRANCH: ${CI_BRANCH:?set by scripts/ci.*}
+      CI_REPOSITORY: ${CI_REPOSITORY:?set by scripts/ci.*}
+      CI_SOURCE: ${CI_SOURCE:?set by scripts/ci.* — "commit" or "working-tree"}
