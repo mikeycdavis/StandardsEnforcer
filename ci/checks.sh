@@ -220,8 +220,12 @@ done_stage
 # `npm test` verbatim: the repository's own authoritative command, not a reconstruction of it.
 # ENFORCER_REQUIRE_ORACLE=1 comes from the environment and asserts that this run exercised the
 # authoritative integration surface. Under it a missing oracle is a red suite, not 18 quiet skips.
+# ENFORCER_REQUIRE_SYMLINKS=1 asserts the same about a capability rather than a dependency: that the
+# ADR 0005 link-containment cases ran here rather than skipping for want of privilege. Both are
+# named tests. Nothing below reads a count to decide anything.
 stage "test-suite"
 say "\$ npm test   (ENFORCER_REQUIRE_ORACLE=1, ENFORCER_ORACLE_REPO=$ORACLE)"
+say "             (ENFORCER_REQUIRE_SYMLINKS=${ENFORCER_REQUIRE_SYMLINKS:-unset})"
 say ""
 set +e
 npm test 2>&1 | tee "$TEST_LOG"

@@ -94,7 +94,7 @@ test("mutation · each status count is caught", () => {
   // Every status, in both directions: an item moved out of one bucket and into another must be
   // reported twice, once for the bucket it left and once for the bucket it joined.
   for (const [id, from, to] of [
-    ["ST-08", "NOT_STARTED", "IN_PROGRESS"],
+    ["ST-09", "NOT_STARTED", "IN_PROGRESS"],
     ["EP-04", "IN_PROGRESS", "BLOCKED"],
     ["ST-07", "BLOCKED", "NOT_STARTED"],
     ["FE-01", "COMPLETE", "NOT_STARTED"],
@@ -149,18 +149,22 @@ test("mutation · the leaf count and the completion percentage are caught", () =
 });
 
 test("mutation · a parent progress tuple is caught even when every aggregate is unchanged", () => {
-  // The sharp case. One leaf completes under EP-06, one leaf un-completes under EP-05, so the
+  // The sharp case. One leaf completes under EP-05, one leaf un-completes under EP-06, so the
   // status counts, the leaf ratio, the progress bar, the theme row and the in-flight set are all
   // bit-identical. Only two tuples move. A checker that compares totals sees nothing here.
+  //
+  // Re-pointed when ST-08 closed. The specimens are chosen for their state, never for their
+  // meaning: this needs one NOT_STARTED leaf and one COMPLETE leaf under *different* epics, and the
+  // assertions below are what verify the choice still produces the invariance the case is about.
   const { problems, kinds } = underMutation((_r, { item }) => {
-    item("ST-08").status = "COMPLETE";
-    item("ST-08").closed = "2026-08-16";
-    item("FE-12").status = "NOT_STARTED";
-    delete item("FE-12").closed;
+    item("FE-11").status = "COMPLETE";
+    item("FE-11").closed = "2026-08-16";
+    item("ST-10").status = "NOT_STARTED";
+    delete item("ST-10").closed;
   });
   assert.deepEqual(problems, []);
-  assert.ok(kinds.includes("tree:EP-06"), `EP-06's tuple not caught: ${kinds}`);
   assert.ok(kinds.includes("tree:EP-05"), `EP-05's tuple not caught: ${kinds}`);
+  assert.ok(kinds.includes("tree:EP-06"), `EP-06's tuple not caught: ${kinds}`);
 
   for (const unchanged of ["leaf-completion", "progress-bar", "theme-progress:TH-01", "in-flight-membership"]) {
     assert.ok(!kinds.includes(unchanged), `${unchanged} should not have moved: ${kinds}`);
@@ -216,7 +220,7 @@ test("mutation · marking an item ready is caught", () => {
   // and nothing is. Without this the "Ready to pick up" section would be checked only in its empty
   // form, which is the state it can never fail in.
   const { kinds } = underMutation((_r, { item }) => {
-    item("ST-08").ready = true;
+    item("ST-09").ready = true;
   });
   assert.ok(kinds.some((k) => k.startsWith("ready")), `a marked-ready item not caught: ${kinds}`);
 });
@@ -260,7 +264,7 @@ test("model · malformed items are reported rather than skipped", () => {
     ["a cycle", (_r, { item }) => { item("TH-01").parent = "ST-09"; }, /not reachable from the root/u],
     ["a duplicate id", (_r, { item }) => { item("ST-09").id = "ST-08"; }, /duplicate id ST-08/u],
     ["completion with no date", (_r, { item }) => { delete item("FE-01").closed; }, /COMPLETE with no closed date/u],
-    ["a date with no completion", (_r, { item }) => { item("ST-08").closed = "2026-08-16"; }, /closed date on a/u],
+    ["a date with no completion", (_r, { item }) => { item("ST-09").closed = "2026-08-16"; }, /closed date on a/u],
     ["an unknown status", (_r, { item }) => { item("ST-08").status = "ALMOST"; }, /unknown status ALMOST/u],
     ["a missing title", (_r, { item }) => { delete item("ST-08").title; }, /missing title/u],
   ];
