@@ -449,3 +449,40 @@ test("a half-configured gate is refused rather than half-checked", () => {
   assert.equal(r.status, EXIT.NOT_ENFORCEABLE);
   assert.match(r.stderr, /half-configured gate is not a gate/);
 });
+
+/**
+ * The `unmeasured` mechanism, exercised directly.
+ *
+ * A platform may answer with a check it genuinely read while declaring which rooting properties it
+ * did not measure. `assessGate` must refuse — not because anything failed, but because the answer is
+ * incomplete in a way that matters: a requirement matched by name alone is satisfiable by the pull
+ * request's own workflow.
+ *
+ * Tested against a synthetic platform rather than through a producer, because it is a property of
+ * `assessGate` and must survive any particular producer's contract. The governance corpus reached
+ * this path until that producer was found not to serialize check identity at all; without this test
+ * the guard would have become uncovered code the moment its only caller stopped using it.
+ */
+test("unmeasured · a platform that names what it did not measure is refused, not accepted", () => {
+  const named = (unmeasured) => ({
+    name: "partial",
+    requiredChecks: () => ({
+      ok: true,
+      checks: [{ context: "standards", appId: null, source: "repository", enforcement: "active" }],
+      workflows: [],
+      ...(unmeasured ? { unmeasured } : {}),
+    }),
+  });
+  const args = { repo: "o/r", branch: "main", expectedCheck: "standards" };
+
+  const refused = assessGate(named(["app-binding", "workflow-pinning"]), args);
+  assert.equal(refused.verdict, "unreadable", "an incomplete answer is an unknown, not a defect");
+  assert.notEqual(refused.verdict, "invalid", "nothing established that the unmeasured properties fail");
+  assert.deepEqual(refused.detail.unmeasured, ["app-binding", "workflow-pinning"]);
+  for (const p of ["app-binding", "workflow-pinning"]) assert.match(refused.why, new RegExp(p));
+
+  // The discriminator: the SAME answer without the declaration is judged on its merits, and an
+  // unbound requirement is a defect rather than an unknown. So `unmeasured` is what is doing the
+  // work here, not the shape of the check.
+  assert.equal(assessGate(named(null), args).verdict, "invalid");
+});

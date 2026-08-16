@@ -17,9 +17,24 @@
  * unknowns, which it refuses on. They are never rendered as failures: nothing established that an
  * unmeasured property would fail, and reporting one as a configuration defect would invent a finding.
  *
- * COMPOSITION IS THE POINT. A record supplying name presence and a live platform supplying app
- * binding and pinning can together reach `rooted`, because each contributed a proposition it
- * measured. That is legitimate in a way that promoting one source's aggregate never is.
+ * WHAT THIS RECORD CAN ESTABLISH, ON ITS OWN: nothing about any named check. The producer decides
+ * `main.standards_check_required` by matching a hardcoded `"standards"` context, and serializes that
+ * name NOWHERE in the record — it survives only inside the control's human-readable `title`. Reading
+ * it back out would mean parsing prose into an enforcement predicate, which is the failure this
+ * repository refuses everywhere else. So the identity of the check each observation is ABOUT is
+ * itself unmeasured, and is listed as such.
+ *
+ * That collapses the one case this record used to settle. An ABSENT observation cannot become
+ * `GATE_MISSING`, because `GATE_MISSING` asserts a known absence OF A PARTICULAR CHECK, and this
+ * record does not say which check it looked for. A consumer expecting `"my-standards-gate"` would
+ * otherwise be told its gate is known-missing on the strength of an observation about a different
+ * name. That is the same evidence upgrade as promoting the aggregate, arriving by a quieter route.
+ *
+ * COMPOSITION IS NOT IMPLEMENTED, AND IS NOT CLAIMED. In principle a record supplying one
+ * proposition and a live platform supplying others could together reach `rooted`. In practice this
+ * producer supplies no name-bound proposition at all, so there is nothing here to compose with.
+ * Building a composition mechanism now would mean building it for a contributor that contributes
+ * nothing. If a producer serializes the context name, that is the point to revisit this.
  *
  * WHAT IS DELIBERATELY NOT READ:
  *
@@ -54,6 +69,7 @@ export const CONTROL_RESULT = Object.freeze(["SATISFIED", "ABSENT", "UNREADABLE"
  * contract, and should say so.
  */
 export const NOT_MEASURED_BY_GOVERNANCE_RECORD = Object.freeze([
+  "check-identity",
   "app-binding",
   "workflow-pinning",
   "organisation-rooting",
@@ -142,14 +158,13 @@ export function sameRequiredContract(a, b) {
 /**
  * Translate a record into a platform answer `assessGate` can evaluate.
  *
- * `expectedCheck` is the enforcer's own configured context name. It is used as the context this
- * record's standards-check observation is ABOUT — not matched against anything in the record,
- * because the producer decides the name it looks for and does not serialize it. That is stated in
- * the returned `translation` rather than hidden: this enforcer is asserting that the record's
- * standards-check control refers to the same check it means, and a reader is entitled to know the
- * assertion was made.
+ * Takes no expected check name, deliberately. An earlier version accepted one and used it as the
+ * context each observation was about — which meant the consumer supplied the identity, the record
+ * appeared to confirm it, and a `"standards"` observation could answer a question asked about
+ * `"my-standards-gate"`. The parameter was the whole mechanism of that fabrication, so it is gone
+ * rather than guarded: a name this function never receives is a name it cannot attach.
  */
-export function platformFromGovernanceRecord(record, { expectedCheck }) {
+export function platformFromGovernanceRecord(record) {
   assertGovernanceRecord(record);
 
   const byId = new Map(record.controls.map((c) => [c.id, c]));
@@ -163,7 +178,6 @@ export function platformFromGovernanceRecord(record, { expectedCheck }) {
       requiredControls: requiredControlIds(record),
       unreadableRequired: unreadable,
       standardsCheckControl: standards ? { id: standards.id, result: standards.result } : null,
-      assertedCheckName: expectedCheck ?? null,
       unmeasured: [...NOT_MEASURED_BY_GOVERNANCE_RECORD],
       // Provenance, never assurance. Preserved under a name that cannot be confused with a check's
       // rooting `source`, so a collection label can never be read as an enforcement property.
@@ -180,18 +194,18 @@ export function platformFromGovernanceRecord(record, { expectedCheck }) {
       if (!standards) {
         return { ok: false, why: `the governance record has no ${STANDARDS_CHECK_CONTROL} observation` };
       }
-      // Known absence. The producer read the surface and the check is not required there — which is
-      // an establishing answer, and the one case where this record alone settles the question.
-      if (standards.result === "ABSENT") {
-        return { ok: true, checks: [], workflows: [] };
-      }
-      // Present by name, and nothing more. `appId: undefined` is not asserted here; the unmeasured
-      // list is what carries the gap, so this can never be mistaken for "looked, found nothing bound".
+      // Whatever the result says, it says it about a check this record does not name. SATISFIED
+      // cannot become a requirement and ABSENT cannot become a known absence, because neither can be
+      // attached to the context the caller is asking about. This is not the record being useless: it
+      // is the record being read for exactly what it measured, which is a control's disposition
+      // rather than a named check's presence.
       return {
-        ok: true,
-        checks: [{ context: expectedCheck, appId: null, source: "repository", enforcement: "active" }],
-        workflows: [],
-        unmeasured: [...NOT_MEASURED_BY_GOVERNANCE_RECORD],
+        ok: false,
+        why:
+          `the governance record observed ${STANDARDS_CHECK_CONTROL} as ${standards.result}, but does not serialize ` +
+          `which check context that observation is about, so it establishes nothing about any particular check. ` +
+          `The name survives only in the control's human-readable title, and a name parsed out of prose is not a ` +
+          `measurement.`,
       };
     },
   };

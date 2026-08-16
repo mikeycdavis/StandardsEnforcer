@@ -7,9 +7,16 @@
  * Synthetic records appear below only where a case needs a shape the real corpus does not contain.
  *
  * THE LOAD-BEARING PROPERTY IS THAT `GOVERNED` DOES NOT MEAN `rooted`. The producer matches the
- * required check by context name and reads neither app binding nor required-workflow pinning — the
- * properties M4 established live are what make a gate a gate. A consumer that promoted its aggregate
- * would accept the configuration ST-06 demonstrated a pull request can satisfy for itself.
+ * required check by a hardcoded context name and reads neither app binding nor required-workflow
+ * pinning — the properties M4 established live are what make a gate a gate. A consumer that promoted
+ * its aggregate would accept the configuration ST-06 demonstrated a pull request can satisfy for
+ * itself.
+ *
+ * AND THE NAME IT MATCHED IS NOT IN THE RECORD. It appears only inside a control's human-readable
+ * `title`, so the identity of the check each observation is about is unmeasured too. That is why no
+ * observation here — SATISFIED or ABSENT — produces a verdict about a named check, and why these
+ * tests assert the verdict is INSENSITIVE to the name the caller expects. A name-sensitive verdict
+ * would mean the caller's assertion had become the evidence.
  */
 
 import test from "node:test";
@@ -42,7 +49,7 @@ const AFTER = load("uiux-2026-08-16-after.json");
 const gateArgs = (over = {}) => ({ repo: "mikeycdavis/UIUXDesignStandards", branch: "main", expectedCheck: CHECK, ...over });
 
 const assess = (record, over = {}) =>
-  assessGate(platformFromGovernanceRecord(record, { expectedCheck: CHECK }), gateArgs(over));
+  assessGate(platformFromGovernanceRecord(record), gateArgs(over));
 
 /** A live platform contributing exactly the propositions the record cannot. */
 const livePlatform = ({ appId = 77001, source = "organization", workflows = [] } = {}) => ({
@@ -69,16 +76,19 @@ test("corpus · both fixtures are present and are not the same observation", () 
 
 test("corpus · the before observation does not pass", () => {
   const g = assess(BEFORE);
-  assert.equal(g.verdict, "missing", "the producer read the surface and the check is not required there");
-  const routed = gateStateFor(g.verdict);
-  assert.equal(routed.state, STATE.GATE_MISSING);
-  assert.notEqual(exitFor(routed.state, false), EXIT.OK);
+  assert.notEqual(gateStateFor(g.verdict).state, null, "an ABSENT observation is never a root");
+  assert.notEqual(exitFor(gateStateFor(g.verdict).state, false), EXIT.OK);
+
+  // And specifically NOT a known absence. `GATE_MISSING` asserts that a named check is not required;
+  // this record does not name the check it looked for, so it cannot support that claim.
+  assert.equal(g.verdict, "unreadable");
+  assert.notEqual(gateStateFor(g.verdict).state, STATE.GATE_MISSING);
 });
 
 test("corpus · the after observation still does not root the gate", () => {
   // The trap. Aggregate GOVERNED, standards check SATISFIED, and it is STILL not a root — because
-  // app binding and workflow pinning were never measured. Not GATE_CONFIG_INVALID either: nothing
-  // established that those properties fail.
+  // check identity, app binding and workflow pinning were never measured. Not GATE_CONFIG_INVALID
+  // either: nothing established that those properties fail.
   const g = assess(AFTER);
   assert.equal(g.verdict, "unreadable");
   assert.notEqual(g.verdict, "rooted", "a name-only requirement is satisfiable by the pull request itself");
@@ -87,20 +97,70 @@ test("corpus · the after observation still does not root the gate", () => {
   const routed = gateStateFor(g.verdict);
   assert.equal(routed.state, STATE.ENFORCEMENT_ERROR);
   assert.equal(exitFor(routed.state, false), EXIT.NOT_ENFORCEABLE);
-  for (const p of NOT_MEASURED_BY_GOVERNANCE_RECORD) assert.match(g.why, new RegExp(p));
 });
 
-test("corpus · the before/after difference is driven by control results alone", () => {
-  // Neither producer name, artifact path, ruleset id, ruleset name, nor a hard-coded count. The only
-  // thing changed here is the standards-check control's result.
-  const forged = structuredClone(BEFORE);
-  for (const c of forged.controls) if (c.id === STANDARDS_CHECK_CONTROL) c.result = "SATISFIED";
-  assert.notEqual(assess(forged).verdict, assess(BEFORE).verdict);
+/**
+ * THE IDENTITY FALSIFIER.
+ *
+ * The producer matches a hardcoded `"standards"` context and serializes that name nowhere — it
+ * survives only inside the control's human-readable `title`. So an observation about it answers no
+ * question asked about any other name. Ask about `"my-standards-gate"` and an ABSENT observation
+ * must NOT come back as "your gate is missing": that would be a known-absence claim manufactured
+ * from an observation about a different check.
+ *
+ * This is the same evidence upgrade as promoting the aggregate, arriving by a quieter route, and it
+ * is what an `expectedCheck` parameter on the translator made possible.
+ */
+test("identity · an observation about an unnamed check answers nothing about a named one", () => {
+  for (const record of [BEFORE, AFTER]) {
+    for (const name of ["my-standards-gate", "standards", "ci/standards"]) {
+      const g = assess(record, { expectedCheck: name });
+      assert.equal(g.verdict, "unreadable", `${name} on ${record.state}`);
+      assert.notEqual(gateStateFor(g.verdict).state, STATE.GATE_MISSING);
+      assert.notEqual(gateStateFor(g.verdict).state, null);
+    }
+  }
+});
 
-  // And the aggregate word is inert: flipping it alone changes nothing.
+test("identity · check identity is declared unmeasured, not quietly assumed", () => {
+  assert.ok(NOT_MEASURED_BY_GOVERNANCE_RECORD.includes("check-identity"),
+    "the gap must be stated as data, so a producer that closes it has something to contradict");
+  const t = platformFromGovernanceRecord(AFTER).translation;
+  assert.ok(t.unmeasured.includes("check-identity"));
+  assert.equal("assertedCheckName" in t, false,
+    "an asserted name is not a measured one, and recording it invited the assertion to be trusted");
+});
+
+test("identity · the verdict does not vary with the name the caller happens to expect", () => {
+  // A different defect from the one above, and a weaker guard: this catches a translator that
+  // MATCHES the caller's name against the record (making the caller's assertion the evidence), not
+  // one that silently assumes it. Measured — restoring the assumption leaves this test green while
+  // the test above goes red. Both are kept because they fail on different mistakes.
+  const verdicts = new Set(
+    ["a", "b", "standards"].map((name) => assess(BEFORE, { expectedCheck: name }).verdict),
+  );
+  assert.equal(verdicts.size, 1, "a name-sensitive verdict would mean the name was being used as evidence");
+});
+
+test("corpus · the record's evidence discriminates even where its verdict cannot", () => {
+  // The two observations are genuinely different and the translation preserves that difference —
+  // driven by the control result alone, not by producer name, artifact path, ruleset id, or count.
+  // The verdict is identical for both because neither can be attached to a named check, which is a
+  // limit of the producer's contract rather than a failure to read the record.
+  const before = platformFromGovernanceRecord(BEFORE).translation;
+  const after = platformFromGovernanceRecord(AFTER).translation;
+  assert.equal(before.standardsCheckControl.result, "ABSENT");
+  assert.equal(after.standardsCheckControl.result, "SATISFIED");
+  assert.notDeepEqual(before.standardsCheckControl, after.standardsCheckControl);
+
+  // And the aggregate word is inert: flipping it alone changes nothing anywhere.
   const relabelled = structuredClone(BEFORE);
   relabelled.state = "GOVERNED";
   assert.equal(assess(relabelled).verdict, assess(BEFORE).verdict, "the producer's aggregate must not drive the verdict");
+  assert.deepEqual(
+    platformFromGovernanceRecord(relabelled).translation.standardsCheckControl,
+    before.standardsCheckControl,
+  );
 });
 
 test("corpus · both observations answer the same required-control contract", () => {
@@ -119,26 +179,40 @@ test("corpus · a record that drops a required control is refused, not silently 
 });
 
 // ===========================================================================
-// Composition — each source contributing what it measured
+// What the record cannot contribute
+//
+// There is deliberately no composition test here, because there is no composition mechanism and the
+// PR no longer claims one. An earlier pair of tests called themselves composition while assessing
+// only `livePlatform(...)` — the record was named in the title, asserted about, and then never
+// passed to anything. They proved the live platform still works, which was already true elsewhere,
+// and would have stayed green if this module were deleted outright.
+//
+// Composition would be legitimate if each source contributed a proposition it measured. This
+// producer contributes no name-bound proposition at all, so the honest statement is the one below:
+// the record cannot root, alone or otherwise, and the live path is what roots.
 // ===========================================================================
 
-test("compose · record name-presence plus live binding and pinning can root", () => {
-  const sha = "b".repeat(40);
-  const g = assessGate(
-    livePlatform({ workflows: [{ path: ".github/workflows/standards.yml", sha }] }),
-    gateArgs(),
-  );
-  assert.equal(g.verdict, "rooted", g.why ?? "");
-  assert.equal(gateStateFor(g.verdict).state, null);
+test("contribution · no record in the corpus can produce a root, under any expected name", () => {
+  for (const record of [BEFORE, AFTER]) {
+    for (const name of [CHECK, "anything-else"]) {
+      assert.notEqual(assess(record, { expectedCheck: name }).verdict, "rooted");
+    }
+  }
 });
 
-test("compose · a contradiction is decided by the stronger measurement, not averaged", () => {
-  // The record says GOVERNED. Live evidence says the requirement is bound to nothing, so a pull
-  // request satisfies it with its own workflow. GOVERNED must not rescue that.
+test("contribution · deleting the record from the equation changes no live verdict", () => {
+  // The falsifier for the claim just removed. A live platform supplying binding and pinning roots,
+  // and it does so without the record — which is exactly why the old "composition" tests could not
+  // have been detecting composition.
+  const sha = "b".repeat(40);
+  const live = livePlatform({ workflows: [{ path: ".github/workflows/standards.yml", sha }] });
+  assert.equal(assessGate(live, gateArgs()).verdict, "rooted");
+
+  // And a live contradiction is decided on live evidence: a requirement bound to nothing is invalid
+  // whatever a producer's aggregate says about the same repository.
   assert.equal(AFTER.state, "GOVERNED");
-  const g = assessGate(livePlatform({ appId: null }), gateArgs());
-  assert.equal(g.verdict, "invalid");
-  assert.equal(gateStateFor(g.verdict).state, STATE.GATE_CONFIG_INVALID);
+  assert.equal(assessGate(livePlatform({ appId: null }), gateArgs()).verdict, "invalid");
+  assert.equal(gateStateFor("invalid").state, STATE.GATE_CONFIG_INVALID);
 });
 
 // ===========================================================================
@@ -175,13 +249,13 @@ test("provenance · collection source is preserved but changes no verdict", () =
   for (const c of b.controls) c.source = "branch-protection + rulesets";
   assert.equal(assess(a).verdict, assess(b).verdict, "two sources is not stronger than one");
 
-  const t = platformFromGovernanceRecord(b, { expectedCheck: CHECK }).translation;
+  const t = platformFromGovernanceRecord(b).translation;
   assert.equal(t.collectionSource[STANDARDS_CHECK_CONTROL], "branch-protection + rulesets");
   assert.equal("source" in t, false, "must not shadow a check's rooting source");
 });
 
 test("provenance · nothing infers an assurance tier from the corpus", () => {
-  const t = platformFromGovernanceRecord(AFTER, { expectedCheck: CHECK }).translation;
+  const t = platformFromGovernanceRecord(AFTER).translation;
   const serialized = JSON.stringify(t);
   for (const invented of ["evidenceStrength", "behaviorallyVerified", "confidence", "corroborated", "observed-enforcement", "host-configuration"]) {
     assert.ok(!serialized.includes(invented), `${invented} was synthesised from evidence that never contained it`);
