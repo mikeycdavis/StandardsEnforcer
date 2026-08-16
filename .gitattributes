@@ -10,3 +10,9 @@ ci/checks.sh    text eol=lf
 
 # Generated renders of docs/*.mmd. Marked binary so a diff does not bury a review in path data.
 *.svg           -text
+
+# Externally produced evidence, copied verbatim from a named producer commit. `-text` disables all
+# line-ending translation, so a Windows checkout cannot rewrite bytes this repository did not author.
+# test/fixtures/governance/PROVENANCE.md claims these are byte-for-byte; without this, that claim
+# quietly stops being true on every machine that checks out with autocrlf.
+test/fixtures/governance/*.json  -text
