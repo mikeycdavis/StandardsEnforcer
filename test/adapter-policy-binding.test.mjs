@@ -112,13 +112,49 @@ test("policy · the declared binding supplies the GOVERNED repository's policy",
   const packDir = await pack();
   const targetDir = await governed();
   try {
-    const r = runOfficialEvaluator(packDir, targetDir);
+    const r = runOfficialEvaluator(packDir, { target: targetDir, governedRoot: targetDir });
     assert.equal(r.ok, true, r.why ?? "");
     assert.equal(r.report.policyWasSupplied, true);
     assert.equal(r.report.usedPolicy, path.join(targetDir, "project-policy.yml"));
   } finally {
     await rm(packDir, { recursive: true, force: true });
     await rm(targetDir, { recursive: true, force: true });
+  }
+});
+
+/**
+ * THE LOAD-BEARING CASE: the evaluation subject is not the governed root.
+ *
+ * Every other test here uses a governed directory as both the subject and the policy's location, so
+ * `{target}` and `{policy}` coincide and a resolver deriving one from the other would pass all of
+ * them. FinancialStandards is the pack that breaks the coincidence — its subject is an analysis
+ * document, not a repository root (finding H, preserved deliberately by this PR) — so this is the
+ * case `{policy}` exists FOR. Collapse the two inputs and the pack is handed
+ * `<root>/analysis.md/project-policy.yml`: a path below a regular file, which cannot exist.
+ *
+ * Without this case, schema 1.1.0 could spell two placeholders while the enforcer still had exactly
+ * one value to fill them from, and the claim that Financial is representable would be unproven.
+ */
+test("policy · a subject below the governed root does not drag the policy path with it", async () => {
+  const packDir = await pack();
+  const rootDir = await governed();
+  const subject = path.join(rootDir, "analysis.md");
+  await writeFile(subject, "# analysis\n");
+  try {
+    const r = runOfficialEvaluator(packDir, { target: subject, governedRoot: rootDir });
+
+    assert.equal(r.ok, true, r.why ?? "");
+    assert.equal(r.report.subject, subject, "the pack must be pointed at the document, not the root");
+    assert.equal(r.report.usedPolicy, path.join(rootDir, "project-policy.yml"),
+      "the policy is the GOVERNED ROOT's, and does not follow the subject");
+
+    // Named explicitly, so a reader sees the defect this excludes rather than inferring it.
+    assert.notEqual(r.report.usedPolicy, path.join(subject, "project-policy.yml"),
+      "deriving {policy} from {target} produces a path below a regular file");
+    assert.equal(r.report.usedPolicy.includes("analysis.md"), false);
+  } finally {
+    await rm(packDir, { recursive: true, force: true });
+    await rm(rootDir, { recursive: true, force: true });
   }
 });
 
@@ -139,7 +175,7 @@ test("policy · without the binding the pack silently evaluates its OWN policy, 
   const packDir = await pack(declared);
   const targetDir = await governed();
   try {
-    const r = runOfficialEvaluator(packDir, targetDir);
+    const r = runOfficialEvaluator(packDir, { target: targetDir, governedRoot: targetDir });
 
     assert.equal(r.ok, true, "the point is that nothing errors");
     assert.equal(r.report.status, "COMPLIANT", "and that the verdict looks like a pass");
@@ -182,7 +218,7 @@ test("policy · the `=` form is rejected by the pack rather than quietly repaire
   const packDir = await pack(declared);
   const targetDir = await governed();
   try {
-    const r = runOfficialEvaluator(packDir, targetDir);
+    const r = runOfficialEvaluator(packDir, { target: targetDir, governedRoot: targetDir });
     // The enforcer substituted faithfully and the pack refused the form. Both halves matter: the
     // enforcer must not rewrite a declared argument, and a pack that cannot read it must fail loudly.
     assert.equal(r.ok, false);
@@ -197,7 +233,7 @@ test("policy · {target} and {policy} are not conflated", async () => {
   const packDir = await pack();
   const targetDir = await governed();
   try {
-    const r = runOfficialEvaluator(packDir, targetDir);
+    const r = runOfficialEvaluator(packDir, { target: targetDir, governedRoot: targetDir });
     assert.equal(r.report.subject, targetDir);
     assert.notEqual(r.report.subject, r.report.usedPolicy, "the subject is not its own governing policy");
   } finally {
