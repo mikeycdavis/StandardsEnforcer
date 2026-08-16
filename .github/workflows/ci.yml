@@ -5,6 +5,19 @@ on:
     branches: [main]
   pull_request:
 
+# WHERE THE CHECK LIST LIVES. Not here. `ci/checks.sh` is the single authoritative definition of
+# what "CI passed" means for this repository, and this workflow calls it. The developer's
+# containerised pipeline (`scripts/ci.ps1`, `scripts/ci.sh`) calls the same file. Neither restates
+# the commands, so the two cannot drift into disagreeing about what was verified — which is the
+# usual fate of a repository that keeps its pipeline in YAML and its convenience script in bash.
+#
+# What still differs between the two, and is not pretended away:
+#
+#   isolation   here, the hosted runner. Locally, a network-isolated container built from
+#               `git archive` of the exact commit. The check list is identical; the boundary is not.
+#   the oracle  here, a network checkout of `vars.ENFORCER_ORACLE_REMOTE`. Locally, a read-only
+#               bind mount of a checkout already on disk. Same repository, obtained differently.
+#
 # This job asserts that the run exercised the authoritative integration surface. It did not before:
 # the oracle path was hardcoded to a workstation directory that cannot exist on a hosted runner, so
 # every identity, adoption, oracle, gate-root and scope-integration test skipped and `npm test`
@@ -43,10 +56,44 @@ jobs:
           fetch-depth: 0          # the suite resolves release tags, so the history must come too
           token: ${{ secrets.ENFORCER_ORACLE_TOKEN || github.token }}
 
-      # No install step. An install is a second thing that can differ between the machine
-      # that reviewed a release and the machine that runs it.
-      - name: Test
+      # No install step. An install is a second thing that can differ between the machine that
+      # reviewed a release and the machine that runs it — and ci/checks.sh now asserts that
+      # absence rather than leaving it as something nobody happened to add.
+      #
+      # Invoked through `bash` so the run does not depend on the executable bit surviving a
+      # checkout on every platform a contributor might commit from.
+      - name: Run the authoritative check list
         env:
           ENFORCER_REQUIRE_ORACLE: '1'
           ENFORCER_ORACLE_REPO: ${{ github.workspace }}/.oracle
-        run: npm test
+          CI_OUT_DIR: ${{ runner.temp }}/local-ci
+          CI_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+          CI_BRANCH: ${{ github.head_ref || github.ref_name }}
+          CI_REPOSITORY: ${{ github.repository }}
+          CI_SOURCE: commit
+        run: bash ci/checks.sh
+
+      - name: Upload the machine-readable result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-result
+          path: ${{ runner.temp }}/local-ci/latest.json
+          if-no-files-found: warn
+
+# OPTIONAL: A SELF-HOSTED RUNNER, LATER.
+#
+# Nothing above needs redesigning to add one. A self-hosted runner with Docker available runs the
+# *containerised* pipeline — the identical environment a developer verifies in — by calling the
+# same entry point:
+#
+#   check-containerised:
+#     runs-on: [self-hosted, docker]
+#     steps:
+#       - uses: actions/checkout@v4
+#         with: { fetch-depth: 0 }        # scripts/ci.sh archives the commit, so it needs history
+#       - run: ./scripts/ci.sh --oracle=/srv/oracles/MachineLearningStandards
+#
+# That is the whole change. It is not enabled here because this repository has no self-hosted
+# runner today, and a workflow targeting a runner nobody has is a job that queues forever —
+# indistinguishable, to a branch protection rule, from a check that is still running.

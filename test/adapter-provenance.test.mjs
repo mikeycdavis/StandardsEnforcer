@@ -315,6 +315,151 @@ test("7b · a symlinked entrypoint pointing outside the checkout does not execut
 });
 
 // ---------------------------------------------------------------------------
+// 7c–7g. The rest of the link surface.
+//
+// Case 7b above establishes that a symlinked entrypoint pointing outside must not execute. It was
+// the only link case, and for as long as it could only run where symlinks can be created, it was
+// also the only one nobody had ever seen run — it first executed under the containerised Linux
+// pipeline, and failed. See artifacts/evidence/2026-08-16-entrypoint-link-containment.md.
+//
+// These are the cases a fix for it can plausibly get wrong in each direction: refusing something
+// legitimate, or permitting an escape that does not look like 7b. A containment check that only
+// inspects the final path component passes 7b and fails 7e.
+// ---------------------------------------------------------------------------
+
+/** Build, commit and tag a pack whose `scripts/` contents the caller arranges. */
+async function packWithScripts(arrange, { declared = contract() } = {}) {
+  const dir = await mkdtemp(path.join(tmpdir(), "pack-links-"));
+  await writeFile(path.join(dir, "standards-adapter.json"), JSON.stringify(declared));
+  await arrange(dir);
+  git(["init", "-q", "-b", "main"], dir);
+  git(["config", "user.email", "t@example.com"], dir);
+  git(["config", "user.name", "t"], dir);
+  await commitAll(dir, "pack", "v1.0.0");
+  return { dir, tag: "v1.0.0", sha: git(["rev-list", "-n", "1", "v1.0.0"], dir) };
+}
+
+test("7c · an entrypoint physically inside the checkout still runs", async () => {
+  // The regression guard for 7b's fix. Containment that refuses everything is not containment, and
+  // the failure mode of a hastily tightened path check is that ordinary releases stop working —
+  // which then gets "fixed" by loosening it back past where it started.
+  const pack = await packWithScripts(async (dir) => {
+    await mkdir(path.join(dir, "scripts"), { recursive: true });
+    await writeFile(path.join(dir, "scripts", "standards.mjs"), evaluator("genuine", "REAL_PASS"));
+  });
+  const target = await governedTarget();
+  try {
+    const r = await run(pack, target);
+    assert.equal(r.state, STATE.EVALUATED);
+    assert.equal(r.report?.ranFrom, "genuine", "an ordinary in-checkout entrypoint must still execute");
+  } finally {
+    await rm(pack.dir, { recursive: true, force: true });
+    await rm(target, { recursive: true, force: true });
+  }
+});
+
+test("7d · a chain of links that stays inside the checkout runs", async (t) => {
+  // Containment is a property of where the path *lands*, not of how many hops it took. Refusing a
+  // link merely for being a link would be a different rule, and one real packs would trip over.
+  if (!symlinksAvailable()) {
+    t.skip("symlinks unavailable on this platform; case 7d was NOT exercised.");
+    return;
+  }
+  const pack = await packWithScripts(async (dir) => {
+    await mkdir(path.join(dir, "scripts"), { recursive: true });
+    await writeFile(path.join(dir, "scripts", "impl.mjs"), evaluator("genuine", "REAL_PASS"));
+    // Relative, so the chain survives being cloned into the cache under a different absolute path.
+    // An absolute link back to this fixture would resolve outside the materialised checkout and be
+    // refused — correctly, and for a different reason than the one under test here.
+    await symlink("impl.mjs", path.join(dir, "scripts", "hop.mjs"));
+    await symlink("hop.mjs", path.join(dir, "scripts", "standards.mjs"));
+  });
+  const target = await governedTarget();
+  try {
+    const r = await run(pack, target);
+    assert.equal(r.state, STATE.EVALUATED);
+    assert.equal(r.report?.ranFrom, "genuine", "a link chain landing inside the checkout must run");
+  } finally {
+    await rm(pack.dir, { recursive: true, force: true });
+    await rm(target, { recursive: true, force: true });
+  }
+});
+
+test("7e · a symlinked parent directory escapes just as effectively, and is refused", async (t) => {
+  // The case that separates "resolve the whole path" from "check the filename". Here every path
+  // component the contract names is ordinary; it is `scripts/` itself that leaves the checkout.
+  if (!symlinksAvailable()) {
+    t.skip("symlinks unavailable on this platform; case 7e was NOT exercised.");
+    return;
+  }
+  const outside = await mkdtemp(path.join(tmpdir(), "outside-dir-"));
+  const target = await governedTarget();
+  let pack;
+  try {
+    await writeFile(path.join(outside, "standards.mjs"), evaluator("outside", "REAL_PASS"));
+    pack = await packWithScripts(async (dir) => {
+      await symlink(outside, path.join(dir, "scripts"), "dir");
+    });
+
+    const r = await run(pack, target);
+    assert.notEqual(r.report?.ranFrom, "outside", "bytes from outside the verified checkout executed");
+    assert.equal(r.state, STATE.ENFORCEMENT_ERROR, "an escape must be an enforcement error, not a verdict");
+    assert.equal(r.passing, false);
+  } finally {
+    if (pack) await rm(pack.dir, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+    await rm(target, { recursive: true, force: true });
+  }
+});
+
+test("7f · a link that does not resolve is refused explicitly, not treated as absence", async (t) => {
+  // Where it would have pointed is unknown. INV-E1 does not permit an unknown enforcement condition
+  // to become an acceptable one, and the two conditions send an operator to different fixes: a
+  // missing file is a packaging mistake, a dangling link is a release that cannot be trusted to
+  // name its own evaluator.
+  if (!symlinksAvailable()) {
+    t.skip("symlinks unavailable on this platform; case 7f was NOT exercised.");
+    return;
+  }
+  const pack = await packWithScripts(async (dir) => {
+    await mkdir(path.join(dir, "scripts"), { recursive: true });
+    await symlink("nowhere.mjs", path.join(dir, "scripts", "standards.mjs"));
+  });
+  const target = await governedTarget();
+  try {
+    const r = await run(pack, target);
+    assert.equal(r.state, STATE.ENFORCEMENT_ERROR);
+    assert.equal(r.passing, false);
+    assert.match(
+      String(r.detail),
+      /does not resolve/,
+      "the refusal must name the unresolved link rather than report the file as missing",
+    );
+  } finally {
+    await rm(pack.dir, { recursive: true, force: true });
+    await rm(target, { recursive: true, force: true });
+  }
+});
+
+test("7g · an entrypoint that is simply absent still reports as absent", async () => {
+  // The other side of 7f. Adding link handling must not reclassify an ordinary missing file, or the
+  // message an operator gets stops matching what they have to fix.
+  const pack = await packWithScripts(async (dir) => {
+    await mkdir(path.join(dir, "scripts"), { recursive: true });
+    await writeFile(path.join(dir, "scripts", "something-else.mjs"), evaluator("genuine", "REAL_PASS"));
+  });
+  const target = await governedTarget();
+  try {
+    const r = await run(pack, target);
+    assert.equal(r.state, STATE.ENFORCEMENT_ERROR);
+    assert.match(String(r.detail), /not in the pinned release/);
+  } finally {
+    await rm(pack.dir, { recursive: true, force: true });
+    await rm(target, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // 8–9. The cache is keyed by identity, and holds what the identity contained.
 // ---------------------------------------------------------------------------
 

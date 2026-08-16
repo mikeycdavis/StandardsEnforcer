@@ -1,1 +1,7 @@
 node_modules/
+
+# Local CI verification results. Transient evidence about one run on one machine, rewritten by
+# every run — deliberately not committed. `artifacts/evidence/` is this repository's intentional,
+# reviewed evidence-retention surface; this is not that, and conflating the two would let a
+# machine-generated file inherit the standing of a human-recorded one.
+artifacts/local-ci/
