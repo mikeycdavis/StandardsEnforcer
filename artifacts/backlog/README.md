@@ -13,10 +13,10 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 [`items/`](./items/); its YAML frontmatter is the source of truth, and the figures on this page are
 derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/backlog.mjs).
 
-**15 of 23 leaf items complete — 65%**
+**16 of 24 leaf items complete — 67%**
 
 ```
-██████████████████████████░░░░░░░░░░░░░░  65%
+███████████████████████████░░░░░░░░░░░░░  67%
 ```
 
 ## Status
@@ -26,8 +26,8 @@ derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/
 | ○ Not started | 6 |
 | ◑ In progress | 7 |
 | ◒ Blocked | 2 |
-| ● Complete | 17 |
-| **Total** | **32** |
+| ● Complete | 18 |
+| **Total** | **33** |
 
 ## The hierarchy
 
@@ -36,7 +36,7 @@ derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/
 | Theme | `TH-` | 1 | Which enduring area of value is this? |
 | Initiative | `IN-` | 1 | What outcome are we pursuing there? |
 | Epic | `EP-` | 6 | What large body of work delivers it? |
-| Feature | `FE-` | 14 | What shippable slice of that epic? |
+| Feature | `FE-` | 15 | What shippable slice of that epic? |
 | Story | `ST-` | 10 | What user-visible change, roughly one PR? |
 | Task | `TA-` | 0 | What technical step inside a story? |
 
@@ -44,7 +44,7 @@ derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/
 
 | Theme | Progress | Done | Remaining |
 | --- | --- | ---: | ---: |
-| [TH-01 Enforced standards compliance across the portfolio](./items/TH-01.md) | `█████████░░░░░` 65% | 15 | 8 |
+| [TH-01 Enforced standards compliance across the portfolio](./items/TH-01.md) | `█████████░░░░░` 67% | 16 | 8 |
 
 ## In flight
 
@@ -64,8 +64,8 @@ _Nothing marked ready._
 
 ## Everything
 
-- ◑ **[TH-01](./items/TH-01.md)** Enforced standards compliance across the portfolio _(15/23)_
-  - ◑ **[IN-01](./items/IN-01.md)** Enforcement a governed repository cannot weaken _(15/23)_
+- ◑ **[TH-01](./items/TH-01.md)** Enforced standards compliance across the portfolio _(16/24)_
+  - ◑ **[IN-01](./items/IN-01.md)** Enforcement a governed repository cannot weaken _(16/24)_
     - ● **[EP-01](./items/EP-01.md)** Authority transport — run a pack's own evaluator under a pinned identity _(8/8)_
       - ● **[FE-01](./items/FE-01.md)** M1 — run the official standards implementation and report what it said
       - ● **[FE-02](./items/FE-02.md)** M2 — contract-driven authority transport _(5/5)_
@@ -82,8 +82,9 @@ _Nothing marked ready._
         - ● **[ST-06](./items/ST-06.md)** Establish live whether an Actions-bound required check is spoofable
         - ◒ **[ST-07](./items/ST-07.md)** Validate the required-workflows remedy against a real organisation ruleset
     - ● **[EP-03](./items/EP-03.md)** Scope — whether a standard governs a repository is a recorded decision
-    - ◑ **[EP-04](./items/EP-04.md)** The enforcer's own release lineage _(1/1)_
+    - ◑ **[EP-04](./items/EP-04.md)** The enforcer's own release lineage _(2/2)_
       - ● **[FE-06](./items/FE-06.md)** Decide which line becomes authoritative, and then the disposition of main
+      - ● **[FE-17](./items/FE-17.md)** The front door advertises a state model the code removed
     - ○ **[EP-05](./items/EP-05.md)** Reach beyond one repository, one platform, one standard _(1/6)_
       - ○ **[FE-07](./items/FE-07.md)** Repository discovery across an organisation
       - ○ **[FE-08](./items/FE-08.md)** A second platform adapter

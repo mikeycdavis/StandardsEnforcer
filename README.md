@@ -49,13 +49,17 @@ falls to a non-zero exit, and a test walks the whole vocabulary asserting it.
 
 ## States
 
+**Every state here is about enforcement. None of them is a standards verdict**, and that is the whole
+point of the 0.4.0 rewrite. Until 0.3.0 this table listed five pack-native statuses — `COMPLIANT`,
+`COMPLIANT_WITH_EXCEPTIONS`, `NON_COMPLIANT`, `NOT_EVALUATED`, `BLOCKED_BY_INVARIANT` — as enforcer
+states, and mapped them to exit codes. [ADR 0001](artifacts/adr/0001-orchestrate-do-not-reimplement.md)
+does not merely say those strings should come from somewhere else; it says the enforcer must not know
+what a pack's verdict **means**. Mapping `NOT_EVALUATED` to `2` kept exactly that meaning in encoded
+form, so the semantics had to go, not just the strings.
+
 | State | Meaning | Exit |
 | --- | --- | --- |
-| `COMPLIANT` | The standards accepted the repository | `0` |
-| `COMPLIANT_WITH_EXCEPTIONS` | Accepted, with approved and current waivers | `0` |
-| `NON_COMPLIANT` | The standards rejected it | `1` |
-| `NOT_EVALUATED` | The standards reached no verdict | `2` |
-| `BLOCKED_BY_INVARIANT` | The standards system declared itself untrustworthy here | `3` |
+| `EVALUATED` | An authority was identified, invoked, and returned a status **its own contract declares**. Says nothing about what was said. | `0` or `1` — see below |
 | `OUT_OF_SCOPE` | An authorised reviewer recorded that these standards do not govern this repository | `0` |
 | `NOT_ADOPTED` | No standards version governs this repository — blocking once scope confirms it does | `4` |
 | `SCOPE_REVIEW_REQUIRED` | The scope disposition is absent, unauthorised, or no longer matches the evidence | `4` |
@@ -64,11 +68,28 @@ falls to a non-zero exit, and a test walks the whole vocabulary asserting it.
 | `GATE_CONFIG_INVALID` | Something requires it, in a way the pull request could satisfy for itself | `4` |
 | `BYPASS_USED` | An authorised bypass was used; an event, never a verdict | `4` |
 | `STANDARDS_IDENTITY_MISMATCH` | The declared release does not resolve to the declared commit | `4` |
-| `ENFORCEMENT_ERROR` | Enforcement could not be carried out | `2` |
+| `ENFORCEMENT_ERROR` | Enforcement could not be carried out | `4` |
 
-The first five are verdicts, passed through **with the standards system's own exit codes,
-unchanged**. The rest are states about enforcement, and `4` is a code MachineLearningStandards never
-returns — so a caller can tell *the standards said no* from *enforcement could not be established*.
+Whether a merge may proceed rides **beside** `EVALUATED` as `passing`, decided by the pack's own
+declared set — never by this repository recognising a word. The process projection is three codes:
+
+```text
+0   the authority spoke and established passing
+1   the authority spoke and did not establish passing
+4   the authority could not be established, heard, or trusted
+```
+
+`1` reads as *"an authoritative evaluation completed and did not establish passing"*, **not** as
+"non-compliant". A pack's `NOT_EVALUATED` lands there without this enforcer claiming it means failure
+— only that the pack did not put it in its passing set.
+
+**What is lost, said plainly:** a caller reading only the exit code can no longer tell "the standards
+said no" from "the standards reached no conclusion". That distinction was never the enforcer's to
+draw, and it survives verbatim in the payload under `authority.status`. Only the lossy projection
+changed. `4` remains a code MachineLearningStandards never returns.
+
+This table is not maintained by hand alone: `test/front-door.test.mjs` derives the state names and
+their exit codes from [`scripts/states.mjs`](scripts/states.mjs) and fails when this page disagrees.
 
 `OUT_OF_SCOPE` is the one non-verdict a merge may proceed on, and it is bounded rather than trusted:
 it is producible only alongside a named authorised reviewer, a date and a reason, `result()` demotes
@@ -160,12 +181,20 @@ scripts/footprint.mjs   ML evidence detection. Deliberately incapable of decidin
 scripts/platform/       adapters. GitHub today; the boundary exists for the next one
 scripts/states.mjs      the state vocabulary, the exit contract, and INV-E1
 test/                   the invariant, identity, adoption, the oracle, the gate, and scope
+test-support/           helpers node --test must NOT collect: the oracle resolver, the symlink
+                        capability probe, and the single-materialisation runner the concurrency
+                        arms drive. A file under test/ with no tests in it counts as a passing
+                        test, which is how a vacuous green got into a count here once
 ci/checks.sh            the authoritative CI check list; local Docker and GitHub both run it
 ci/verify.mjs           the submission gate: does this evidence authorise pushing this commit?
 scripts/ci.*            run the complete pipeline locally, in Docker
 scripts/submit-pr.*     verify, then push exactly the verified commit, then open the PR
 artifacts/adr/          decisions
+artifacts/plan/         the live forward-looking plan; see AGENTS.md §5
 artifacts/evidence/     what was actually run, and what it produced
+artifacts/backlog/      tracked work. README.md there is written by hand and CHECKED against
+                        items/ by scripts/backlog.mjs — it is not generated, and it no longer
+                        claims to be
 ```
 
 ## Local CI
