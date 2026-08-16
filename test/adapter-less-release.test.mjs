@@ -33,14 +33,14 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile, readdir } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { enforce, runOfficialEvaluator, loadAdapter } from "../scripts/enforce.mjs";
 import { STATE, exitFor, EXIT } from "../scripts/states.mjs";
-import { resolveIdentity } from "../scripts/identity.mjs";
+import { resolveIdentity, checkoutIsExactly } from "../scripts/identity.mjs";
 import { oracleAt } from "../test-support/oracle.mjs";
 
 /**
@@ -123,18 +123,45 @@ test("adapter-less · a governed target under this release is ENFORCEMENT_ERROR,
 
 // --- The frozen authority is not touched --------------------------------------------------------
 
+/**
+ * WHY THIS COMPARES THE CHECKOUT AND NOT A LIST OF NAMES.
+ *
+ * This guard used to snapshot `readdir(id.dir)` before and after and compare the sorted names. That
+ * is a strictly weaker claim than the one in the test's title, and the gap was not theoretical: with
+ * the name list as the only comparison, editing the bytes of an existing file left the guard green,
+ * and so did planting a new file beneath an existing directory. Only a NEW TOP-LEVEL entry was ever
+ * detectable, which meant the single defect the guard actually caught was the one the second
+ * assertion already named explicitly.
+ *
+ * `checkoutIsExactly` is the right instrument rather than a hand-rolled recursive digest, because it
+ * is the same primitive `materialise` uses to decide whether a cached checkout may be executed at
+ * all. Asserting it here means this test's guarantee IS the production guarantee — HEAD is the
+ * commit, and the working tree matches that commit — rather than a second, parallel definition of
+ * "unchanged" that could drift away from the one the enforcer actually relies on.
+ *
+ * ITS ONE RESIDUAL BLIND SPOT, NAMED RATHER THAN LEFT TO BE DISCOVERED. `git status --porcelain`
+ * honours `.gitignore`, so a file written to an ignored path inside the release would not appear.
+ * In the pinned oracle those paths are `artifacts/local-ci/` and `node_modules/`. Closing that would
+ * mean changing `checkoutIsExactly` itself — a change to production identity verification, not to a
+ * test — and this suite is not the place to decide it unilaterally.
+ */
 test("adapter-less · the frozen release is not mutated by being enforced against", NEEDS_ORACLE, async () => {
   const id = resolveIdentity({ repo: MLS, tag: TAG, sha: SHA, cacheRoot: CACHE });
-  const before = (await readdir(id.dir)).sort();
+
+  // Anti-vacuity. If the checkout were already dirty on the way in, "still dirty on the way out"
+  // would prove nothing about what enforcement did, and the assertion below would be measuring a
+  // pre-existing condition rather than this run.
+  const start = checkoutIsExactly(id.dir, SHA);
+  assert.equal(start.ok, true, `the release must be pristine before enforcement: ${start.why}`);
 
   await scratch(async (dir) => {
     await writeFile(path.join(dir, "train.py"), "import sklearn\n");
     await enforce({ target: dir, standardsRepo: MLS, tag: TAG, sha: SHA, cacheRoot: CACHE });
   });
 
-  const after = (await readdir(id.dir)).sort();
-  assert.deepEqual(after, before,
-    "the enforcer must not repair a frozen release by writing the contract it lacks");
+  const end = checkoutIsExactly(id.dir, SHA);
+  assert.equal(end.ok, true,
+    `the enforcer must not modify the frozen release it executes: ${end.why}`);
   assert.equal(existsSync(path.join(id.dir, "standards-adapter.json")), false,
     "the missing contract must still be missing — a repaired fixture is no longer the fixture");
 });
