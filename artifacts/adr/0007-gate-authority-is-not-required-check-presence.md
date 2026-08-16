@@ -1,4 +1,4 @@
-# ADR 0006 — Gate authority is not established by required-check presence
+# ADR 0007 — Gate authority is not established by required-check presence
 
 **Status:** accepted, 2026-08-16
 **Context:** EP-02 amendment. Reconciles [ADR 0003](0003-the-enforcement-root.md) with the M4 live
@@ -8,6 +8,17 @@ appeared — UIUXDesignStandards at `54352e9`.
 > **A governance observation that establishes a required check by context name does not establish the
 > authority that produced that check. `SATISFIED` for required-check presence is necessary but
 > insufficient evidence for a rooted enforcement gate.**
+
+## Numbering
+
+This is `0007`, not `0006`. It was drafted as `0006` on this branch while `0006` was already taken on
+`main` by the cache-concurrency decision
+([`0006-the-cache-is-shared-and-coordination-is-not-authority.md`](0006-the-cache-is-shared-and-coordination-is-not-authority.md),
+accepted 2026-08-12), which `FE-15` and the FE-15 concurrency evidence both cite by number. Renumbered
+before this branch was ever pushed, so no reference to it as `0006` exists anywhere outside its own
+draft. ADR 0005 records the same collision between the scope and provenance lineages; this is the third
+occurrence, and it is a branch-shaped hazard rather than an accident — a lineage that reads the ADR
+directory on its own branch sees a free number that `main` has already spent.
 
 ## Context
 

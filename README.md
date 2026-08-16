@@ -190,6 +190,7 @@ See [docs/local-ci.md](docs/local-ci.md).
 - [0004](artifacts/adr/0004-scope-is-a-recorded-decision.md) — scope is a recorded decision, not a detection
 - [0005](artifacts/adr/0005-adapter-provenance.md) — the adapter is read from the identity-verified release, and nowhere else
 - [0006](artifacts/adr/0006-the-cache-is-shared-and-coordination-is-not-authority.md) — the cache is shared on purpose; coordination decides who may write, verification decides what may run
+- [0007](artifacts/adr/0007-gate-authority-is-not-required-check-presence.md) — a required check by name is necessary but insufficient evidence of a rooted gate; authority must be observed, never inferred
 
 ## Evidence
 
