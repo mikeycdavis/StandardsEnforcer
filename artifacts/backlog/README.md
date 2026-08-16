@@ -13,10 +13,10 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 [`items/`](./items/); its YAML frontmatter is the source of truth, and the figures on this page are
 derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/backlog.mjs).
 
-**14 of 23 leaf items complete — 61%**
+**15 of 23 leaf items complete — 65%**
 
 ```
-████████████████████████░░░░░░░░░░░░░░░░  61%
+██████████████████████████░░░░░░░░░░░░░░  65%
 ```
 
 ## Status
@@ -24,9 +24,9 @@ derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/
 | Status | Items |
 | --- | ---: |
 | ○ Not started | 6 |
-| ◑ In progress | 8 |
+| ◑ In progress | 7 |
 | ◒ Blocked | 2 |
-| ● Complete | 16 |
+| ● Complete | 17 |
 | **Total** | **32** |
 
 ## The hierarchy
@@ -44,7 +44,7 @@ derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/
 
 | Theme | Progress | Done | Remaining |
 | --- | --- | ---: | ---: |
-| [TH-01 Enforced standards compliance across the portfolio](./items/TH-01.md) | `█████████░░░░░` 61% | 14 | 9 |
+| [TH-01 Enforced standards compliance across the portfolio](./items/TH-01.md) | `█████████░░░░░` 65% | 15 | 8 |
 
 ## In flight
 
@@ -52,7 +52,6 @@ derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/
 - ◑ [EP-04](./items/EP-04.md) — The enforcer's own release lineage
 - ◑ [EP-06](./items/EP-06.md) — Self-assurance — this repository's own evidence must establish what it reports
 - ◑ [FE-04](./items/FE-04.md) — M4 — the enforcement root against live GitHub
-- ◑ [FE-06](./items/FE-06.md) — Decide which line becomes authoritative, and then the disposition of main
 - ◒ [FE-09](./items/FE-09.md) — Make BYPASS_USED reachable
 - ◑ [FE-14](./items/FE-14.md) — A skipped oracle is not a passing integration
 - ◑ [IN-01](./items/IN-01.md) — Enforcement a governed repository cannot weaken
@@ -65,8 +64,8 @@ _Nothing marked ready._
 
 ## Everything
 
-- ◑ **[TH-01](./items/TH-01.md)** Enforced standards compliance across the portfolio _(14/23)_
-  - ◑ **[IN-01](./items/IN-01.md)** Enforcement a governed repository cannot weaken _(14/23)_
+- ◑ **[TH-01](./items/TH-01.md)** Enforced standards compliance across the portfolio _(15/23)_
+  - ◑ **[IN-01](./items/IN-01.md)** Enforcement a governed repository cannot weaken _(15/23)_
     - ● **[EP-01](./items/EP-01.md)** Authority transport — run a pack's own evaluator under a pinned identity _(8/8)_
       - ● **[FE-01](./items/FE-01.md)** M1 — run the official standards implementation and report what it said
       - ● **[FE-02](./items/FE-02.md)** M2 — contract-driven authority transport _(5/5)_
@@ -83,8 +82,8 @@ _Nothing marked ready._
         - ● **[ST-06](./items/ST-06.md)** Establish live whether an Actions-bound required check is spoofable
         - ◒ **[ST-07](./items/ST-07.md)** Validate the required-workflows remedy against a real organisation ruleset
     - ● **[EP-03](./items/EP-03.md)** Scope — whether a standard governs a repository is a recorded decision
-    - ◑ **[EP-04](./items/EP-04.md)** The enforcer's own release lineage _(0/1)_
-      - ◑ **[FE-06](./items/FE-06.md)** Decide which line becomes authoritative, and then the disposition of main
+    - ◑ **[EP-04](./items/EP-04.md)** The enforcer's own release lineage _(1/1)_
+      - ● **[FE-06](./items/FE-06.md)** Decide which line becomes authoritative, and then the disposition of main
     - ○ **[EP-05](./items/EP-05.md)** Reach beyond one repository, one platform, one standard _(1/6)_
       - ○ **[FE-07](./items/FE-07.md)** Repository discovery across an organisation
       - ○ **[FE-08](./items/FE-08.md)** A second platform adapter
