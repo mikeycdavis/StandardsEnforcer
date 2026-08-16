@@ -160,9 +160,27 @@ scripts/footprint.mjs   ML evidence detection. Deliberately incapable of decidin
 scripts/platform/       adapters. GitHub today; the boundary exists for the next one
 scripts/states.mjs      the state vocabulary, the exit contract, and INV-E1
 test/                   the invariant, identity, adoption, the oracle, the gate, and scope
+ci/checks.sh            the authoritative CI check list; local Docker and GitHub both run it
+ci/verify.mjs           the submission gate: does this evidence authorise pushing this commit?
+scripts/ci.*            run the complete pipeline locally, in Docker
+scripts/submit-pr.*     verify, then push exactly the verified commit, then open the PR
 artifacts/adr/          decisions
 artifacts/evidence/     what was actually run, and what it produced
 ```
+
+## Local CI
+
+The complete pipeline runs in Docker before anything is pushed, and a pull request may only be
+submitted if the exact commit SHA being pushed passed it:
+
+```
+.\scripts\ci.ps1          # or ./scripts/ci.sh — run the checks, change nothing
+.\scripts\submit-pr.ps1   # or ./scripts/submit-pr.sh — verify, push that SHA, open the PR
+```
+
+GitHub remains source control, pull requests and review. GitHub-hosted Actions are not required to
+establish that a branch passes, and a local result is never reported as a GitHub Actions result.
+See [docs/local-ci.md](docs/local-ci.md).
 
 ## Decisions
 

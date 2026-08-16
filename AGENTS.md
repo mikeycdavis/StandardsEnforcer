@@ -83,10 +83,18 @@ substitute for reading the standards it points at.
 | --- | --- |
 | Standards repository | `<path or URL>` |
 | Working branch | `<branch>` |
-| Install | `<command>` |
-| Build | `<command>` |
-| Test | `<command>` |
+| Install | **none — this repository has no dependencies, and `ci/checks.sh` asserts it** |
+| Build | none — plain ESM, run directly by Node |
+| Test | `npm test` (add `ENFORCER_REQUIRE_ORACLE=1` and `ENFORCER_ORACLE_REPO=<checkout>` to run the authoritative integration surface) |
+| Full CI | `.\scripts\ci.ps1` / `./scripts/ci.sh` — the complete pipeline, in Docker |
+| Submit a PR | `.\scripts\submit-pr.ps1` / `./scripts/submit-pr.sh` — verified against the exact commit |
 | Validate standards | `<command>` |
+
+**Local CI is the authoritative gate before a push.** The check list lives in `ci/checks.sh` and
+nowhere else; `.github/workflows/ci.yml` runs that same file. If you change what CI does, change it
+there — never in one of the two callers, which is how the definitions come apart. A pull request may
+only be submitted if the exact commit SHA being pushed passed the pipeline. See
+[docs/local-ci.md](docs/local-ci.md).
 
 **Do not touch:** `<generated files, vendored code, anything an agent must leave alone>`
 
