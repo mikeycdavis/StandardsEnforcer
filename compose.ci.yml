@@ -53,6 +53,12 @@ services:
     environment:
       ENFORCER_REQUIRE_ORACLE: "1"
       ENFORCER_ORACLE_REPO: /oracle
+      # This environment claims it can create symlinks, and therefore that the ADR 0005
+      # link-containment cases actually ran here. Container CI is where they first ran at all — and
+      # where they first failed. A rootless runtime, a hardened daemon or a filesystem without
+      # symlink support would silently return all four to skipping; under this flag it goes red
+      # instead. See test-support/capabilities.mjs and ST-08.
+      ENFORCER_REQUIRE_SYMLINKS: "1"
       CI_OUT_DIR: /out
       CI_COMMIT: ${CI_COMMIT:?set by scripts/ci.*}
       CI_BRANCH: ${CI_BRANCH:?set by scripts/ci.*}

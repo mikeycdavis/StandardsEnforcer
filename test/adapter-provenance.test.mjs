@@ -18,12 +18,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import fs from "node:fs";
 import { mkdtemp, writeFile, mkdir, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { enforce } from "../scripts/enforce.mjs";
 import { STATE } from "../scripts/states.mjs";
+import { symlinkSkip } from "../test-support/capabilities.mjs";
 
 const CACHE = path.join(tmpdir(), "enforcer-provenance-cache");
 
@@ -74,26 +74,12 @@ async function governedTarget(extra = async () => {}) {
 const run = (pack, target, over = {}) =>
   enforce({ target, standardsRepo: pack.dir, tag: pack.tag, sha: pack.sha, cacheRoot: CACHE, ...over });
 
-/**
- * Can this platform create a symlink at all?
- *
- * Probed against a throwaway file rather than inferred from `process.platform`, because the answer
- * depends on privilege and developer mode rather than on the OS name — Windows can do it, given
- * either. Kept separate from the fixture so that "the platform cannot" and "the fixture broke" are
- * distinguishable, and only the first is allowed to skip.
- */
-function symlinksAvailable() {
-  const probe = fs.mkdtempSync(path.join(tmpdir(), "symlink-probe-"));
-  try {
-    fs.writeFileSync(path.join(probe, "a"), "x");
-    fs.symlinkSync(path.join(probe, "a"), path.join(probe, "b"));
-    return true;
-  } catch {
-    return false;
-  } finally {
-    fs.rmSync(probe, { recursive: true, force: true });
-  }
-}
+// The symlink capability probe and its skip wording moved to test-support/capabilities.mjs (ST-08).
+// Four cases below shared one local copy of each; they now share one module, and the same probe
+// answers the requirement guard in test/capability-required.test.mjs. Under
+// ENFORCER_REQUIRE_SYMLINKS=1 an environment that cannot create symlinks fails that guard rather
+// than skipping these four quietly — which is what a run claiming to have exercised link
+// containment must do.
 
 async function withPackAndTarget(fn, targetExtra) {
   const pack = await genuinePack();
@@ -286,11 +272,9 @@ test("7b · a symlinked entrypoint pointing outside the checkout does not execut
     // A platform that cannot create symlinks at all leaves this case unverified, and says so. A
     // platform that CAN, but where this fixture then fails, is a broken test and must go red — a
     // skip there would let a real regression hide behind a permission story.
-    if (!symlinksAvailable()) {
-      t.skip(
-        "symlinks unavailable on this platform; case 7b was NOT exercised. " +
-          "Run this suite where symlinks can be created before treating symlink escape as established.",
-      );
+    const unexercised = symlinkSkip("7b");
+    if (unexercised) {
+      t.skip(unexercised);
       return;
     }
     await symlink(path.join(outside, "evil.mjs"), path.join(dir, "scripts", "standards.mjs"));
@@ -361,8 +345,9 @@ test("7c · an entrypoint physically inside the checkout still runs", async () =
 test("7d · a chain of links that stays inside the checkout runs", async (t) => {
   // Containment is a property of where the path *lands*, not of how many hops it took. Refusing a
   // link merely for being a link would be a different rule, and one real packs would trip over.
-  if (!symlinksAvailable()) {
-    t.skip("symlinks unavailable on this platform; case 7d was NOT exercised.");
+  const unexercised = symlinkSkip("7d");
+  if (unexercised) {
+    t.skip(unexercised);
     return;
   }
   const pack = await packWithScripts(async (dir) => {
@@ -388,8 +373,9 @@ test("7d · a chain of links that stays inside the checkout runs", async (t) => 
 test("7e · a symlinked parent directory escapes just as effectively, and is refused", async (t) => {
   // The case that separates "resolve the whole path" from "check the filename". Here every path
   // component the contract names is ordinary; it is `scripts/` itself that leaves the checkout.
-  if (!symlinksAvailable()) {
-    t.skip("symlinks unavailable on this platform; case 7e was NOT exercised.");
+  const unexercised = symlinkSkip("7e");
+  if (unexercised) {
+    t.skip(unexercised);
     return;
   }
   const outside = await mkdtemp(path.join(tmpdir(), "outside-dir-"));
@@ -417,8 +403,9 @@ test("7f · a link that does not resolve is refused explicitly, not treated as a
   // to become an acceptable one, and the two conditions send an operator to different fixes: a
   // missing file is a packaging mistake, a dangling link is a release that cannot be trusted to
   // name its own evaluator.
-  if (!symlinksAvailable()) {
-    t.skip("symlinks unavailable on this platform; case 7f was NOT exercised.");
+  const unexercised = symlinkSkip("7f");
+  if (unexercised) {
+    t.skip(unexercised);
     return;
   }
   const pack = await packWithScripts(async (dir) => {

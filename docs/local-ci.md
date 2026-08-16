@@ -84,7 +84,15 @@ GitHub workflow run that file, so they cannot drift into disagreeing about what 
 | `environment` | Records the Node, npm, git and user identity that produced the result. Not a gate — the evidence that makes the rest legible. |
 | `no-install-invariant` | `package.json` declares no dependencies and no `node_modules/` is present. This repository has no install step *by decision* ("an install is a second thing that can differ between the machine that reviewed a release and the machine that runs it"), and a decision nothing checks is a decision that decays. |
 | `oracle-readiness` | The mounted oracle is a git repository and resolves every release the suite pins, each via `rev-list -n 1` so an annotated tag dereferences to its commit. This is the dependency health check — a real resolution, never a sleep. |
-| `test-suite` | `npm test` verbatim, with `ENFORCER_REQUIRE_ORACLE=1`. The repository's own authoritative command, not a reconstruction of it. |
+| `test-suite` | `npm test` verbatim, with `ENFORCER_REQUIRE_ORACLE=1` and `ENFORCER_REQUIRE_SYMLINKS=1`. The repository's own authoritative command, not a reconstruction of it. |
+
+Both `ENFORCER_REQUIRE_*` flags are claims this environment makes about itself, and each is checked
+by a named test rather than by a count. `ENFORCER_REQUIRE_ORACLE=1` says the run exercised the
+authoritative integration surface; `ENFORCER_REQUIRE_SYMLINKS=1` says it exercised the ADR 0005
+link-containment cases rather than skipping them for want of privilege. The second exists because
+those cases first ran in this container — and failed. A capability that four provenance controls
+depend on, and which nothing asserts, is a green pipeline waiting for a rootless runtime. See
+`test-support/capabilities.mjs`.
 
 ### Checks this repository does not have
 
