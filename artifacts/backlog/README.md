@@ -13,21 +13,21 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 [`items/`](./items/); its YAML frontmatter is the source of truth, and the figures on this page are
 derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/backlog.mjs).
 
-**16 of 24 leaf items complete — 67%**
+**16 of 25 leaf items complete — 64%**
 
 ```
-███████████████████████████░░░░░░░░░░░░░  67%
+██████████████████████████░░░░░░░░░░░░░░  64%
 ```
 
 ## Status
 
 | Status | Items |
 | --- | ---: |
-| ○ Not started | 6 |
+| ○ Not started | 7 |
 | ◑ In progress | 7 |
 | ◒ Blocked | 2 |
 | ● Complete | 18 |
-| **Total** | **33** |
+| **Total** | **34** |
 
 ## The hierarchy
 
@@ -36,7 +36,7 @@ derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/
 | Theme | `TH-` | 1 | Which enduring area of value is this? |
 | Initiative | `IN-` | 1 | What outcome are we pursuing there? |
 | Epic | `EP-` | 6 | What large body of work delivers it? |
-| Feature | `FE-` | 15 | What shippable slice of that epic? |
+| Feature | `FE-` | 16 | What shippable slice of that epic? |
 | Story | `ST-` | 10 | What user-visible change, roughly one PR? |
 | Task | `TA-` | 0 | What technical step inside a story? |
 
@@ -44,7 +44,7 @@ derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/
 
 | Theme | Progress | Done | Remaining |
 | --- | --- | ---: | ---: |
-| [TH-01 Enforced standards compliance across the portfolio](./items/TH-01.md) | `█████████░░░░░` 67% | 16 | 8 |
+| [TH-01 Enforced standards compliance across the portfolio](./items/TH-01.md) | `█████████░░░░░` 64% | 16 | 9 |
 
 ## In flight
 
@@ -64,9 +64,9 @@ _Nothing marked ready._
 
 ## Everything
 
-- ◑ **[TH-01](./items/TH-01.md)** Enforced standards compliance across the portfolio _(16/24)_
-  - ◑ **[IN-01](./items/IN-01.md)** Enforcement a governed repository cannot weaken _(16/24)_
-    - ● **[EP-01](./items/EP-01.md)** Authority transport — run a pack's own evaluator under a pinned identity _(8/8)_
+- ◑ **[TH-01](./items/TH-01.md)** Enforced standards compliance across the portfolio _(16/25)_
+  - ◑ **[IN-01](./items/IN-01.md)** Enforcement a governed repository cannot weaken _(16/25)_
+    - ● **[EP-01](./items/EP-01.md)** Authority transport — run a pack's own evaluator under a pinned identity _(8/9)_
       - ● **[FE-01](./items/FE-01.md)** M1 — run the official standards implementation and report what it said
       - ● **[FE-02](./items/FE-02.md)** M2 — contract-driven authority transport _(5/5)_
         - ● **[ST-01](./items/ST-01.md)** M2 Phase 0 — what the eight released interfaces actually are
@@ -76,6 +76,7 @@ _Nothing marked ready._
         - ● **[ST-05](./items/ST-05.md)** Adapter provenance bound to the verified release
       - ● **[FE-13](./items/FE-13.md)** A cache marker is not proof of current identity
       - ● **[FE-15](./items/FE-15.md)** Concurrent processes share a mutable cache root
+      - ○ **[FE-21](./items/FE-21.md)** A policy the authority admits is a policy this enforcer must find
     - ◑ **[EP-02](./items/EP-02.md)** The enforcement root — a gate the governed pull request cannot satisfy _(2/3)_
       - ● **[FE-03](./items/FE-03.md)** M2 — a gate is a required check, not a file
       - ◑ **[FE-04](./items/FE-04.md)** M4 — the enforcement root against live GitHub _(1/2)_
