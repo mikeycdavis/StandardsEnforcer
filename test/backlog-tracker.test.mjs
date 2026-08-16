@@ -188,19 +188,29 @@ test("mutation · the in-flight set is caught even when every status count is un
   }
 });
 
-test("mutation · reopening EP-01 moves the parent reporting and leaves leaf completion alone", () => {
-  // The transition the tracker has actually seen. EP-01 was closed by owner disposition rather than
-  // by its children, so undoing that closure must change its glyph, the status counts and the
-  // in-flight set — and must NOT change 12/23, because EP-01 is not a leaf. This is the pair of
-  // properties that made the closure legible in the first place; if the checker cannot tell them
-  // apart it cannot police the next one.
+test("mutation · reopening a closed epic moves the parent reporting and leaves leaf completion alone", () => {
+  // The transition the tracker has actually seen, twice. A closed epic reopened by owner disposition
+  // rather than by its children must change its glyph, the status counts and the in-flight set — and
+  // must NOT change leaf completion, because an epic is not a leaf. This is the pair of properties
+  // that made those closures legible; if the checker cannot tell them apart it cannot police the next.
+  //
+  // RE-POINTED from EP-01 to FE-02 on 2026-08-16, because EP-01 was reopened for real (FE-21:
+  // authority withheld before the evaluator is invoked). The specimen has to be an item that is
+  // actually closed, or the mutation is a no-op and this test passes while asserting nothing — the
+  // same rot ST-08's closure exposed in four mutations here.
+  //
+  // FE-02 rather than another epic, and the reason is the property under test. EP-03 is closed but
+  // has no children, so reopening it DOES move leaf completion and would falsify the second half of
+  // this test for the right reason. Of the closed items with children, FE-02 is one; "epic" was never
+  // what mattered here, "closed and not a leaf" is.
   const { problems, kinds } = underMutation((_r, { item }) => {
-    const ep01 = item("EP-01");
-    ep01.status = "IN_PROGRESS";
-    delete ep01.closed;
+    const epic = item("FE-02");
+    assert.equal(epic.status, "COMPLETE", "FE-02 is no longer closed; this mutation needs re-pointing");
+    epic.status = "IN_PROGRESS";
+    delete epic.closed;
   });
   assert.deepEqual(problems, []);
-  assert.ok(kinds.includes("tree:EP-01"), `EP-01's glyph not caught: ${kinds}`);
+  assert.ok(kinds.includes("tree:FE-02"), `the parent's glyph not caught: ${kinds}`);
   assert.ok(kinds.includes("in-flight-membership"), `in-flight set not caught: ${kinds}`);
   assert.ok(kinds.includes("status-count:COMPLETE"), `complete count not caught: ${kinds}`);
   assert.ok(kinds.includes("status-count:IN_PROGRESS"), `in-progress count not caught: ${kinds}`);
