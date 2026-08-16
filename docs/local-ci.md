@@ -97,6 +97,7 @@ statements and only one of them is true here:
 | formatting, linting, static analysis | None configured. No ESLint, Prettier, editorconfig or type checker exists in the repository. |
 | compilation / build | None. Plain ESM run directly by Node; there is no build step to reproduce. |
 | unit + integration tests | The single `node --test` suite. Integration coverage is the oracle-dependent portion of it. |
+| capability-dependent tests | Some cases can only run where the platform allows them — symlink creation needs privilege on Windows, so the suite probes and reports those cases as **NOT exercised** rather than as passing. The Linux container is where they actually run; this is not cosmetic, and it found a real defect the first time it happened. See `artifacts/evidence/2026-08-16-entrypoint-link-containment.md`. |
 | database provisioning / migrations | **No database.** This repository stores its state as files. |
 | API, frontend, E2E/browser tests | None exist. |
 | generated-code validation | `docs/*.svg` are rendered from `docs/*.mmd` and are **not** validated by CI today — see *Follow-up* below. |
@@ -233,9 +234,9 @@ test counts and a completion timestamp — and writes `artifacts/local-ci/latest
   "result": "passed",
   "environment": "docker",
   "failedCheck": null,
-  "startedAt": "2026-08-15T23:45:24Z",
-  "completedAt": "2026-08-15T23:49:32Z",
-  "tests": { "passed": 199, "failed": 0, "skipped": 0 },
+  "startedAt": "2026-08-16T15:26:11Z",
+  "completedAt": "2026-08-16T15:28:45Z",
+  "tests": { "passed": 204, "failed": 0, "skipped": 0 },
   "checks": ["environment", "no-install-invariant", "oracle-readiness", "test-suite"]
 }
 ```
