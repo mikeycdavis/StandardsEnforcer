@@ -103,7 +103,13 @@ HEAD_AFTER="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 
 step 'Verifying the commit to be pushed is the commit that passed'
 set +e
-docker run --rm --network none \
+# MSYS_NO_PATHCONV under Git Bash on Windows. Without it, MSYS rewrites the container-side paths
+# (`/ci/verify.mjs`, `/evidence/latest.json`) into Windows paths on the way past, and the verifier
+# dies with MODULE_NOT_FOUND — which this script would then report as a refusal to push. A guard
+# that fails for the wrong reason still stops the push, so it looks safe and is not: the operator
+# is told the commit was not verified when in fact nothing was checked. Unset elsewhere, ignored
+# by every other shell.
+MSYS_NO_PATHCONV=1 docker run --rm --network none \
   -v "$REPO_ROOT/ci:/ci:ro" \
   -v "$REPO_ROOT/artifacts/local-ci:/evidence:ro" \
   node:20-bookworm-slim \
