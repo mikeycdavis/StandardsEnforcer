@@ -6,7 +6,7 @@ originating session's context.
 
 **Repository:** `F:/Repos/StandardsEnforcer`
 **Branch:** `design/ep-02-gate-authority-boundary`, off `main` @ `3eeb65b`
-**Normative output:** [ADR 0007](../adr/0007-gate-authority-is-not-required-check-presence.md)
+**Normative output:** [ADR 0009](../adr/0009-gate-authority-is-not-required-check-presence.md)
 **Not implemented on:** `m3-scope-registry`. That branch carries active M3 scope-registry work; this
 is EP-02, and appending to it would mix two epics in one history.
 
@@ -19,7 +19,7 @@ six declared controls with a derived aggregate, plus two real observations of th
 before and after a genuine host configuration change.
 
 That producer is useful and its arrival exposed a boundary this repository had implemented but never
-stated: **required-check presence is not gate authority.** ADR 0007 states it.
+stated: **required-check presence is not gate authority.** ADR 0009 states it.
 
 ## 2. Reconciliation with FE-04, ST-06, ST-07
 

@@ -1,4 +1,4 @@
-# ADR 0007 — Gate authority is not established by required-check presence
+# ADR 0009 — Gate authority is not established by required-check presence
 
 **Status:** accepted, 2026-08-16
 **Context:** EP-02 amendment. Reconciles [ADR 0003](0003-the-enforcement-root.md) with the M4 live
@@ -11,14 +11,36 @@ appeared — UIUXDesignStandards at `54352e9`.
 
 ## Numbering
 
-This is `0007`, not `0006`. It was drafted as `0006` on this branch while `0006` was already taken on
-`main` by the cache-concurrency decision
+This is `0009`. It has been renumbered twice, and the second time is the more instructive.
+
+It was drafted as `0006` while `0006` was already taken on `main` by the cache-concurrency decision
 ([`0006-the-cache-is-shared-and-coordination-is-not-authority.md`](0006-the-cache-is-shared-and-coordination-is-not-authority.md),
-accepted 2026-08-12), which `FE-15` and the FE-15 concurrency evidence both cite by number. Renumbered
-before this branch was ever pushed, so no reference to it as `0006` exists anywhere outside its own
-draft. ADR 0005 records the same collision between the scope and provenance lineages; this is the third
-occurrence, and it is a branch-shaped hazard rather than an accident — a lineage that reads the ADR
-directory on its own branch sees a free number that `main` has already spent.
+accepted 2026-08-12), which `FE-15` and the FE-15 concurrency evidence both cite by number. It then
+became `0007` — a number `main` had not spent, which is what the check at the time looked for.
+
+**That check was insufficient, and this is the fourth occurrence of the same hazard.** `0007` was
+already claimed on 2026-08-13 by `reconciliation/m3-integration`, three days before this ADR was
+written, for *the review surface is the whole tracked repository* — and that lineage had already built
+`0008` on top of it. Neither branch had merged, so `main` showed both numbers free while two decisions
+were being drafted into the same slot. The collision would have been resolved by whichever branch
+merged second, which is to say by Git rather than by anyone deciding which decision owns the
+identifier.
+
+The earlier claim was preserved on three grounds: it is chronologically first; it carries a dependent
+`0008`; and it is cited by `FE-18`, `FE-19`, `FE-20`, `scripts/digest.mjs` and the portfolio baseline,
+so renumbering it would have rewritten ten files to spare one. `0007` and `0008` therefore stay
+reserved for that lineage even though it has not merged. A gap in the sequence is harmless; two
+decisions answering to one number is not.
+
+This also repairs a live ambiguity rather than merely avoiding a future one:
+[`2026-08-12-m3-reconciled-plan.md`](../plan/2026-08-12-m3-reconciled-plan.md) already refers on this
+branch to "ADR 0007 — the review surface", which did not describe the file sitting at `0007` here.
+It does again.
+
+ADR 0005 records the same collision between the scope and provenance lineages. The pattern is
+branch-shaped rather than accidental: **a lineage that reads the ADR directory on its own branch sees
+a free number, and checking `main` is not enough — every unmerged branch is also a claimant.** The
+allocation surface is the set of all live refs, not the trunk.
 
 ## Context
 
@@ -88,8 +110,25 @@ assessGate()
        └─ rooted ────────────────────────→ continue enforcement assessment
 ```
 
-An external `SATISFIED` is **input to** `assessGate`, never a replacement for it. It may narrow what
-must be collected; it may not shorten the assessment.
+An external `SATISFIED` is **input to** `assessGate`, never a replacement for it. It may not shorten
+the assessment, and **it does not narrow what must be collected either.** This ADR authorises no
+reduction in the collection set.
+
+An earlier draft of this section said narrowing "may" happen. That was too permissive to leave
+standing. A permission granted in the abstract, against a mechanism nobody has built yet, is read
+later as settled authority by someone who has only this sentence — and the reduction it would license
+is precisely the one that turns an observation into a substitute for an assessment, which the
+paragraph above forbids. Narrowing is not ruled out forever; it is **not authorised by this document**,
+and it cannot be, because the condition it depends on is unresolved:
+
+> **Freshness semantics for an external governance observation are undecided.** Nothing currently
+> establishes how old such an observation may be, what invalidates it, or how a consumer detects that
+> the state it described has since changed. Until that is decided, "this was `SATISFIED` when someone
+> looked" cannot excuse not looking.
+
+If narrowing is ever wanted, it requires its own affirmative, committed decision that names which
+evidence is dropped, what freshness guarantee replaces collecting it, and how the guarantee is
+verified rather than asserted. Until such a record exists, **treat the collection set as fixed.**
 
 ### The insufficiency is itself an invariant
 
