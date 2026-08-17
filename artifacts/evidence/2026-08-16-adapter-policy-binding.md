@@ -1,5 +1,33 @@
 # The adapter contract could not express a policy binding, and FinancialStandards needs one
 
+> ### SUPERSEDED IN PART — 2026-08-16, later the same day
+>
+> **The schema-capability finding below stands. Its description of how `{policy}` is *implemented*
+> records an intermediate state and is no longer how the merged code works.**
+>
+> This file says `{policy}` is derived inside `runOfficialEvaluator` from `target` and `POLICY_FILE`.
+> That was true when it was written, and it was the defect a later review flagged: derivation from
+> the subject only works while the subject is a repository root, and released FinancialStandards
+> accepts a document or directory analysis selection that need not be one.
+>
+> The merged mechanism still derives the path — once, and not here. `enforce()` computes
+> `path.join(target, POLICY_FILE)` at the adoption boundary, proves it exists, and hands that exact
+> value on. What is gone is the *second* derivation: the seam binds what it is given, does not know
+> what a policy file is called, and contains no policy filename. The invariant is:
+>
+> > the policy whose presence established adoption is the exact policy handed to the authority
+>
+> **For the current state and the measurement behind it, read
+> [`2026-08-16-financial-policy-interface.md`](./2026-08-16-financial-policy-interface.md).** It
+> records the read-only forensic pass over released FinancialStandards (`3627c6f`; latest release
+> `v1.1.0` at `0d0b271`) that separated the pack's released behaviour from its repository convention,
+> qualified finding H, and strengthened finding F.
+>
+> **Nothing below is rewritten.** The schema-capability defect, the two-wrong-options table, the
+> version-scoped placeholder decision and the measurement log are all still accurate about what was
+> established when this was written, and the superseded paragraph is left in place so the correction
+> has something to be a correction *to*.
+
 **2026-08-16.** A schema-capability defect in `schemas/standards-adapter.schema.json`, found while
 scoping a FinancialStandards adapter release. The release was stopped; the contract was fixed.
 
@@ -71,6 +99,12 @@ rather than having the binding dropped, which is the difference between a refusa
 pack's own. It is derived inside `runOfficialEvaluator` from `target` and `POLICY_FILE` rather than
 passed in, so the path a contract is given and the path `enforce` reads for adoption cannot become
 two different files.
+
+> **SUPERSEDED — see the banner at the top of this file.** The goal named in this paragraph — that the
+> path a contract is given and the path `enforce` reads for adoption cannot become two different
+> files — is the right goal and is now met more directly. Deriving the path in two places achieved it
+> only while both derivations joined the same constant onto the same root. The merged code resolves
+> it once and passes it, so there is one path rather than two that agree.
 
 ## The measurements, in order
 
