@@ -34,6 +34,7 @@ import path from "node:path";
 
 import { runOfficialEvaluator } from "../scripts/enforce.mjs";
 import { validateAdapter, bindArguments, placeholdersFor } from "../scripts/contracts/adapter.mjs";
+import { readSource, stripComments } from "../test-support/source-scan.mjs";
 
 /**
  * A pack that behaves the way FinancialStandards behaves.
@@ -245,11 +246,32 @@ test("policy · the seam binds the exact path supplied, not one it rebuilds from
  * and an equality assertion between two reconstructions is exactly the weaker proof this replaced.
  */
 test("policy · the invoked policy IS the one whose presence established adoption", async () => {
-  const { readFile } = await import("node:fs/promises");
-  const src = await readFile(new URL("../scripts/enforce.mjs", import.meta.url), "utf8");
+  // NORMALISED, AND THE NORMALISATION IS LOAD-BEARING. This test shipped in PR #2 slicing on the
+  // literal "\n}\n". `core.autocrlf=true` on the authoring machine and .mjs carries no
+  // `text eol=lf` attribute, so the working tree and — decisively — the `git archive` the CI image
+  // is built from both carry CRLF. `indexOf` returned -1, `slice(0, 0)` produced an EMPTY body, and
+  // both assertions below ran against "" in every environment, authoritative container CI included.
+  // Measured, not deduced: against an archived `main`, `body.length` was 0.
+  const src = await readSource(new URL("../scripts/enforce.mjs", import.meta.url));
 
   const seam = src.slice(src.indexOf("export function runOfficialEvaluator"));
-  const body = seam.slice(0, seam.indexOf("\n}\n") + 1);
+  const end = seam.indexOf("\n}\n");
+  // THE GUARD'S OWN LIVENESS, asserted before anything it guards, because the defect this repairs
+  // was not a wrong answer — it was no answer, reported as a pass. Whatever breaks the extraction
+  // next (a renamed function, a reformatted brace, another line-ending surprise) fails here saying
+  // so, rather than quietly handing the assertions an empty search space.
+  assert.ok(end > 0, "the seam body could not be located, so the assertions below would prove nothing");
+  const located = seam.slice(0, end + 1);
+  assert.ok(located.includes("bindArguments"), "the extracted region is not the evaluator seam");
+
+  // SCANNED AS CODE, NOT AS TEXT. The seam's comments discuss the reconstruction this test forbids —
+  // they have to, to explain why it is forbidden — and a blunt substring scan cannot tell an
+  // identifier from a word about one. Stripping prose is what keeps the guard's subject the
+  // mechanism instead of the prose, so a later author need not avoid saying `POLICY_FILE` in English.
+  const body = stripComments(located);
+  assert.ok(body.includes("bindArguments"), "comment stripping removed code; the scan below is unsound");
+  assert.equal(body.includes("Deriving"), false, "comment stripping left prose behind; the scan below is unsound");
+
   assert.equal(body.includes("POLICY_FILE"), false,
     "the evaluator seam must not name a policy filename — discovery belongs at the adoption boundary");
   assert.equal(/governedRoot/u.test(body), false,
