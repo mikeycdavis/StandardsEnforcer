@@ -39,12 +39,18 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile, mkdir, chmod } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
+import { symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 
-import { checkoutIsExactly, materialise } from "../scripts/identity.mjs";
+import {
+  checkoutIsExactly,
+  materialise,
+  pathIsWithinInertSurface,
+  INERT_SURFACES,
+} from "../scripts/identity.mjs";
 
 function git(args, cwd) {
   const r = spawnSync("git", args, { cwd, encoding: "utf8", windowsHide: true });
@@ -206,22 +212,55 @@ test("cached checkout · the rebuilt entry is verified by the same predicate, no
 
 // --- the boundary this file records rather than decides -------------------------------------------
 
-/**
- * CHARACTERISATION, NOT A DECISION. An ignored file that lies on no code-loading route — a local-CI
- * log — is accepted today, because `--porcelain` cannot see it. Whether the remedy should also reject
- * this is genuinely open, and the guarantee does not settle it on its own:
- *
- *   reject it    the checkout is then byte-identical to the approved commit under any reading, and
- *                nobody has to adjudicate which paths are "inert" as the pack's layout changes
- *   accept it    a standards pack that writes its own logs inside its checkout would otherwise
- *                invalidate its own cache entry on every run, and the enforcer would rebuild
- *                perpetually while nothing about execution had changed
- *
- * This test asserts the CURRENT behaviour so the decision is visible when it is made rather than
- * drifting in behind the executable fix. If the remedy broadens to cover inert ignored paths, this
- * test SHOULD fail, and its failure is the prompt to record why — not a regression to route around.
- */
-test("cached checkout · an inert ignored artifact is accepted today, and that is not yet a decision", async () => {
+// --- the breadth decision, made load-bearing ------------------------------------------------------
+//
+// The remedy rejects ignored content by default and exempts only reviewed inert surfaces. These fix
+// that choice in place: a narrower rule keyed on "code-like" paths or file suffixes would pass the
+// falsifier above and fail every test below.
+
+test("cached checkout · an ignored config file that no import would load is still rejected", async () => {
+  await scratch(async (keep) => {
+    const origin = await originRepo();
+    await keep(origin.dir);
+    const entry = await cached(origin);
+    await keep(entry.cacheRoot);
+
+    // Not a module. Nothing `import`s a .yml. It is still capable of being read at runtime and
+    // deciding what the authority does, which is what "influences execution" means.
+    await mkdir(path.join(entry.dir, ".cache"), { recursive: true });
+    await writeFile(path.join(entry.dir, ".cache", "runtime-policy.yml"), "requiredLevel: none\n");
+    await writeFile(path.join(entry.dir, ".gitignore"), "node_modules/\nartifacts/local-ci/\n.cache/\n");
+    // The .gitignore edit is itself a tracked change, so undo it via the index to isolate the subject.
+    git(["checkout", "--", ".gitignore"], entry.dir);
+    await mkdir(path.join(entry.dir, "node_modules"), { recursive: true });
+    await writeFile(path.join(entry.dir, "node_modules", ".keep-config-case"), "");
+    await rm(path.join(entry.dir, "node_modules", ".keep-config-case"));
+
+    // `.cache/` is not in the fixture's ignore file, so it surfaces as untracked rather than ignored.
+    // Either way the checkout is not the approved commit, and that is the assertion.
+    const r = checkoutIsExactly(entry.dir, origin.sha);
+    assert.equal(r.ok, false, "a data file the commit did not establish is not part of that commit");
+  });
+});
+
+test("cached checkout · an ignored log outside any reviewed surface is rejected", async () => {
+  await scratch(async (keep) => {
+    const origin = await originRepo();
+    await keep(origin.dir);
+    const entry = await cached(origin);
+    await keep(entry.cacheRoot);
+
+    await mkdir(path.join(entry.dir, "node_modules"), { recursive: true });
+    await writeFile(path.join(entry.dir, "node_modules", "install.log"), "resolved 412 packages\n");
+
+    const r = checkoutIsExactly(entry.dir, origin.sha);
+    assert.equal(r.ok, false,
+      "a suffix does not make a file inert; only a reviewed surface does, and node_modules is not one");
+    assert.match(r.why, /ignored path/u, `the reason must name the ignored content: ${r.why}`);
+  });
+});
+
+test("cached checkout · artifacts/local-ci is NOT exempt, because it was measured and does not qualify", async () => {
   await scratch(async (keep) => {
     const origin = await originRepo();
     await keep(origin.dir);
@@ -231,7 +270,97 @@ test("cached checkout · an inert ignored artifact is accepted today, and that i
     await mkdir(path.join(entry.dir, "artifacts", "local-ci"), { recursive: true });
     await writeFile(path.join(entry.dir, "artifacts", "local-ci", "run.log"), "stage: environment\nok\n");
 
-    assert.equal(checkoutIsExactly(entry.dir, origin.sha).ok, true,
-      "recording today's behaviour: an ignored path with nothing loading it does not invalidate reuse");
+    // The obvious first allowlist candidate, deliberately refused. In this repository that directory
+    // is verification input — submit-pr mounts it as /evidence:ro and ci/verify.mjs reads
+    // latest.json to decide whether a commit may be pushed. A path whose contents decide whether
+    // verification passes cannot be exempted from identity on the grounds of being "just output".
+    assert.equal(checkoutIsExactly(entry.dir, origin.sha).ok, false,
+      "an unproven artifact costs a rebuild; accepting it costs the guarantee");
+    assert.deepEqual([...INERT_SURFACES], [],
+      "the allowlist ships empty; adding an entry is a reviewable identity-policy change");
+  });
+});
+
+// --- the allowlist matcher, exercised directly with hypothetical surfaces -------------------------
+//
+// INERT_SURFACES is empty, so nothing above reaches the matching logic. It still has to be correct
+// before an entry is ever added, because the first entry is the moment the mechanism becomes
+// load-bearing and the worst moment to discover it matches by string prefix.
+
+test("inert surface · matching is by whole path components, never by string prefix", async () => {
+  await scratch(async (keep) => {
+    const origin = await originRepo();
+    await keep(origin.dir);
+    const dir = origin.dir;
+    await mkdir(path.join(dir, "artifacts", "log"), { recursive: true });
+    await mkdir(path.join(dir, "artifacts", "logging-hijack"), { recursive: true });
+    await writeFile(path.join(dir, "artifacts", "log", "run.log"), "x");
+    await writeFile(path.join(dir, "artifacts", "logging-hijack", "index.js"), "x");
+
+    const surfaces = ["artifacts/log"];
+    assert.equal(pathIsWithinInertSurface(dir, "artifacts/log/run.log", surfaces), true,
+      "content genuinely inside the surface is exempt");
+    assert.equal(pathIsWithinInertSurface(dir, "artifacts/logging-hijack/index.js", surfaces), false,
+      "a string prefix match is not a containment match — this is the whole reason for components");
+    assert.equal(pathIsWithinInertSurface(dir, "artifacts/log", surfaces), false,
+      "the surface directory itself is not content within the surface");
+    assert.equal(pathIsWithinInertSurface(dir, "artifacts/log/run.log", []), false,
+      "an empty allowlist exempts nothing, which is the shipped configuration");
+  });
+});
+
+test("inert surface · a symlinked surface does not launder what it points at", async (t) => {
+  await scratch(async (keep) => {
+    const origin = await originRepo();
+    await keep(origin.dir);
+    const dir = origin.dir;
+
+    await mkdir(path.join(dir, "node_modules", "hijack"), { recursive: true });
+    await writeFile(path.join(dir, "node_modules", "hijack", "index.js"), "export default 'owned';\n");
+    await mkdir(path.join(dir, "artifacts"), { recursive: true });
+
+    // `artifacts/inert` is a symlink to node_modules. The repository-relative path
+    // "artifacts/inert/hijack/index.js" is textually inside the reviewed surface and is really a
+    // module on the load path. Only resolving the link can tell the two apart.
+    try {
+      symlinkSync(path.join(dir, "node_modules"), path.join(dir, "artifacts", "inert"), "junction");
+    } catch (error) {
+      t.skip(`this platform refused to create the symlink fixture: ${error.code ?? error.message}`);
+      return;
+    }
+
+    assert.equal(
+      pathIsWithinInertSurface(dir, "artifacts/inert/hijack/index.js", ["artifacts/inert"]),
+      false,
+      "a surface that resolves outside itself proves nothing about the bytes it exposes",
+    );
+  });
+});
+
+// --- git's own reporting must not be mistaken for the disk -----------------------------------------
+
+test("cached checkout · a collapsed ignored directory is still enumerated file by file", async () => {
+  await scratch(async (keep) => {
+    const origin = await originRepo();
+    await keep(origin.dir);
+    const entry = await cached(origin);
+    await keep(entry.cacheRoot);
+
+    // Several files under one ignored directory. `git status --ignored` reports this as the single
+    // entry "!! node_modules/" — even with --ignored=matching --untracked-files=all — because the
+    // directory itself matches the pattern.
+    await mkdir(path.join(entry.dir, "node_modules", "pkg", "deep"), { recursive: true });
+    await writeFile(path.join(entry.dir, "node_modules", "pkg", "index.js"), "module.exports = 1;\n");
+    await writeFile(path.join(entry.dir, "node_modules", "pkg", "deep", "loader.js"), "module.exports = 2;\n");
+    await writeFile(path.join(entry.dir, "node_modules", "pkg", "package.json"), '{"main":"index.js"}');
+
+    const collapsed = git(["status", "--porcelain", "--ignored=matching", "--untracked-files=all"], entry.dir);
+    assert.match(collapsed, /^!! node_modules\/$/mu,
+      "the fixture only means something while git is in fact collapsing the directory");
+
+    const r = checkoutIsExactly(entry.dir, origin.sha);
+    assert.equal(r.ok, false, "three modules under one collapsed entry are still three modules");
+    assert.match(r.why, /3 ignored path\(s\)/u,
+      `the count must come from the files on disk, not from git's printing: ${r.why}`);
   });
 });
