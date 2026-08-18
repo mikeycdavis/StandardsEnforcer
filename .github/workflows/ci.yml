@@ -27,11 +27,24 @@ on:
 # fallback that let the required-oracle mode be satisfied by anything else would restore the defect
 # under a different spelling.
 
+# CREDENTIALS ARE NOT LEFT WHERE THE PULL REQUEST CAN READ THEM. This job obtains a private oracle
+# and then runs `npm test`, which is code the pull request under test wrote. `actions/checkout`
+# defaults to persisting its credential in the checked-out repository's git configuration, so the
+# default arrangement is: fetch a secret, leave it on disk, then execute untrusted code beside it.
+# Fork pull requests never receive secrets, but this repository's own workflow is same-repository
+# branch pull requests, which do — so the exposure is on the live path rather than the theoretical
+# one. Every checkout below sets `persist-credentials: false`, and `ci/checks.sh` establishes the
+# result on the real checkout before the suite runs rather than trusting these two lines.
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -55,6 +68,10 @@ jobs:
           path: .oracle
           fetch-depth: 0          # the suite resolves release tags, so the history must come too
           token: ${{ secrets.ENFORCER_ORACLE_TOKEN || github.token }}
+          # The load-bearing line. Without it the token above is written into `.oracle/.git/config`
+          # as an `AUTHORIZATION: basic <base64>` extraheader and is still there when `npm test`
+          # runs. The checkout still authenticates; it simply leaves nothing behind.
+          persist-credentials: false
 
       # No install step. An install is a second thing that can differ between the machine that
       # reviewed a release and the machine that runs it — and ci/checks.sh now asserts that
@@ -71,6 +88,13 @@ jobs:
           # would still report green, which is the defect ST-08 was filed against. Set here as well
           # as in compose.ci.yml because both runners claim the same authority.
           ENFORCER_REQUIRE_SYMLINKS: '1'
+          # This runner obtained the oracle with a token, so it is the environment the credential
+          # property is actually about. Under this flag the credential-hygiene stage must inspect
+          # both named checkouts and find both clean — it cannot complete by having nothing to look
+          # at, which is precisely how it completes in the container. Set here and nowhere else:
+          # local Docker holds no checkout credential and must keep reporting NOT_EXERCISED rather
+          # than a pass it did not earn.
+          ENFORCER_REQUIRE_CREDENTIAL_HYGIENE: '1'
           CI_OUT_DIR: ${{ runner.temp }}/local-ci
           CI_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
           CI_BRANCH: ${{ github.head_ref || github.ref_name }}

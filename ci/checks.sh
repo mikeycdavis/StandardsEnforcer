@@ -39,6 +39,11 @@ FAILED_STAGE=""
 PASS_COUNT=""
 FAIL_COUNT=""
 SKIP_COUNT=""
+# What the credential-hygiene stage established, which is not the same as whether it completed.
+# NOT_RUN until the stage is reached; then ESTABLISHED, NOT_EXERCISED or FAILED. Carried into the
+# result document so a reader can tell a hosted run that proved the property from a local run that
+# could not have.
+HYGIENE_OUTCOME="NOT_RUN"
 
 # ---------------------------------------------------------------------------------------------
 # Reporting
@@ -91,6 +96,7 @@ emit_result() {
   "failedCheck": $( [ -n "$FAILED_STAGE" ] && printf '"%s"' "$(json_escape "$FAILED_STAGE")" || printf 'null' ),
   "startedAt": "$STARTED_AT",
   "completedAt": "$completed_at",
+  "credentialHygiene": "$(json_escape "$HYGIENE_OUTCOME")",
   "tests": {
     "passed": ${PASS_COUNT:-null},
     "failed": ${FAIL_COUNT:-null},
@@ -122,6 +128,9 @@ on_exit() {
   say "Source:          $SOURCE"
   say "Environment:     Docker (local). This is NOT a GitHub Actions result."
   say "Checks executed: ${STAGES[*]:-none}"
+  # Named separately from the stage list, because "the stage ran" and "the property was established"
+  # are different claims and this repository has already shipped one of those pretending to be the other.
+  say "Credential hygiene: $HYGIENE_OUTCOME"
   if [ -n "$PASS_COUNT" ]; then
     # Never "all tests passed". The skip count is part of the result, not a footnote: this
     # repository has already shipped one green suite whose subject was absent.
@@ -214,6 +223,49 @@ for tag in $ORACLE_TAGS; do
     FAILED_STAGE="oracle-readiness"; exit 1
   fi
 done
+done_stage
+
+# --- credential hygiene -----------------------------------------------------------------------
+# Ordered deliberately: after the oracle is obtained, BEFORE `npm test` runs. The property is that
+# the pull request's own code cannot read the oracle credential, so establishing it after that code
+# has already run would establish nothing.
+#
+# It inspects the real checkouts rather than the workflow file. `persist-credentials: false` is a
+# statement of intent; what matters is whether a credential sits in the configuration git would
+# actually use, and only the checkout can answer that. `test/credential-hygiene.test.mjs` drives the
+# same module through the exact shape `actions/checkout` writes — an `AUTHORIZATION: basic <base64>`
+# extraheader, which contains no literal token and which a search for the secret would miss.
+#
+# THE SUBJECTS ARE NAMED HERE UNCONDITIONALLY, and the decision is made in the module rather than in
+# this shell. An earlier version of this stage built its subject list by testing for `.git` and,
+# finding neither in the container, printed a line and completed successfully — a stage reported as
+# passed whose property had not been exercised at all. Discovering subjects by their presence makes a
+# subject that disappeared indistinguishable from one that was never expected, which is ST-11's
+# defect wearing different clothes.
+#
+# So both checkouts are always named. ENFORCER_REQUIRE_CREDENTIAL_HYGIENE=1 is the environment's own
+# claim that it holds a checkout credential — the same shape as ENFORCER_REQUIRE_ORACLE and
+# ENFORCER_REQUIRE_SYMLINKS, and never a count of anything. Under it each named subject must exist
+# and be clean, so a workflow that stopped cloning the oracle turns this red rather than quietly
+# shrinking its own observation set. Local Docker sets nothing, holds no credential, and is reported
+# NOT_EXERCISED — which is carried into the result document rather than left as a line of output.
+stage "credential-hygiene"
+HYGIENE_OUTCOME_FILE="$LOG_DIR/credential-hygiene.outcome"
+HYGIENE_REQUIRE=""
+[ "${ENFORCER_REQUIRE_CREDENTIAL_HYGIENE:-0}" = "1" ] && HYGIENE_REQUIRE="--require"
+say "requirement: ENFORCER_REQUIRE_CREDENTIAL_HYGIENE=${ENFORCER_REQUIRE_CREDENTIAL_HYGIENE:-unset}"
+say ""
+# shellcheck disable=SC2086
+if ! node ci/credential-hygiene.mjs $HYGIENE_REQUIRE \
+     "--outcome-file=$HYGIENE_OUTCOME_FILE" \
+     "workspace-checkout=$ROOT" \
+     "oracle-checkout=$ROOT/.oracle"; then
+  HYGIENE_OUTCOME="FAILED"
+  say ""
+  say "FAIL  credential hygiene was not established."
+  FAILED_STAGE="credential-hygiene"; exit 1
+fi
+HYGIENE_OUTCOME="$(head -n 1 "$HYGIENE_OUTCOME_FILE" 2>/dev/null || printf 'UNKNOWN')"
 done_stage
 
 # --- the suite --------------------------------------------------------------------------------
