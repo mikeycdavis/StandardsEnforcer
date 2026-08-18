@@ -28,6 +28,12 @@ REPOSITORY="${CI_REPOSITORY:-unknown}"
 SOURCE="${CI_SOURCE:-unknown}"
 ORACLE="${ENFORCER_ORACLE_REPO:-/oracle}"
 
+# Provenance comes from the executing environment, never from a caller. See ci/environment.sh.
+# shellcheck source=ci/environment.sh
+. "$ROOT/ci/environment.sh"
+ENVIRONMENT_ID="$(ci_environment_id)"
+ENVIRONMENT_LABEL="$(ci_environment_label)"
+
 STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 LOG_DIR="$(mktemp -d)"
 TEST_LOG="$LOG_DIR/test.log"
@@ -92,7 +98,7 @@ emit_result() {
   "commit": "$(json_escape "$COMMIT")",
   "source": "$(json_escape "$SOURCE")",
   "result": "$(json_escape "$RESULT")",
-  "environment": "docker",
+  "environment": "$(json_escape "$ENVIRONMENT_ID")",
   "failedCheck": $( [ -n "$FAILED_STAGE" ] && printf '"%s"' "$(json_escape "$FAILED_STAGE")" || printf 'null' ),
   "startedAt": "$STARTED_AT",
   "completedAt": "$completed_at",
@@ -126,7 +132,7 @@ on_exit() {
   say "Branch:          $BRANCH"
   say "Verified commit: $COMMIT"
   say "Source:          $SOURCE"
-  say "Environment:     Docker (local). This is NOT a GitHub Actions result."
+  say "Environment:     $ENVIRONMENT_LABEL"
   say "Checks executed: ${STAGES[*]:-none}"
   # Named separately from the stage list, because "the stage ran" and "the property was established"
   # are different claims and this repository has already shipped one of those pretending to be the other.
