@@ -1,3 +1,17 @@
+# THE DEFAULT, AND WHY IT IS FIRST. Later rules win in this file, so this is the baseline every rule
+# below deliberately overrides. Without it, a file matching none of them is translated by whatever
+# `core.autocrlf` the cloning machine happens to have — which makes the bytes a consumer reads a
+# property of the developer rather than of this repository. That is not a style preference:
+# test/adapter-policy-binding.test.mjs once extracted a function body with `indexOf("\n}\n")`, got -1
+# on a CRLF checkout, and scanned an empty string while reporting success. Repairing that consumer
+# did not remove the condition — any later test comparing committed text against generated text can
+# acquire the same fault, and it presents as a Windows-only failure a Linux run reports green.
+# test/checkout-line-endings.test.mjs holds this file to that invariant.
+#
+# This does not rewrite a checkout that already exists. Refresh one with:
+#     git rm --cached -r . && git reset --hard
+* text=auto eol=lf
+
 # The CI container executes ci/checks.sh directly. A CRLF checkout on a Windows developer machine
 # makes the shebang unparseable inside a Linux container, and the failure ("bad interpreter") names
 # neither the file nor the cause. These line endings are therefore not a style preference.
