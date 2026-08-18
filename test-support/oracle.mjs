@@ -118,7 +118,21 @@ export function oracleAt(tag) {
  * Every release the suite pins, so the required-oracle guard checks all of them rather than
  * whichever one it happens to import.
  *
- * `enforce` and `gate` run against v1.5.0; `scope` pins v1.4.0. A guard that checked one would pass
- * on an oracle that cannot serve the other, which is the same partial-coverage error one level down.
+ * A guard that checked one would pass on an oracle that cannot serve the other, which is the same
+ * partial-coverage error one level down.
+ *
+ * EACH ENTRY IS HERE FOR A STATED REASON, and the reasons are different. Recorded because until
+ * 2026-08-16 one of them had no reason at all: `scope.test.mjs` pinned `v1.4.0` because that was the
+ * first release it was integrated against, which read as coverage of that release and was not.
+ *
+ *   v1.5.0  the authority-side repair of the false green — a run in which every applicable rule was
+ *           skipped used to report COMPLIANT. `enforce`, `gate` and `scope` all run against it.
+ *   v1.4.0  the only frozen release that ships no `standards-adapter.json`; the contract arrived one
+ *           release later, in v1.4.1. `adapter-less-release.test.mjs` is the sole reason this entry
+ *           exists. If that file goes, this entry goes with it rather than becoming another
+ *           accidental dependency.
+ *
+ * `v1.4.0` is durable as a fixture rather than merely convenient: MachineLearningStandards ADR 0010
+ * makes a published release tag immutable, so it can never acquire the contract it lacks.
  */
 export const ORACLE_TAGS = ["v1.4.0", "v1.5.0"];

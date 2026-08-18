@@ -30,7 +30,17 @@ import { STATE, PASSING, REQUIRES_RECORDED_DECISION, REACHABLE, exitFor, EXIT } 
 import { oracleAt } from "../test-support/oracle.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const TAG = "v1.4.0";
+/**
+ * These tests need a real authoritative pack and nothing more specific than that: they end at
+ * `NOT_ADOPTED`, `OUT_OF_SCOPE` and disposition stability, all of which terminate before any
+ * evaluator or contract is reached, so no assertion here can tell one release from another.
+ *
+ * It pinned `v1.4.0` until 2026-08-16 for historical reasons — the first release it was integrated
+ * against — which read as coverage of that release and was not. The distinctive property of
+ * `v1.4.0`, that it ships no invocation contract, is now asserted in
+ * `adapter-less-release.test.mjs`, where something actually depends on it.
+ */
+const TAG = "v1.5.0";
 const CACHE = path.join(tmpdir(), "standards-enforcer-test-cache");
 const TODAY = "2026-08-09";
 const REVIEWER = "ml-governance@acme.example";
@@ -39,8 +49,8 @@ const ID = "github:1024871";
 const STANDARD = "machine-learning";
 
 const git = (args, cwd) => spawnSync("git", args, { encoding: "utf8", cwd, windowsHide: true });
-// Resolved, never assumed. This suite pins v1.4.0 while enforce and gate pin v1.5.0, which is why
-// the required-oracle guard checks every tag rather than whichever one it happens to import.
+// Resolved, never assumed. The required-oracle guard checks every tag in ORACLE_TAGS rather than
+// whichever one a suite happens to import, so a release this file no longer names is still probed.
 const ORACLE = oracleAt(TAG);
 const MLS = ORACLE.repo;
 const MLS_AVAILABLE = ORACLE.available;
