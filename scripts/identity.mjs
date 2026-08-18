@@ -35,7 +35,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, renameSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync, renameSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 
 const FULL_SHA = /^[0-9a-f]{40}$/;
@@ -124,14 +124,135 @@ function markerFor(cacheRoot, sha) {
 }
 
 /**
+ * THE INERT SURFACES. This list is part of the identity contract, not housekeeping.
+ *
+ * THE GUARANTEE IT SERVES:
+ *
+ *     A cached standards checkout is reusable only when every byte not established by the approved
+ *     commit is either absent or belongs to an explicitly reviewed ignored surface whose contents
+ *     cannot influence authority execution or verification.
+ *
+ * So the default is to reject ignored content, and an entry here is a reviewed exemption from that
+ * default. Adding one asserts that nothing in the authority's execution or verification path ever
+ * reads anything under it. That is an identity-policy change and should be reviewed as one.
+ *
+ * **IT IS DELIBERATELY EMPTY.** `artifacts/local-ci/**` was the obvious first candidate and it was
+ * measured rather than assumed — it does not qualify. In this repository that directory is
+ * verification input: `scripts/submit-pr.sh` mounts it into a container as `/evidence:ro` and
+ * `ci/verify.mjs` reads `/evidence/latest.json` to decide whether a commit may be pushed. A path
+ * whose contents decide whether verification passes is the opposite of inert. The packs this enforcer
+ * executes are built from the same local-CI convention, so the name means the same thing there.
+ *
+ * The consequence is accepted on purpose: a pack that writes into an ignored path inside its own
+ * checkout will invalidate its cache entry and be rebuilt. A rebuild costs a clone. Accepting bytes
+ * whose relevance is unknown costs the guarantee.
+ *
+ * NOT AN EXTENSION LIST, AND THIS IS THE POINT. `.log`, `.txt` and `.json` are not inert as a class —
+ * any of them can be runtime input, which is exactly what `latest.json` turned out to be. Inertness
+ * is a property of a reviewed *surface* in a specific repository layout, never of a file suffix.
+ */
+export const INERT_SURFACES = Object.freeze([]);
+
+/** Split a path into components, separator-agnostic, discarding empties. */
+function componentsOf(p) {
+  return String(p).split(/[\\/]+/u).filter((c) => c !== "" && c !== ".");
+}
+
+/** Is `child` strictly inside `parent`, both already resolved to real paths? */
+function containedIn(parent, child) {
+  const rel = path.relative(parent, child);
+  // `path.relative` returns an ABSOLUTE path when no relative route exists — which on Windows is
+  // what happens across volumes. Treating that as "inside" would admit anything on another drive.
+  return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
+}
+
+/**
+ * Does this ignored path genuinely belong to a reviewed inert surface?
+ *
+ * TWO CHECKS, AND THE SECOND IS WHY THIS IS NOT A `startsWith`.
+ *
+ * First the repository-relative path is matched by **whole components**, so a surface `artifacts/log`
+ * does not swallow `artifacts/logging-hijack/`, which a string prefix would.
+ *
+ * Then the match is **proved on disk**. A directory naming a reviewed surface can be a symlink
+ * pointing anywhere — at `node_modules`, at another checkout, outside the cache entirely — and the
+ * repository-relative string would look identical either way. So both the surface root and the file
+ * are resolved with `realpathSync` and the containment is re-established on the resolved paths, plus
+ * a check that the surface root really lives inside the checkout. If anything cannot be resolved, the
+ * answer is **no**: an unprovable claim of inertness is not a claim of inertness.
+ *
+ * Exported because the allowlist is a security contract. The matching has to be testable directly,
+ * with hypothetical surfaces, rather than only through whatever `INERT_SURFACES` happens to hold.
+ */
+export function pathIsWithinInertSurface(checkoutDir, relPath, surfaces = INERT_SURFACES) {
+  const relParts = componentsOf(relPath);
+  if (relParts.length === 0) return false;
+
+  for (const surface of surfaces) {
+    const surfaceParts = componentsOf(surface);
+    // A surface must contain the path strictly: the surface directory itself is not "content within".
+    if (surfaceParts.length === 0 || relParts.length <= surfaceParts.length) continue;
+    if (!surfaceParts.every((part, i) => relParts[i] === part)) continue;
+
+    try {
+      // Resolve the checkout first, so a checkout that legitimately sits under a symlinked temp
+      // directory is not mistaken for a laundering attempt.
+      const checkout = realpathSync(checkoutDir);
+      const lexicalRoot = path.join(checkout, ...surfaceParts);
+      const lexicalFile = path.join(checkout, ...relParts);
+      const root = realpathSync(lexicalRoot);
+      const file = realpathSync(lexicalFile);
+
+      // CONTAINMENT IS NOT ENOUGH, and this is the correction the symlink case forced. Resolving
+      // and then testing containment still admits `artifacts/inert -> node_modules`: the target is
+      // inside the checkout, so both containment checks pass while the "inert" label has been draped
+      // over the module load path. The reviewed surface is a LOCATION, so the surface must actually
+      // be at that location — not a link to somewhere else that also happens to be inside.
+      if (root !== lexicalRoot) continue;
+      if (file !== lexicalFile) continue;
+
+      if (containedIn(root, file) && containedIn(checkout, root)) return true;
+    } catch {
+      // Unresolvable — a broken link, a race, a permission failure. Fail closed.
+    }
+  }
+  return false;
+}
+
+/**
+ * Every ignored file in the checkout, one path per entry.
+ *
+ * `git status --ignored` COLLAPSES. Even `--ignored=matching --untracked-files=all` reports
+ * `!! node_modules/` — a single directory entry — because the directory itself matches an ignore
+ * pattern. A caller that concluded "one ignored entry, and it is not on the allowlist" would be
+ * reasoning about how compactly git chose to print, not about what is on disk; and one that allowed a
+ * collapsed directory would be exempting its entire unexamined contents.
+ *
+ * `ls-files -o -i --exclude-standard -z` enumerates per file, NUL-separated so that a path containing
+ * a newline or a quote cannot be split wrongly. The property is about bytes on disk.
+ */
+function ignoredFiles(dir) {
+  const r = git(["ls-files", "--others", "--ignored", "--exclude-standard", "-z"], dir);
+  if (!r.ok) return { ok: false, files: [], why: r.why };
+  return { ok: true, files: r.out.split("\0").filter((p) => p !== ""), why: null };
+}
+
+/**
  * Is this directory, right now, exactly the commit it is supposed to be?
  *
- * Three questions, in the order that makes their answers distinguishable: is there a repository here
- * at all, is its HEAD the commit, and does the tree match that commit. The third is not decoration —
- * an edited file leaves HEAD untouched and changes what executes, so HEAD alone would leave the same
- * hole one level down.
+ * Four questions, in the order that makes their answers distinguishable: is there a repository here
+ * at all, is its HEAD the commit, does the tracked tree match that commit, and does the checkout
+ * carry ignored content nobody reviewed. The third is not decoration — an edited file leaves HEAD
+ * untouched and changes what executes, so HEAD alone would leave the same hole one level down.
  *
- * `why` names which of the three failed, because "the cached authority is not what you approved" and
+ * THE FOURTH EXISTS BECAUSE THE THIRD HAS THE SAME HOLE AGAIN, ONE LEVEL FURTHER DOWN.
+ * `git status --porcelain` honours `.gitignore`, so bytes written to an ignored path leave both HEAD
+ * and the porcelain status untouched and still change what executes. That was measured, not supposed:
+ * a planted `node_modules/hijack/index.js` left `--porcelain` completely empty while sitting on a path
+ * module resolution reaches. Note it needed no execute permission to do so — "executable" here means
+ * *able to influence what the authority does*, which is a property of the path, never of a mode bit.
+ *
+ * `why` names which of the four failed, because "the cached authority is not what you approved" and
  * "the cache directory is not a checkout" call for different actions.
  */
 export function checkoutIsExactly(dir, sha) {
@@ -152,6 +273,21 @@ export function checkoutIsExactly(dir, sha) {
       why:
         `the checkout is at ${sha} but its working tree is not: ${paths.length} path(s) differ, ` +
         `starting with "${sample}". HEAD names a commit; it does not promise the files match it`,
+    };
+  }
+
+  const ignored = ignoredFiles(dir);
+  if (!ignored.ok) {
+    return { ok: false, why: `the checkout's ignored content could not be enumerated (${ignored.why})` };
+  }
+  const unreviewed = ignored.files.filter((rel) => !pathIsWithinInertSurface(dir, rel));
+  if (unreviewed.length > 0) {
+    return {
+      ok: false,
+      why:
+        `the checkout is at ${sha} but carries ${unreviewed.length} ignored path(s) the approved ` +
+        `commit did not establish, starting with "${unreviewed[0]}". Ignored is not absent: these ` +
+        `bytes are on disk and can be read or loaded by what executes`,
     };
   }
   return { ok: true, why: null };
