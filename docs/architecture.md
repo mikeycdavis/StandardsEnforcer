@@ -28,7 +28,7 @@ The one invariant that shapes every module:
 | Git access | The `git` CLI, spawned as a subprocess (`scripts/identity.mjs`) |
 | Packaging | `package.json` `bin: { "standards-enforce": "scripts/enforce.mjs" }`, `private: true`, `UNLICENSED` |
 | CI | GitHub Actions — `.github/workflows/ci.yml` (test on push/PR) |
-| Distribution as a gate | `.github/workflows/standards-gate.yml` — a `workflow_call` reusable workflow, **intended to be hosted outside every governed repository** |
+| Distribution as a gate | A `workflow_call` reusable workflow, **hosted outside every governed repository — including this one**. This repository ships no copy: the one it carried never ran and was [retired](../artifacts/evidence/2026-08-18-standards-gate-retired.md) on 2026-08-18 |
 
 Version today: `VERSION` = `0.4.0`, `package.json` = `0.4.0` (a test asserts they agree),
 `SCHEMA_VERSION` in `scripts/enforce.mjs` = `0.4.0` (independent lifecycle — see `CHANGELOG.md`).
@@ -76,22 +76,33 @@ Both the gate group and the scope group are **all-or-nothing**: supplying any op
 without its required companions is an argument error, not a half-check. "A half-configured gate is
 not a gate," and half of a control reads like the whole of one in a log.
 
-### 2. `Standards gate` — the reusable GitHub Actions workflow
+### 2. `Standards gate` — the reusable workflow, **a design shape, not a process in this repository**
 
-**Host:** GitHub Actions, `workflow_call`.
-**Entry point:** [`.github/workflows/standards-gate.yml`](../.github/workflows/standards-gate.yml)
-**Purpose:** This is the deployment shape of the whole system. It is **not meant to live in a
-governed repository** — it is hosted in a repository governed projects cannot write to, the
-organisation ruleset requires the check it produces, and a governed project references it pinned to a
-40-hex commit SHA. It checks out four trees side by side (`target/`, `standards/`, `enforcer/`,
-`scope/` — the registry deliberately *beside* the target, never inside it), installs Node 20, and
-runs `enforce.mjs` with the gate and scope arguments wired from GitHub context.
+**Host:** GitHub Actions, `workflow_call`, in a repository governed projects cannot write to.
+**Entry point in this repository:** none. See below.
+**Purpose:** This is the intended deployment shape of the whole system. It is **not meant to live in a
+governed repository** — it is hosted where governed projects cannot write to it, the organisation
+ruleset requires the check it produces, and a governed project references it pinned to a 40-hex commit
+SHA. It checks out four trees side by side (`target/`, `standards/`, `enforcer/`, `scope/` — the
+registry deliberately *beside* the target, never inside it), installs Node 20, and runs `enforce.mjs`
+with the gate and scope arguments wired from GitHub context.
 
 Three properties make it a root of trust, and the enforcer checks all three rather than assuming
-them: the **organisation** requires the check; the requirement is **bound to an app**; and this
-workflow is **pinned**. It requests `contents: read` and `administration: read` — the latter so the
-enforcer can read the ruleset that requires it, which is the only way a removed requirement becomes
-visible from inside the run it was supposed to require.
+them: the **organisation** requires the check; the requirement is **bound to an app**; and the
+workflow is **pinned**.
+
+**This repository no longer carries a copy of that workflow, and the copy it did carry never ran.**
+`.github/workflows/standards-gate.yml` was retired on 2026-08-18 after 56 runs, 56 failures and zero
+jobs — GitHub rejected it before job creation every time, from its first commit onwards. It produced
+no check run, and nothing required it. It also assumed a capability that does not exist: it requested
+`administration: read` so the enforcer could read the ruleset requiring it, but reading rulesets is
+not grantable to `GITHUB_TOKEN` under any `permissions:` scope. Making that gate real needs a
+credential principal, which is enforcement-root work and is **not done**. The full measurement, the
+caller search, and the retired file preserved verbatim are in
+[the retirement record](../artifacts/evidence/2026-08-18-standards-gate-retired.md).
+
+A working copy of this shape does exist outside this repository: `enforcer-m4-trusted` hosts the one
+the M4 experiment exercised, and that evidence is unaffected by the retirement.
 
 ### 3. `standards-enforcer CI` — this repository's own test workflow
 
@@ -751,7 +762,7 @@ Areas where the code left a question open rather than a gap:
 | Add an **ML detection signal** | `scripts/footprint.mjs` — add to `SIGNAL_KINDS` and the relevant constant list. Note this **changes every digest** for repositories that acquire the new kind, which correctly makes their scope decisions stale |
 | Change **scope resolution** | `scripts/scope.mjs`, then `test/scope.test.mjs` and `test/scope-seam-invariance.test.mjs` |
 | Change the **identity model** | `scripts/identity.mjs`, then `test/identity-tags.test.mjs` and `test/identity-provenance.test.mjs` |
-| Change the **deployment/gate wiring** | `.github/workflows/standards-gate.yml` — and read its header comment first; the file documents why each property is a root of trust |
+| Change the **deployment/gate wiring** | Not here — this repository ships no gate workflow. Read [the retirement record](../artifacts/evidence/2026-08-18-standards-gate-retired.md) first: it preserves the retired file verbatim and documents why each property is a root of trust, why that copy never ran, and why a syntax repair would not have made it work |
 | Record a **decision** | `artifacts/adr/` — next number is `0006`. Note the numbering collision explained in ADR 0005 |
 | Record **what was run** | `artifacts/evidence/YYYY-MM-DD-<slug>.md`, with raw tool output under a sibling directory where it matters (see `m4-raw/`) |
 | Add or update **backlog work** | `artifacts/backlog/items/<ID>.md` and `artifacts/backlog/README.md` |
