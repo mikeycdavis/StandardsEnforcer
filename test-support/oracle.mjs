@@ -133,6 +133,9 @@ export function oracleAt(tag) {
  *           accidental dependency.
  *
  * `v1.4.0` is durable as a fixture rather than merely convenient: MachineLearningStandards ADR 0010
- * makes a published release tag immutable, so it can never acquire the contract it lacks.
+ * makes a published release tag immutable, so it can never acquire the contract it lacks. That ADR
+ * resolves at the commit below -- pinned by commit, not by branch, because the ref carrying it is a
+ * branch and therefore movable:
+ * https://github.com/mikeycdavis/MachineLearningStandards/blob/e30a84c6ffd74b9401d9e3ec0ffe08fb8cfa703d/artifacts/adr/0010-published-release-tags-are-public-authorities.md
  */
 export const ORACLE_TAGS = ["v1.4.0", "v1.5.0"];

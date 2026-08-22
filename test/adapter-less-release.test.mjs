@@ -10,8 +10,9 @@
  * WHY THIS FILE EXISTS. MachineLearningStandards `v1.4.0` closed at `6bfd078` and ships no
  * `standards-adapter.json`; the contract arrived one release later, in `v1.4.1`. That makes it the
  * only real specimen of a class this repository has to handle and could not otherwise exercise —
- * and it is genuinely durable, because ADR 0010 in that repository makes a published release tag
- * immutable, so `v1.4.0` can never acquire the file.
+ * and it is genuinely durable, because MachineLearningStandards ADR 0010 makes a published release
+ * tag immutable, so `v1.4.0` can never acquire the file. `test-support/oracle.mjs` carries the
+ * resolvable link to that ADR, beside the `ORACLE_TAGS` entry this file is the reason for.
  *
  * WHY IT IS NOT `scope.test.mjs`'S JOB. That suite pinned `v1.4.0` for historical reasons and its
  * assertions — `NOT_ADOPTED`, `OUT_OF_SCOPE`, disposition stability — all terminate before any
