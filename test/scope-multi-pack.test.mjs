@@ -235,7 +235,19 @@ test("adding a pack requires no change to the enforcer, which is the actual acce
   // with the source guard in `authority-boundary.test.mjs` rather than trusted alone.
   const invented = ["one-standards", "two-standards", "three-standards", "four-standards", "five-standards"];
   const entries = Object.fromEntries(
-    invented.map((id, i) => [id, decision({ disposition: i % 2 ? "out-of-scope" : "in-scope", reason: `Decided for ${id}.` })]),
+    invented.map((id, i) => [
+      id,
+      decision({
+        disposition: i % 2 ? "out-of-scope" : "in-scope",
+        reason: `Decided for ${id}.`,
+        // Required from 0.6.0 on any repository in scope for more than one pack, and this fixture is
+        // three. Not a weakening of what this case tests: the property is that N packs resolve
+        // independently with the enforcer knowing none of them, and naming a policy per pack is
+        // pack-agnostic — the requirement is triggered by a COUNT of in-scope dispositions, never by
+        // any pack's identity. An out-of-scope pack is evaluated against nothing and needs none.
+        ...(i % 2 ? {} : { policyPath: `policies/${id}.yml` }),
+      }),
+    ]),
   );
   await withRegistry(entries, (registryPath) => {
     const outcomes = invented.map((id) => resolve(registryPath, id).outcome);

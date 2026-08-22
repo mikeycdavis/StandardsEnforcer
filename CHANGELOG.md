@@ -32,9 +32,81 @@ Do not synchronise them by habit, and do not write a test asserting they are equ
 
 `VERSION` and `package.json` genuinely share one lifecycle and a test asserts they agree.
 `SCHEMA_VERSION` does not: a release may change behaviour without changing the shape of what it
-prints, and a printed shape may change without a behavioural release. It reads `0.4.0` today because
-the envelope really did change in `0.4.0` — that is agreement, not synchronisation, and it will drift
-the first time only one of them moves.
+prints, and a printed shape may change without a behavioural release.
+
+**They have now drifted, which is the point.** Through `0.5.0` all three read the same number and the
+table above looked like a rule nobody needed. `0.6.0` moved the release while the envelope moved to
+`0.5.0`, because the envelope gained one field and that is a smaller event than the release. Reading
+either number off the other is now wrong, and the paragraph that used to say "it reads `0.4.0` today"
+has been replaced rather than renumbered — a version this file states as current is a claim it has to
+keep true.
+
+---
+
+## 0.6.0 — 2026-08-20
+
+**The governing policy is a parameter. A repository may be governed by more than one pack.**
+
+`--policy=<path>`, and the result envelope now carries which policy was read.
+
+Until now a target held exactly one policy, at the root, called `project-policy.yml`, and the path
+was a constant rather than an input. That holds for a repository governed by one pack and fails for
+one governed by several: every pack's `init` writes `project-policy.yml`, and the schemas are
+mutually incompatible — MachineLearningStandards' own `policy.mjs` rejects an EngineeringStandards
+policy field by field. Handing pack B the file pack A adopted is finding F's failure arriving from
+the other direction, and it produces a confident verdict about the wrong document.
+
+* **`--policy=<path>`** names the governing policy. Omitted, the default resolves exactly as before.
+* **The envelope gains `policy: { path, source, digest }`.** `source` is `"explicit"` or `"default"`,
+  so a deliberate default and a forgotten flag are distinguishable; `digest` is the SHA-256 of the
+  bytes evaluated, because two runs can name one path and mean different content. **`SCHEMA_VERSION`
+  moves `0.4.0` → `0.5.0`** for that field.
+* **R1** — where the scope registry's new optional `policyPath` names the policy for a
+  (repository x pack), defaulting is refused (`ENFORCEMENT_ERROR`) and a `--policy` naming anything
+  else goes to a human (`SCOPE_REVIEW_REQUIRED`). Registry-scoped on purpose: the enforcer cannot
+  tell which pack a target's root policy belongs to, because **no pack's policy file declares one**.
+* **R2** — a pinned release declaring a pack the invocation did not ask for is
+  `STANDARDS_IDENTITY_MISMATCH`, refused after the adapter loads and before anything is spawned.
+* **R3** — a repository recorded in scope for **more than one** pack must name a `policyPath` on the
+  disposition being asked about; without one the answer is `SCOPE_REVIEW_REQUIRED` and nothing is
+  evaluated. Added on review, because R1 as first written was optional exactly where it was needed:
+  it refuses to default only where a `policyPath` exists, so a multi-pack repository that recorded
+  none kept the single-pack behaviour and could be evaluated through another pack's policy. The
+  trigger is a **count of in-scope dispositions**, never a list of packs — `scope.mjs` may not know
+  which packs exist (ADR 0001), and does not need to.
+
+**Compatibility.** Every invocation that omits `--policy` and every registry entry without
+`policyPath` behaves exactly as in `0.5.0`, with one exception: a repository recorded in scope for
+two or more packs and naming no `policyPath` now requires review (R3). Nothing operational is
+affected: no scope registry is committed anywhere in the portfolio yet, and the shipped example has
+one in-scope pack, which names its policy. One of this repository's own fixtures did need updating —
+`scope-multi-pack`'s five-pack case — and that is the requirement working, not a collision. The minor position because the CLI's accepted arguments and the result envelope are
+the public contract, and both changed.
+
+Two behaviour changes reach an existing caller, and both can only turn a verdict into a non-pass,
+never the reverse, so INV-E1 is unaffected: **R2**, which previously let a mismatched release answer
+— and which fires only for scope-supplied invocations, since it compares against the id the scope
+lookup carries; and **R3** above.
+
+**What R2 does not cover, stated plainly.** The check compares the id the invocation named against
+the id the release declares. It is *not* a check on the policy: `--policy` naming another pack's
+policy while invoking the right pack passes R2, because no policy file carries a pack identity to
+compare against. R1 and R3 are what close that, from the registry side. With exactly one pack in
+scope the residual is deliberate and tested (`policy-path` case 9) — there is no second policy to be
+confused with, and `policy.source` lets a caller demand `"explicit"` for itself.
+
+**Path comparison is by file, not by spelling.** R1's conflict test folds case and separators on
+win32 and falls back to `realpathSync.native` when both paths resolve. `path.resolve` preserves the
+drive-letter case it is handed, so `F:\Repos\...` from the registry and `f:/repos/...` from a CI
+variable are one file that compared unequal — reported as a governance conflict, sent to a human, over
+a drive letter. An inconclusive comparison still takes the mismatch branch, which is the fail-closed
+one.
+
+Two of this repository's own guard tests moved with it, neither weakened:
+`adapter-policy-binding` now matches the ternary resolution and additionally asserts
+`path.join(target, POLICY_FILE)` appears exactly once; `scope-seam-invariance`'s unusable-evaluator
+fixture declares the pack the invocation asks for, so its governed case still fails on unusability
+rather than earlier on identity, and a new assertion pins the two literals together.
 
 ---
 

@@ -30,7 +30,8 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, realpathSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -49,10 +50,65 @@ const PLATFORMS = { github: githubPlatform };
 
 const HERE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_CACHE = path.join(tmpdir(), "standards-enforcer-cache");
-export const SCHEMA_VERSION = "0.4.0";
+export const SCHEMA_VERSION = "0.5.0";
 
-/** The file whose presence is adoption. Absence is not non-compliance; it is a different state. */
+/**
+ * The DEFAULT policy filename, and no longer the only one.
+ *
+ * Until 0.5.0 this constant *was* the resolution: a target held exactly one policy, at the root,
+ * under this name. That holds for a repository governed by one pack and breaks the moment a second
+ * one arrives — every pack's `init` writes `project-policy.yml`, and their schemas are mutually
+ * incompatible, so four packs cannot share one file. Handing pack B the file pack A adopted is the
+ * finding-F failure from the other direction: a confident verdict about the wrong policy.
+ *
+ * So the name survives as a DEFAULT and the path became a parameter. Absence is still not
+ * non-compliance; it is still a different state.
+ */
 const POLICY_FILE = "project-policy.yml";
+
+/**
+ * The identity of the policy that was actually evaluated.
+ *
+ * Recorded because a path alone stops being sufficient once four policies exist: two runs can name
+ * the same path and mean different content, and an evidence trail that cannot tell them apart cannot
+ * show which policy a verdict was reached against. Read as bytes, so line endings are part of the
+ * identity rather than silently normalised away — this repository has Windows and Linux runners, and
+ * a digest that changed with the checkout would be worse than none.
+ */
+function policyDigest(file) {
+  return "sha256:" + createHash("sha256").update(readFileSync(file)).digest("hex");
+}
+
+/**
+ * Do two paths name the same policy file?
+ *
+ * NOT `===`, and the reason is specific to this repository: it runs on Windows and Linux runners, and
+ * on Windows `path.resolve` normalises separators but preserves the case it was handed. A registry
+ * entry resolved against `F:\Repos\Numerai` and a `--policy` given as `f:/repos/numerai/...` are
+ * the same file and compare unequal, which R1 would report as a governance conflict — a reviewer sent
+ * to arbitrate between two identical paths, for a difference in a drive letter.
+ *
+ * Two passes, and the order matters. Lexical first, because it works whether or not the file exists,
+ * and a registry naming an absent policy must reach NOT_ADOPTED rather than being decided here.
+ * Canonical second, only when both resolve: `realpathSync.native` sees through 8.3 short names,
+ * substituted drives and links that no amount of string handling can. A throw means at least one path
+ * does not resolve, and the answer is then "not proven the same" — the mismatch branch is the
+ * fail-closed one, so an inconclusive comparison goes to a human rather than through.
+ */
+function samePolicyPath(a, b) {
+  // Case folding is applied on win32 only. NTFS is case-insensitive by default and POSIX is not, so
+  // folding everywhere would make two genuinely different Linux files compare equal.
+  const lexical = (p) => {
+    const r = path.resolve(p);
+    return process.platform === "win32" ? r.replace(/\\/gu, "/").toLowerCase() : r;
+  };
+  if (lexical(a) === lexical(b)) return true;
+  try {
+    return lexical(realpathSync.native(a)) === lexical(realpathSync.native(b));
+  } catch {
+    return false;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // The one place the standards system is invoked.
@@ -183,7 +239,7 @@ function isSymbolicLink(p) {
  * `validate` because `evaluate` failed, because a subcommand that happens to succeed may be
  * answering a different question — `check` exists in two packs and means something else in both.
  */
-export function runOfficialEvaluator(standardsDir, { target, policyPath } = {}) {
+export function runOfficialEvaluator(standardsDir, { target, policyPath, expectStandardId = null } = {}) {
   if (typeof target !== "string" || typeof policyPath !== "string") {
     // Both are paths, so a positional signature let them be swapped or silently collapsed into one
     // value. Named and required, because the whole point of {policy} is that it is NOT derivable
@@ -197,6 +253,31 @@ export function runOfficialEvaluator(standardsDir, { target, policyPath } = {}) 
     return { ok: false, why: e.message, exitCode: null, report: null, contract: null };
   }
   const { contract, entrypoint } = loaded;
+  // R2 — the release must be the pack the caller asked for.
+  //
+  // Checked HERE, after the adapter is loaded and before anything is spawned, because a verdict that
+  // exists gets quoted: discovering afterwards that the wrong pack answered leaves the wrong answer
+  // already written down. It cannot move earlier without putting scope resolution behind the
+  // evaluator seam, which `scope-seam-invariance.test.mjs` exists to prevent.
+  //
+  // The comparison is between two things the enforcer legitimately holds: the id the INVOCATION named
+  // and the id the RELEASE declares. It is deliberately NOT a comparison against the policy file.
+  // No pack's policy carries a pack identity — engineering, machine-learning, betting and prediction
+  // policies all declare `standardVersion` and `project` and nothing else, and `standardVersion:
+  // "1.0.0"` is the current value in three different packs, so it does not discriminate. Reading one
+  // would also mean parsing YAML in a zero-dependency repository, to interpret a document ADR 0001
+  // says this component does not interpret.
+  if (expectStandardId && contract.standard.id !== expectStandardId) {
+    return {
+      ok: false,
+      why: `the invocation asked for "${expectStandardId}" and the pinned release declares itself ` +
+        `"${contract.standard.id}"; a verdict from the wrong pack is not a verdict about this standard`,
+      exitCode: null,
+      report: null,
+      contract,
+      identityMismatch: true,
+    };
+  }
   if (!existsSync(entrypoint)) {
     return {
       ok: false,
@@ -352,6 +433,10 @@ export async function enforce({
   // held registry before anything is evaluated; without it scope is unchecked and NOT_ADOPTED keeps
   // its weaker M2 meaning — "no policy here" rather than "governed, and not adopted".
   scope = null, today = new Date().toISOString().slice(0, 10),
+  // The governing policy. `null` means "resolve the default", which is what every caller before
+  // 0.5.0 did implicitly and what a single-pack repository still wants. Supplying it is what makes a
+  // multi-pack repository possible: see the resolution below, and R1.
+  policy = null,
 }) {
   if (!target || !existsSync(target)) {
     return result(STATE.ENFORCEMENT_ERROR, `the target ${target ?? "(none given)"} does not exist`);
@@ -440,20 +525,65 @@ export async function enforce({
     }
   }
 
-  const policyPath = path.join(target, POLICY_FILE);
+  // Policy resolution, and the one rule that keeps a four-policy repository honest.
+  //
+  // `source` is recorded rather than inferred. "Which policy governed this run" and "did anybody say
+  // so, or did the enforcer pick one" are different questions, and a payload that answers only the
+  // first cannot distinguish a deliberate default from a forgotten flag.
+  const policySource = policy ? "explicit" : "default";
+  const policyPath = policy ? path.resolve(policy) : path.join(target, POLICY_FILE);
+
+  // R1 — where an external registry names the policy for this (repository x pack), that naming is
+  // authoritative and defaulting is refused.
+  //
+  // SCOPED TO THE REGISTRY DELIBERATELY, and this is the honest limit of what Stage 1 can enforce.
+  // A universal "non-engineering packs must pass --policy" is not implementable here: the enforcer
+  // cannot tell which pack a target's root policy belongs to, because no policy file declares one.
+  // What it CAN do is honour a declaration held where the governed repository cannot write to it,
+  // which is the same root of trust scope dispositions already stand on. A repository with no
+  // registry entry keeps the pre-0.5.0 behaviour exactly, and its runs say `source: "default"` so a
+  // caller that wants the stronger rule can require `explicit` itself.
+  const registryPolicy = scopeReport.decision?.policyPath ?? null;
+  if (registryPolicy) {
+    const expected = path.resolve(target, registryPolicy);
+    if (!policy) {
+      return result(STATE.ENFORCEMENT_ERROR,
+        `the registry names ${registryPolicy} as the policy governing ${scope.repoName ?? scope.repoId} for ` +
+        `${scope.standardId}, and no --policy was supplied. Defaulting to ${POLICY_FILE} would evaluate this ` +
+        "repository against a policy nobody said governs it here",
+        { standards, gate: gateReport, scope: scopeReport, policy: { path: expected, source: policySource, digest: null } });
+    }
+    if (!samePolicyPath(expected, policyPath)) {
+      // Not an ENFORCEMENT_ERROR: two recorded intentions disagree, and which one is right is a
+      // judgement about governance rather than a fault in the run. That is what the registry's own
+      // CONFLICT handling is for, so it goes back to a human on the same path.
+      return result(STATE.SCOPE_REVIEW_REQUIRED,
+        `the registry names ${registryPolicy} for ${scope.standardId} and this run was given ${policyPath}; ` +
+        "a policy the registry does not name cannot be the one it authorised",
+        { standards, gate: gateReport, scope: { ...scopeReport, policyConflict: true }, policy: { path: policyPath, source: policySource, digest: null } });
+    }
+  }
+
   if (!existsSync(policyPath)) {
     // Before M3 this could only mean "no policy file here". With a confirmed in-scope disposition it
     // means something stronger and blockable: the authoritative registry says this repository is
     // governed, and adoption is absent. The two are reported differently because they are different
     // findings with different owners — see ADR 0004.
     const governed = scopeReport.disposition === OUTCOME.IN_SCOPE;
+    // Name the path that was actually looked for, not the constant. Once the path is a parameter,
+    // "contains no project-policy.yml" is a misleading sentence to print about a run that was told
+    // to read something else entirely.
+    const looked = policySource === "explicit" ? policyPath : POLICY_FILE;
     return result(STATE.NOT_ADOPTED,
       governed
         ? `${scope.repoName ?? scope.repoId} is recorded in scope for these standards by ${scopeReport.decision.reviewedBy} ` +
-          `on ${scopeReport.decision.reviewedAt}, and contains no ${POLICY_FILE}: it is governed and has not adopted`
-        : `${target} contains no ${POLICY_FILE}, so no standards version governs it`,
-      { standards, gate: gateReport, scope: scopeReport, governed });
+          `on ${scopeReport.decision.reviewedAt}, and contains no ${looked}: it is governed and has not adopted`
+        : `${target} contains no ${looked}, so no standards version governs it`,
+      { standards, gate: gateReport, scope: scopeReport, governed, policy: { path: policyPath, source: policySource, digest: null } });
   }
+
+  // Computed once the file is known to exist, and reported on every outcome downstream of here.
+  const policyReport = { path: policyPath, source: policySource, digest: policyDigest(policyPath) };
 
   // `enforce`'s subject IS the governed root — it enforces against a repository. The policy is passed
   // separately anyway, so that the day a caller evaluates a subpath, the policy does not follow it.
@@ -462,9 +592,12 @@ export async function enforce({
   // rather than recomputed: this line is the whole of "the policy whose presence established adoption
   // is the exact policy handed to the authority", and it is also the single place a future discovery
   // change has to reach.
-  const run = runOfficialEvaluator(identity.dir, { target, policyPath });
+  const run = runOfficialEvaluator(identity.dir, { target, policyPath, expectStandardId: scope?.standardId ?? null });
   if (!run.ok) {
-    return result(STATE.ENFORCEMENT_ERROR, run.why, { standards, gate: gateReport, scope: scopeReport });
+    // R2's refusal is an identity failure, not a generic one. STANDARDS_IDENTITY_MISMATCH already
+    // carries "nobody can say which standards ran", which is exactly what a wrong-pack release means.
+    return result(run.identityMismatch ? STATE.STANDARDS_IDENTITY_MISMATCH : STATE.ENFORCEMENT_ERROR,
+      run.why, { standards, gate: gateReport, scope: scopeReport, policy: policyReport });
   }
 
   const status = run.report?.status;
@@ -474,7 +607,7 @@ export async function enforce({
     // is membership of THIS release's declared vocabulary, not of any list held here.
     return result(STATE.ENFORCEMENT_ERROR,
       `the standards release returned the status ${JSON.stringify(status)}, which its own contract does not declare`,
-      { standards, gate: gateReport, scope: scopeReport, standardsExitCode: run.exitCode, report: run.report });
+      { standards, gate: gateReport, scope: scopeReport, policy: policyReport, standardsExitCode: run.exitCode, report: run.report });
   }
 
   // The whole of the enforcer's opinion about the verdict: is this status in the set the pack itself
@@ -486,6 +619,9 @@ export async function enforce({
     standards,
     gate: gateReport,
     scope: scopeReport,
+    // Which policy this verdict is about, and whether anybody said so. Beside the verdict, never
+    // inside it — the pack's report is reproduced verbatim and this is the enforcer's own record.
+    policy: policyReport,
     standardsExitCode: run.exitCode,
     // The native answer, kept as data rather than promoted into the enforcer's state machine.
     authority: { standard: run.contract.standard.id, status },
@@ -517,7 +653,7 @@ function describe(status, passing) {
 // ---------------------------------------------------------------------------
 
 function parseArgs(argv) {
-  const args = { target: null, standardsRepo: null, tag: null, sha: null, json: false, cacheRoot: DEFAULT_CACHE, gate: null, scope: null };
+  const args = { target: null, standardsRepo: null, tag: null, sha: null, json: false, cacheRoot: DEFAULT_CACHE, gate: null, scope: null, policy: null };
   const g = {};
   const s = {};
   for (const a of argv) {
@@ -527,6 +663,14 @@ function parseArgs(argv) {
     else if (a.startsWith("--tag=")) args.tag = a.slice(6);
     else if (a.startsWith("--sha=")) args.sha = a.slice(6);
     else if (a.startsWith("--cache=")) args.cacheRoot = path.resolve(a.slice(8));
+    // Absent, not empty: `--policy=` with nothing after it is a caller who meant to say something.
+    // Resolving "" would silently become the working directory, which is the class of accident this
+    // flag exists to prevent.
+    else if (a.startsWith("--policy=")) {
+      const v = a.slice(9);
+      if (!v) return { error: "--policy= was given with no path" };
+      args.policy = path.resolve(v);
+    }
     else if (a.startsWith("--platform=")) g.platform = a.slice(11);
     else if (a.startsWith("--gate-repo=")) g.repo = a.slice(12);
     else if (a.startsWith("--gate-branch=")) g.branch = a.slice(14);
@@ -594,6 +738,12 @@ function render(r) {
         ` (assurance: ${r.scope.detection.assurance})`);
     }
   }
+  if (r.policy) {
+    out.push("");
+    out.push(`  Policy: ${r.policy.path}`);
+    out.push(`          ${r.policy.source === "explicit" ? "named by the invocation" : `defaulted to ${POLICY_FILE}`}` +
+      (r.policy.digest ? `, ${r.policy.digest.slice(0, 19)}\u2026` : ""));
+  }
   out.push("");
   if (r.state === STATE.OUT_OF_SCOPE) {
     // The one passing state that is not a verdict. It must never read as though the standards looked
@@ -621,7 +771,8 @@ async function main() {
   if (parsed.error) {
     process.stderr.write(
       `enforce: ${parsed.error}\n\n` +
-        "  node scripts/enforce.mjs --target=<repo> --standards=<standards-repo> --tag=<tag> --sha=<40-hex> [--json]\n",
+        "  node scripts/enforce.mjs --target=<repo> --standards=<standards-repo> --tag=<tag> --sha=<40-hex>\n" +
+        "                           [--policy=<path>] [--json]\n",
     );
     return exitFor(STATE.ENFORCEMENT_ERROR, false);
   }

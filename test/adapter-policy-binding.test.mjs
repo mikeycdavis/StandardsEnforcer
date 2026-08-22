@@ -278,11 +278,22 @@ test("policy · the invoked policy IS the one whose presence established adoptio
     "and must not retain a root it could rejoin a filename onto");
 
   // One resolution, guarded, then handed on under the same name.
-  assert.ok(/const policyPath = path\.join\(target, POLICY_FILE\);/u.test(src),
+  //
+  // UPDATED IN 0.5.0, AND THE PROPERTY IS UNCHANGED. The resolution stopped being a bare join when
+  // `--policy` arrived, because a repository governed by four packs cannot hold one policy at one
+  // fixed name. What this guard is for did not move: there is still exactly ONE place a policy path
+  // comes into existence, it is still the adoption boundary, adoption is still decided on that exact
+  // path, and that exact value — never a recomputation — is still what the authority receives. Only
+  // the expression changed, so only the pattern changed with it.
+  assert.ok(/const policyPath = policy \? path\.resolve\(policy\) : path\.join\(target, POLICY_FILE\);/u.test(src),
     "the single resolution site should still be the adoption boundary in enforce()");
+  // Stronger than before rather than weaker: the default branch is the ONLY join of a root and a
+  // filename anywhere in the file, so a second discovery site cannot appear beside this one.
+  assert.equal(src.split("path.join(target, POLICY_FILE)").length - 1, 1,
+    "a policy path is derived in more than one place, which is the equality this guard exists to prevent");
   assert.ok(/if \(!existsSync\(policyPath\)\)/u.test(src),
     "adoption is decided by that exact path");
-  assert.ok(/runOfficialEvaluator\(identity\.dir, \{ target, policyPath \}\)/u.test(src),
+  assert.ok(/runOfficialEvaluator\(identity\.dir, \{ target, policyPath, expectStandardId: [^}]*\}\)/u.test(src),
     "and that exact path — not a recomputation of it — is what the authority receives");
 });
 
