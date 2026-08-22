@@ -39,8 +39,11 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
  * against — which read as coverage of that release and was not. The distinctive property of
  * `v1.4.0`, that it ships no invocation contract, is now asserted in
  * `adapter-less-release.test.mjs`, where something actually depends on it.
+ *
+ * Because no assertion here distinguishes releases, this pin tracks the current one. It moved from
+ * `v1.5.0` to `v1.6.0` on 2026-08-22 for that reason and no other.
  */
-const TAG = "v1.5.0";
+const TAG = "v1.6.0";
 const CACHE = path.join(tmpdir(), "standards-enforcer-test-cache");
 const TODAY = "2026-08-09";
 const REVIEWER = "ml-governance@acme.example";

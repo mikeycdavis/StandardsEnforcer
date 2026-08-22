@@ -125,12 +125,20 @@ export function oracleAt(tag) {
  * 2026-08-16 one of them had no reason at all: `scope.test.mjs` pinned `v1.4.0` because that was the
  * first release it was integrated against, which read as coverage of that release and was not.
  *
- *   v1.5.0  the authority-side repair of the false green — a run in which every applicable rule was
- *           skipped used to report COMPLIANT. `enforce`, `gate` and `scope` all run against it.
+ *   v1.6.0  the first release whose invocation contract declares schemaVersion 1.1.0 and admits
+ *           `{policy}`. `enforce`, `gate` and `scope` all run against it. It also carries the
+ *           authority-side repair of the false green that v1.5.0 introduced, which is why moving
+ *           those three suites forward loses no coverage: v1.6.0 descends from v1.5.0, so the
+ *           repaired behaviour is still what runs.
  *   v1.4.0  the only frozen release that ships no `standards-adapter.json`; the contract arrived one
  *           release later, in v1.4.1. `adapter-less-release.test.mjs` is the sole reason this entry
  *           exists. If that file goes, this entry goes with it rather than becoming another
  *           accidental dependency.
+ *
+ * `v1.5.0` was removed on 2026-08-22 when the three suites that imported it moved to `v1.6.0`. It
+ * is not kept "for coverage": with nothing importing it, it would be an entry with no stated reason,
+ * which is the exact accidental dependency the paragraph above exists to prevent. Its behaviour is
+ * still exercised, because v1.6.0 contains it.
  *
  * `v1.4.0` is durable as a fixture rather than merely convenient: MachineLearningStandards ADR 0010
  * makes a published release tag immutable, so it can never acquire the contract it lacks. That ADR
@@ -138,4 +146,4 @@ export function oracleAt(tag) {
  * branch and therefore movable:
  * https://github.com/mikeycdavis/MachineLearningStandards/blob/e30a84c6ffd74b9401d9e3ec0ffe08fb8cfa703d/artifacts/adr/0010-published-release-tags-are-public-authorities.md
  */
-export const ORACLE_TAGS = ["v1.4.0", "v1.5.0"];
+export const ORACLE_TAGS = ["v1.4.0", "v1.6.0"];
