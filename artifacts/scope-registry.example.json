@@ -14,6 +14,30 @@
     "pack is a question, not an answer: no decision on file is review-required, and never inherits",
     "another pack's decision.",
     "",
+    "`policyPath` names the policy file that governs this repository FOR THIS PACK, relative to the",
+    "repository root. Where it is present the enforcer refuses to default and refuses a --policy",
+    "naming anything else, so which policy governs is settled where the governed repository cannot",
+    "rewrite the answer. Comparison is by file rather than by spelling: case and separators are folded",
+    "on Windows, so a drive-letter difference is not reported as a governance conflict.",
+    "",
+    "IT IS REQUIRED ONCE A REPOSITORY IS IN SCOPE FOR MORE THAN ONE PACK, and optional below that.",
+    "Every pack's init writes project-policy.yml and their schemas are mutually incompatible, so with",
+    "two or more dispositions in scope the default filename cannot say which document governs which",
+    "pack. A disposition that omits it there is review-required and nothing is evaluated -- the",
+    "registry is well-formed and a human under-specified it. With exactly one pack in scope the default",
+    "is unambiguous and requiring this would be ceremony.",
+    "",
+    "acme/pricing-engine below is the multi-pack shape, and it carries the one consequence people get",
+    "wrong: the pack whose policy sits at the DEFAULT location must name it too. Being the incumbent is",
+    "not an exemption. Once a second pack is in scope, `project-policy.yml` is one candidate among",
+    "several rather than the obvious answer, and the requirement is on every in-scope disposition.",
+    "",
+    "The pack ids in this file are opaque data -- each is a pack's own `standard.id`, read from the",
+    "adapter contract in its verified release. The enforcer holds no list of them and validates nothing",
+    "about them beyond presence: an id it has never seen simply has no disposition on file, which is",
+    "review-required. Governing a repository with a third or fourth pack is an edit to THIS file and to",
+    "nothing in scripts/ (ADR 0001).",
+    "",
     "`reviewedFootprint` is the evidence basis, and it NAMES THE SURFACE it was reviewed against. It is",
     "what makes a decision able to go stale, and a decision that cannot go stale cannot be trusted to be",
     "fresh. Obtain it with `node scripts/footprint.mjs <dir>`. A basis naming a surface the enforcer did",
@@ -26,6 +50,7 @@
   "schemaVersion": "1.0.0",
   "authorisedReviewers": [
     "ml-governance@acme.example",
+    "eng-governance@acme.example",
     "j.okafor@acme.example"
   ],
   "repositories": {
@@ -34,6 +59,7 @@
       "standards": {
         "machine-learning": {
           "disposition": "in-scope",
+          "policyPath": "artifacts/standards/policies/machine-learning-policy.yml",
           "reviewedBy": "ml-governance@acme.example",
           "reviewedAt": "2026-08-09",
           "reason": "Trains and evaluates gradient-boosted models against a held-out season and ships the result to production ranking.",
@@ -53,6 +79,67 @@
               "training-call-shape",
               "training-framework-dependency",
               "training-framework-import"
+            ],
+            "digest": "REPLACE-WITH-OUTPUT-OF-footprint.mjs"
+          },
+          "expiresAt": null
+        }
+      }
+    },
+    "github:4096227": {
+      "name": "acme/pricing-engine",
+      "$comment": [
+        "IN SCOPE FOR TWO PACKS, so every in-scope disposition here names its own policyPath -- the",
+        "engineering one included, even though its policy is the file the enforcer would have defaulted",
+        "to. That is the point: with a second pack in scope, the default location stops identifying a",
+        "document. Omit it on either disposition and the answer is review-required, not a verdict.",
+        "",
+        "Both bases name `training-evidence` because that is the one surface the enforcer computes",
+        "today, not because both packs are about training. A basis naming a surface no detector",
+        "produces is undetermined -- neither fresh nor stale -- and goes back to a human."
+      ],
+      "standards": {
+        "engineering": {
+          "disposition": "in-scope",
+          "policyPath": "project-policy.yml",
+          "reviewedBy": "eng-governance@acme.example",
+          "reviewedAt": "2026-08-14",
+          "reason": "A production service with its own CI, release process and on-call rotation, which is the subject the engineering standards address.",
+          "evidence": [
+            ".github/workflows/ci.yml gates every merge",
+            "docs/runbook.md records the on-call procedure"
+          ],
+          "revisitWhen": [
+            "the service is retired or absorbed into another repository"
+          ],
+          "reviewedFootprint": {
+            "surface": "training-evidence",
+            "kinds": [
+              "training-call-shape",
+              "training-framework-dependency"
+            ],
+            "digest": "REPLACE-WITH-OUTPUT-OF-footprint.mjs"
+          },
+          "expiresAt": null
+        },
+        "machine-learning": {
+          "disposition": "in-scope",
+          "policyPath": "artifacts/standards/policies/machine-learning-policy.yml",
+          "reviewedBy": "ml-governance@acme.example",
+          "reviewedAt": "2026-08-14",
+          "reason": "Fits and re-fits a demand model on a weekly cadence and selects between candidates on held-out error, so the training and evaluation standards have a subject here.",
+          "evidence": [
+            "src/pricing/fit.py refits weekly against a rolling window",
+            "artifacts/eval/weekly-backtest.md records candidate selection"
+          ],
+          "revisitWhen": [
+            "pricing moves to a vendor model this repository only calls"
+          ],
+          "reviewedFootprint": {
+            "surface": "training-evidence",
+            "kinds": [
+              "training-call-shape",
+              "training-framework-dependency"
             ],
             "digest": "REPLACE-WITH-OUTPUT-OF-footprint.mjs"
           },

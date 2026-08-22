@@ -205,6 +205,12 @@ export function resolveScope({ registryPath, repoId, repoName = null, standardId
     evidence: recorded.evidence ?? [],
     revisitWhen: recorded.revisitWhen ?? [],
     reviewedFootprint: recorded.reviewedFootprint ?? null,
+    // Which policy file governs this repository for THIS pack. Optional, and absent means "no
+    // opinion" rather than "the default is authorised": a repository governed by one pack never
+    // needed it, and one governed by four cannot work without it. The enforcer refuses to default
+    // when this is present — see R1 in enforce.mjs. Held here because the registry is the one place
+    // a governed repository cannot rewrite the answer.
+    policyPath: recorded.policyPath ?? null,
     expiresAt: recorded.expiresAt ?? null,
   };
 
@@ -229,6 +235,38 @@ export function resolveScope({ registryPath, repoId, repoName = null, standardId
   if (decision.expiresAt && DATE.test(decision.expiresAt) && decision.expiresAt < today) {
     // Not a default timer — a bound a reviewer chose to set on their own decision.
     return review(`the scope decision for ${repoName ?? repoId} expired on ${decision.expiresAt}`, { decision, expired: true });
+  }
+
+  // A repository governed by more than one pack must say which policy belongs to which.
+  //
+  // THIS IS THE PRECONDITION R1 QUIETLY CREATED. R1 refuses to default only where a disposition names
+  // `policyPath`; where none is named it keeps the old behaviour, so the guard that closes the
+  // wrong-policy hole was itself optional, and optional exactly where it is needed. The enforcer
+  // cannot close it from the target's side — no policy file declares which pack it belongs to — so
+  // the requirement is stated here, against the registry, which is the one place a governed
+  // repository cannot rewrite the answer.
+  //
+  // The trigger is a COUNT, never a list. Nothing in this file may know which packs exist (ADR 0001,
+  // enforced by `authority-boundary.test.mjs`), and it does not need to: with two or more dispositions
+  // in scope, every one of their adoptions writes the same default filename, and one default cannot
+  // identify four documents. With exactly one pack in scope the default is unambiguous and the
+  // requirement would be ceremony.
+  //
+  // Review-required rather than invalid: the registry is well-formed and a human under-specified it.
+  // That is the same shape as every other incomplete disposition here, and it goes to the same place.
+  if (decision.disposition === DISPOSITION.IN_SCOPE && !decision.policyPath) {
+    const governing = Object.values(filed).filter(
+      (d) => d && typeof d === "object" && d.disposition === DISPOSITION.IN_SCOPE,
+    ).length;
+    if (governing > 1) {
+      return review(
+        `${repoName ?? repoId} is recorded in scope for ${governing} standards packs, and the disposition for ` +
+        `${standardId} names no policyPath. Every pack's adoption writes the same default policy filename, so ` +
+        "with more than one in scope the default cannot say which policy governs this one, and a verdict read " +
+        "from another pack's policy would be confident and wrong",
+        { decision, policyPathRequired: true, governing },
+      );
+    }
   }
 
   const basis = decision.reviewedFootprint;

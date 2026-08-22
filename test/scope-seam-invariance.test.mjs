@@ -67,7 +67,15 @@ const BROKEN = {
   "an unusable evaluator": {
     "standards-adapter.json": JSON.stringify({
       schemaVersion: "1.0.0",
-      standard: { id: "seam-fixture" },
+      // Must equal STANDARD, and asserted below so the two cannot drift.
+      //
+      // It read "seam-fixture" until 0.5.0, which was incidental to what this fixture is for — an
+      // evaluator that cannot produce a verdict — and stopped being incidental when R2 began
+      // refusing a release that declares a pack the invocation did not ask for. With a mismatched id
+      // the governed case never reached the unusable evaluator at all: it failed earlier, on
+      // identity, and the paired assertion below would have been proving the wrong refusal. The
+      // assertions are untouched; only the fixture reaches the path it was written to exercise.
+      standard: { id: "machine-learning" },
       evaluation: { entrypoint: "scripts/standards.mjs", arguments: ["validate", "{target}", "--json"] },
       result: { statuses: ["COMPLIANT", "NON_COMPLIANT"], passing: ["COMPLIANT"] },
     }),
@@ -118,6 +126,15 @@ async function registry(at, entry, { reviewers = [REVIEWER], key = ID } = {}) {
 
 /** The asking pack's id. Supplied by the invocation, never read out of the release under test. */
 const STANDARD = "machine-learning";
+
+// The unusable-evaluator fixture has to declare the pack the invocation asks for, or R2 refuses it
+// on identity before the evaluator is ever reached and the paired case below asserts nothing about
+// unusability. Pinned here rather than trusted, because the two literals sit ~60 lines apart.
+test("fixture · the unusable evaluator declares the pack the invocation asks for", () => {
+  const declared = JSON.parse(BROKEN["an unusable evaluator"]["standards-adapter.json"]).standard.id;
+  assert.equal(declared, STANDARD,
+    "a mismatched fixture id would make the unusable-evaluator cases fail on identity instead");
+});
 
 const decision = (over = {}) => ({
   disposition: "in-scope",
