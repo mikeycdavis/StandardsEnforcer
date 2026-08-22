@@ -26,7 +26,9 @@ import { STATE, exitFor, EXIT } from "../scripts/states.mjs";
 import { oracleAt } from "../test-support/oracle.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const TAG = "v1.5.0";
+// v1.6.0: the first release declaring adapter schemaVersion 1.1.0, so binding {policy} through the
+// real contract is exercised here rather than only against a synthetic pack this repository wrote.
+const TAG = "v1.6.0";
 const CACHE = path.join(tmpdir(), "standards-enforcer-test-cache");
 const CHECK = "standards / machine-learning";
 const PINNED_WF = "acme/standards-ci/.github/workflows/standards.yml@1111111111111111111111111111111111111111";

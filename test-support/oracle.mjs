@@ -125,12 +125,26 @@ export function oracleAt(tag) {
  * 2026-08-16 one of them had no reason at all: `scope.test.mjs` pinned `v1.4.0` because that was the
  * first release it was integrated against, which read as coverage of that release and was not.
  *
- *   v1.5.0  the authority-side repair of the false green — a run in which every applicable rule was
- *           skipped used to report COMPLIANT. `enforce`, `gate` and `scope` all run against it.
+ *   v1.6.0  the first release whose invocation contract declares schemaVersion 1.1.0 and admits
+ *           `{policy}`. `enforce`, `gate` and `scope` all run against it. At 1.0.0 a bound
+ *           `{policy}` is silently dropped, so before this release the binding could only be
+ *           exercised against packs this repository wrote -- which is not independent evidence.
+ *   v1.5.0  the authority-side repair of the false green: a run in which every applicable rule was
+ *           skipped used to report COMPLIANT. Retained as a fixture in its own right, not as the
+ *           incidental import it once was. No suite pins it today, and that is not a reason to drop
+ *           it -- the release where a repair FIRST exists is the specimen for that repair, and an
+ *           oracle unable to serve it cannot demonstrate the behaviour whatever else it can serve.
+ *           Semantic ancestry is not substitution: that v1.6.0 descends from v1.5.0 makes the
+ *           behaviour present, not the fixture reproducible.
  *   v1.4.0  the only frozen release that ships no `standards-adapter.json`; the contract arrived one
  *           release later, in v1.4.1. `adapter-less-release.test.mjs` is the sole reason this entry
  *           exists. If that file goes, this entry goes with it rather than becoming another
  *           accidental dependency.
+ *
+ * Note the asymmetry, because it is the whole point of this list. `v1.4.0` and `v1.5.0` are retained
+ * for what they are -- an adapter-less release and a false-green repair, each unreproducible from any
+ * other tag under ADR 0010's immutability. `v1.6.0` is here because three suites import it. An entry
+ * needs one of those two reasons; it may not survive on neither.
  *
  * `v1.4.0` is durable as a fixture rather than merely convenient: MachineLearningStandards ADR 0010
  * makes a published release tag immutable, so it can never acquire the contract it lacks. That ADR
@@ -138,4 +152,4 @@ export function oracleAt(tag) {
  * branch and therefore movable:
  * https://github.com/mikeycdavis/MachineLearningStandards/blob/e30a84c6ffd74b9401d9e3ec0ffe08fb8cfa703d/artifacts/adr/0010-published-release-tags-are-public-authorities.md
  */
-export const ORACLE_TAGS = ["v1.4.0", "v1.5.0"];
+export const ORACLE_TAGS = ["v1.4.0", "v1.5.0", "v1.6.0"];
