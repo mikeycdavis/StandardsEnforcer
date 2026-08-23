@@ -7,7 +7,7 @@
     "standards-enforce": "scripts/enforce.mjs"
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node scripts/test-surface.mjs"
   },
   "engines": {
     "node": ">=18"
