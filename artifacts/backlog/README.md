@@ -24,9 +24,9 @@ derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/
 | Status | Items |
 | --- | ---: |
 | ○ Not started | 9 |
-| ◑ In progress | 8 |
+| ◑ In progress | 7 |
 | ◒ Blocked | 2 |
-| ● Complete | 18 |
+| ● Complete | 19 |
 | **Total** | **37** |
 
 ## The hierarchy
@@ -50,7 +50,6 @@ derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/
 
 - ◑ [EP-01](./items/EP-01.md) — Authority transport — run a pack's own evaluator under a pinned identity
 - ◑ [EP-02](./items/EP-02.md) — The enforcement root — a gate the governed pull request cannot satisfy
-- ◑ [EP-04](./items/EP-04.md) — The enforcer's own release lineage
 - ◑ [EP-06](./items/EP-06.md) — Self-assurance — this repository's own evidence must establish what it reports
 - ◑ [FE-04](./items/FE-04.md) — M4 — the enforcement root against live GitHub
 - ◒ [FE-09](./items/FE-09.md) — Make BYPASS_USED reachable
@@ -84,7 +83,7 @@ _Nothing marked ready._
         - ● **[ST-06](./items/ST-06.md)** Establish live whether an Actions-bound required check is spoofable
         - ◒ **[ST-07](./items/ST-07.md)** Validate the required-workflows remedy against a real organisation ruleset
     - ● **[EP-03](./items/EP-03.md)** Scope — whether a standard governs a repository is a recorded decision
-    - ◑ **[EP-04](./items/EP-04.md)** The enforcer's own release lineage _(2/2)_
+    - ● **[EP-04](./items/EP-04.md)** The enforcer's own release lineage _(2/2)_
       - ● **[FE-06](./items/FE-06.md)** Decide which line becomes authoritative, and then the disposition of main
       - ● **[FE-17](./items/FE-17.md)** The front door advertises a state model the code removed
     - ○ **[EP-05](./items/EP-05.md)** Reach beyond one repository, one platform, one standard _(1/6)_

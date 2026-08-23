@@ -114,7 +114,7 @@ test("mutation · each status count is caught", () => {
   // reported twice, once for the bucket it left and once for the bucket it joined.
   for (const [id, from, to] of [
     ["ST-09", "NOT_STARTED", "IN_PROGRESS"],
-    ["EP-04", "IN_PROGRESS", "BLOCKED"],
+    ["EP-02", "IN_PROGRESS", "BLOCKED"],
     ["ST-07", "BLOCKED", "NOT_STARTED"],
     ["FE-01", "COMPLETE", "NOT_STARTED"],
   ]) {
@@ -197,7 +197,7 @@ test("mutation · the in-flight set is caught even when every status count is un
   // One item starts, another stops, so the four buckets hold exactly what they held before. What
   // changes is who is on the list somebody reads to decide what to work on.
   const { problems, kinds } = underMutation((_r, { item }) => {
-    item("EP-04").status = "NOT_STARTED";
+    item("EP-02").status = "NOT_STARTED";
     item("EP-05").status = "IN_PROGRESS";
   });
   assert.deepEqual(problems, []);
