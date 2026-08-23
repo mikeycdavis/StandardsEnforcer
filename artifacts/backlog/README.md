@@ -13,21 +13,21 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 [`items/`](./items/); its YAML frontmatter is the source of truth, and the figures on this page are
 derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/backlog.mjs).
 
-**17 of 27 leaf items complete — 63%**
+**17 of 28 leaf items complete — 61%**
 
 ```
-█████████████████████████░░░░░░░░░░░░░░░  63%
+████████████████████████░░░░░░░░░░░░░░░░  61%
 ```
 
 ## Status
 
 | Status | Items |
 | --- | ---: |
-| ○ Not started | 8 |
+| ○ Not started | 9 |
 | ◑ In progress | 8 |
 | ◒ Blocked | 2 |
 | ● Complete | 18 |
-| **Total** | **36** |
+| **Total** | **37** |
 
 ## The hierarchy
 
@@ -37,14 +37,14 @@ derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/
 | Initiative | `IN-` | 1 | What outcome are we pursuing there? |
 | Epic | `EP-` | 6 | What large body of work delivers it? |
 | Feature | `FE-` | 16 | What shippable slice of that epic? |
-| Story | `ST-` | 12 | What user-visible change, roughly one PR? |
+| Story | `ST-` | 13 | What user-visible change, roughly one PR? |
 | Task | `TA-` | 0 | What technical step inside a story? |
 
 ## Progress by theme
 
 | Theme | Progress | Done | Remaining |
 | --- | --- | ---: | ---: |
-| [TH-01 Enforced standards compliance across the portfolio](./items/TH-01.md) | `█████████░░░░░` 63% | 17 | 10 |
+| [TH-01 Enforced standards compliance across the portfolio](./items/TH-01.md) | `█████████░░░░░` 61% | 17 | 11 |
 
 ## In flight
 
@@ -65,8 +65,8 @@ _Nothing marked ready._
 
 ## Everything
 
-- ◑ **[TH-01](./items/TH-01.md)** Enforced standards compliance across the portfolio _(17/27)_
-  - ◑ **[IN-01](./items/IN-01.md)** Enforcement a governed repository cannot weaken _(17/27)_
+- ◑ **[TH-01](./items/TH-01.md)** Enforced standards compliance across the portfolio _(17/28)_
+  - ◑ **[IN-01](./items/IN-01.md)** Enforcement a governed repository cannot weaken _(17/28)_
     - ◑ **[EP-01](./items/EP-01.md)** Authority transport — run a pack's own evaluator under a pinned identity _(8/9)_
       - ● **[FE-01](./items/FE-01.md)** M1 — run the official standards implementation and report what it said
       - ● **[FE-02](./items/FE-02.md)** M2 — contract-driven authority transport _(5/5)_
@@ -94,11 +94,12 @@ _Nothing marked ready._
       - ○ **[FE-10](./items/FE-10.md)** Reviewer identity beyond a configured list
       - ○ **[FE-11](./items/FE-11.md)** Cross-pack dependency ordering
       - ● **[FE-12](./items/FE-12.md)** Scope dispositions keyed per pack, not hardcoded to machine-learning
-    - ◑ **[EP-06](./items/EP-06.md)** Self-assurance — this repository's own evidence must establish what it reports _(3/5)_
+    - ◑ **[EP-06](./items/EP-06.md)** Self-assurance — this repository's own evidence must establish what it reports _(3/6)_
       - ◑ **[FE-14](./items/FE-14.md)** A skipped oracle is not a passing integration
       - ● **[ST-08](./items/ST-08.md)** Authoritative container CI must assert the symlink capability it depends on
       - ● **[ST-10](./items/ST-10.md)** The backlog tracker claims to be derived, and no executable derivation exists
       - ● **[ST-11](./items/ST-11.md)** A structural guard must fail when it cannot find what it guards
       - ○ **[ST-12](./items/ST-12.md)** Audit every test that derives structure from source text, before deciding whether the tree needs normalising
+      - ○ **[ST-13](./items/ST-13.md)** The authoritative suite must be this repository's tests, not everything mounted beneath it
     - ○ **[ST-09](./items/ST-09.md)** scripts/ci.sh fails under Git Bash on Windows
 
