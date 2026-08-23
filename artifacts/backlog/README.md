@@ -13,10 +13,10 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 [`items/`](./items/); its YAML frontmatter is the source of truth, and the figures on this page are
 derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/backlog.mjs).
 
-**17 of 27 leaf items complete — 63%**
+**18 of 27 leaf items complete — 67%**
 
 ```
-█████████████████████████░░░░░░░░░░░░░░░  63%
+███████████████████████████░░░░░░░░░░░░░  67%
 ```
 
 ## Status
@@ -24,9 +24,9 @@ derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/
 | Status | Items |
 | --- | ---: |
 | ○ Not started | 8 |
-| ◑ In progress | 8 |
+| ◑ In progress | 6 |
 | ◒ Blocked | 2 |
-| ● Complete | 18 |
+| ● Complete | 20 |
 | **Total** | **36** |
 
 ## The hierarchy
@@ -44,17 +44,15 @@ derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/
 
 | Theme | Progress | Done | Remaining |
 | --- | --- | ---: | ---: |
-| [TH-01 Enforced standards compliance across the portfolio](./items/TH-01.md) | `█████████░░░░░` 63% | 17 | 10 |
+| [TH-01 Enforced standards compliance across the portfolio](./items/TH-01.md) | `█████████░░░░░` 67% | 18 | 9 |
 
 ## In flight
 
 - ◑ [EP-01](./items/EP-01.md) — Authority transport — run a pack's own evaluator under a pinned identity
 - ◑ [EP-02](./items/EP-02.md) — The enforcement root — a gate the governed pull request cannot satisfy
-- ◑ [EP-04](./items/EP-04.md) — The enforcer's own release lineage
 - ◑ [EP-06](./items/EP-06.md) — Self-assurance — this repository's own evidence must establish what it reports
 - ◑ [FE-04](./items/FE-04.md) — M4 — the enforcement root against live GitHub
 - ◒ [FE-09](./items/FE-09.md) — Make BYPASS_USED reachable
-- ◑ [FE-14](./items/FE-14.md) — A skipped oracle is not a passing integration
 - ◑ [IN-01](./items/IN-01.md) — Enforcement a governed repository cannot weaken
 - ◒ [ST-07](./items/ST-07.md) — Validate the required-workflows remedy against a real organisation ruleset
 - ◑ [TH-01](./items/TH-01.md) — Enforced standards compliance across the portfolio
@@ -65,8 +63,8 @@ _Nothing marked ready._
 
 ## Everything
 
-- ◑ **[TH-01](./items/TH-01.md)** Enforced standards compliance across the portfolio _(17/27)_
-  - ◑ **[IN-01](./items/IN-01.md)** Enforcement a governed repository cannot weaken _(17/27)_
+- ◑ **[TH-01](./items/TH-01.md)** Enforced standards compliance across the portfolio _(18/27)_
+  - ◑ **[IN-01](./items/IN-01.md)** Enforcement a governed repository cannot weaken _(18/27)_
     - ◑ **[EP-01](./items/EP-01.md)** Authority transport — run a pack's own evaluator under a pinned identity _(8/9)_
       - ● **[FE-01](./items/FE-01.md)** M1 — run the official standards implementation and report what it said
       - ● **[FE-02](./items/FE-02.md)** M2 — contract-driven authority transport _(5/5)_
@@ -84,7 +82,7 @@ _Nothing marked ready._
         - ● **[ST-06](./items/ST-06.md)** Establish live whether an Actions-bound required check is spoofable
         - ◒ **[ST-07](./items/ST-07.md)** Validate the required-workflows remedy against a real organisation ruleset
     - ● **[EP-03](./items/EP-03.md)** Scope — whether a standard governs a repository is a recorded decision
-    - ◑ **[EP-04](./items/EP-04.md)** The enforcer's own release lineage _(2/2)_
+    - ● **[EP-04](./items/EP-04.md)** The enforcer's own release lineage _(2/2)_
       - ● **[FE-06](./items/FE-06.md)** Decide which line becomes authoritative, and then the disposition of main
       - ● **[FE-17](./items/FE-17.md)** The front door advertises a state model the code removed
     - ○ **[EP-05](./items/EP-05.md)** Reach beyond one repository, one platform, one standard _(1/6)_
@@ -94,8 +92,8 @@ _Nothing marked ready._
       - ○ **[FE-10](./items/FE-10.md)** Reviewer identity beyond a configured list
       - ○ **[FE-11](./items/FE-11.md)** Cross-pack dependency ordering
       - ● **[FE-12](./items/FE-12.md)** Scope dispositions keyed per pack, not hardcoded to machine-learning
-    - ◑ **[EP-06](./items/EP-06.md)** Self-assurance — this repository's own evidence must establish what it reports _(3/5)_
-      - ◑ **[FE-14](./items/FE-14.md)** A skipped oracle is not a passing integration
+    - ◑ **[EP-06](./items/EP-06.md)** Self-assurance — this repository's own evidence must establish what it reports _(4/5)_
+      - ● **[FE-14](./items/FE-14.md)** A skipped oracle is not a passing integration
       - ● **[ST-08](./items/ST-08.md)** Authoritative container CI must assert the symlink capability it depends on
       - ● **[ST-10](./items/ST-10.md)** The backlog tracker claims to be derived, and no executable derivation exists
       - ● **[ST-11](./items/ST-11.md)** A structural guard must fail when it cannot find what it guards
