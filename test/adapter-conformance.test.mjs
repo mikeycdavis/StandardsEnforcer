@@ -275,5 +275,9 @@ test("the placeholder set of each schema version is pinned", () => {
   // binding is ever added to the version packs have already released under.
   assert.deepEqual([...PLACEHOLDERS_BY_VERSION["1.0.0"]], ["{target}"]);
   assert.deepEqual([...PLACEHOLDERS_BY_VERSION["1.1.0"]], ["{target}", "{policy}"]);
-  assert.deepEqual([...SUPPORTED_SCHEMA_VERSIONS], ["1.0.0", "1.1.0"]);
+  // 1.2.0 adds no placeholder: it exists for the `adoption` block, which is a new thing a contract
+  // may SAY rather than a new substitution. Pinned all the same, so that a future binding cannot be
+  // added to it quietly either.
+  assert.deepEqual([...PLACEHOLDERS_BY_VERSION["1.2.0"]], ["{target}", "{policy}"]);
+  assert.deepEqual([...SUPPORTED_SCHEMA_VERSIONS], ["1.0.0", "1.1.0", "1.2.0"]);
 });

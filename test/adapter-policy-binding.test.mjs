@@ -285,11 +285,20 @@ test("policy · the invoked policy IS the one whose presence established adoptio
   // comes into existence, it is still the adoption boundary, adoption is still decided on that exact
   // path, and that exact value — never a recomputation — is still what the authority receives. Only
   // the expression changed, so only the pattern changed with it.
-  assert.ok(/const policyPath = policy \? path\.resolve\(policy\) : path\.join\(target, POLICY_FILE\);/u.test(src),
+  assert.ok(/const policyPath = policy\s*\?\s*path\.resolve\(policy\)\s*:\s*path\.join\(target, present\[0\] \?\? markers\[0\]\);/u.test(src),
     "the single resolution site should still be the adoption boundary in enforce()");
-  // Stronger than before rather than weaker: the default branch is the ONLY join of a root and a
-  // filename anywhere in the file, so a second discovery site cannot appear beside this one.
-  assert.equal(src.split("path.join(target, POLICY_FILE)").length - 1, 1,
+  // UPDATED FOR FE-21, AND THE PROPERTY IS AGAIN UNCHANGED. The default branch stopped joining a
+  // constant when adoption markers became the pack's to declare, so the filename now comes from the
+  // discovered set rather than from this repository. What this guard is for did not move: a policy
+  // path still comes into existence in exactly ONE place, it is still the adoption boundary, and
+  // that exact value is still what the authority receives.
+  //
+  // COUNTED ON THE ASSIGNMENT, NOT ON THE JOIN. Discovery necessarily probes one join per candidate
+  // marker to find which are present, and those probes are not resolutions — they produce no policy
+  // path and nothing downstream reads them. Counting joins would have to be relaxed to a number that
+  // grows with the marker set, which is a guard that stops meaning anything. Counting the binding
+  // keeps the original equality exactly: one assignment, or this fails.
+  assert.equal(src.split("const policyPath =").length - 1, 1,
     "a policy path is derived in more than one place, which is the equality this guard exists to prevent");
   assert.ok(/if \(!existsSync\(policyPath\)\)/u.test(src),
     "adoption is decided by that exact path");

@@ -44,7 +44,7 @@ import { detectFootprint } from "./footprint.mjs";
 import { resolveScope, OUTCOME } from "./scope.mjs";
 import { githubPlatform } from "./platform/github.mjs";
 import { STATE, PASSING, REQUIRES_RECORDED_DECISION, exitFor } from "./states.mjs";
-import { readAdapter, bindArguments, AdapterContractError, ADAPTER_FILENAME } from "./contracts/adapter.mjs";
+import { readAdapter, bindArguments, AdapterContractError, ADAPTER_FILENAME, declaredAdoptionMarkers } from "./contracts/adapter.mjs";
 
 const PLATFORMS = { github: githubPlatform };
 
@@ -65,6 +65,25 @@ export const SCHEMA_VERSION = "0.5.0";
  * non-compliance; it is still a different state.
  */
 const POLICY_FILE = "project-policy.yml";
+
+/**
+ * LEGACY ENFORCER COMPATIBILITY — deliberately not a pack declaration.
+ *
+ * This is the set the enforcer used before adoption markers were declarable, and it is retained for
+ * exactly one reason: a contract stamped below 1.2.0 cannot say anything about adoption, and
+ * changing what those contracts mean after they were released is the retroactive-widening this
+ * repository refuses everywhere else. So a pre-1.2.0 pack keeps the behaviour it already had, and
+ * gains nothing.
+ *
+ * WHAT IT IS NOT. It is not a claim about any pack. It does not mean "packs use this name"; it means
+ * "this enforcer used to assume it, and old contracts are entitled to the assumption they shipped
+ * under". In particular it must never grow: adding `project-policy.yaml` here because
+ * FinancialStandards' `init` admits it would make the CONSUMER authoritative over what adoption of
+ * that pack means, on the evidence of that pack's private implementation — which is the exact
+ * substitution FE-21 was opened to refuse. A pack that wants a second spelling declares it, at
+ * 1.2.0, and pays the re-release to do so.
+ */
+const LEGACY_ADOPTION_MARKERS = Object.freeze([POLICY_FILE]);
 
 /**
  * The identity of the policy that was actually evaluated.
@@ -531,7 +550,77 @@ export async function enforce({
   // so, or did the enforcer pick one" are different questions, and a payload that answers only the
   // first cannot distinguish a deliberate default from a forgotten flag.
   const policySource = policy ? "explicit" : "default";
-  const policyPath = policy ? path.resolve(policy) : path.join(target, POLICY_FILE);
+
+  // Marker discovery, and it runs ONLY on the default path.
+  //
+  // `--policy` is an explicit invocation: the caller named a file, so no filename was ever in
+  // question and there is nothing here to discover. Conflating the two would make an explicit path
+  // subject to a pack's marker set, which is a different and wrong rule — the set says what
+  // constitutes ADOPTION, not what may be evaluated.
+  //
+  // The contract is read here rather than inherited from the evaluation seam because adoption is
+  // decided before the pack is invoked, and `resolveIdentity` above has already materialised the
+  // release — so the declaration is on disk, and this is a reordering rather than a new dependency.
+  //
+  // A CONTRACT THAT CANNOT BE READ IS NOT INTERPRETED HERE. Absent, malformed, or stamped at a
+  // version this enforcer does not implement, discovery falls back to the legacy set and stays
+  // silent, so the run reaches the same state it reached before this existed and the contract's own
+  // failure is reported where it always was — by `runOfficialEvaluator`, in full. Reporting it twice
+  // in two vocabularies would give one defect two owners, and reporting it EARLIER would move
+  // adapter-less releases off NOT_ADOPTED, which `test/adapter-less-release.test.mjs` relies on
+  // precisely because that ordering is what keeps its own assertions from passing vacuously.
+  let markers = LEGACY_ADOPTION_MARKERS;
+  let markerSource = "legacy";
+  if (!policy) {
+    // ABSENT AND INVALID ARE DIFFERENT EVENTS, and only one of them is silent here.
+    //
+    // No contract at all is nothing to read: the release predates the protocol, the legacy set
+    // applies, and the run continues to the state it always reached — which is what keeps
+    // adapter-less releases on NOT_ADOPTED. A contract that EXISTS and does not conform is a
+    // positive integration failure, and swallowing it would report "no policy here" about a run
+    // whose real problem is that the pack's declaration could not be read. That is the FE-21 defect
+    // wearing a different hat: a true condition reported as a different, blockable one.
+    const hasContract = existsSync(path.join(identity.dir, ADAPTER_FILENAME));
+    let contract = null;
+    try {
+      contract = loadAdapter(identity.dir).contract;
+    } catch (e) {
+      if (hasContract) {
+        return result(STATE.ENFORCEMENT_ERROR, e.message,
+          { standards, gate: gateReport, scope: scopeReport,
+            policy: { path: null, source: policySource, digest: null } });
+      }
+      // Absent: stay silent. `runOfficialEvaluator` reports it in full where it always did.
+    }
+    const declared = contract ? declaredAdoptionMarkers(contract) : null;
+    if (declared) {
+      markers = declared;
+      markerSource = "declared";
+    }
+  }
+
+  const present = policy ? [] : markers.filter((name) => existsSync(path.join(target, name)));
+
+  // AMBIGUITY FAILS TOWARD UNCERTAINTY, using the state that already means "this run could not be
+  // configured", never a new one and never a silent pick.
+  //
+  // Order in `policyFiles` is not precedence — the contract says so — so with two markers present
+  // there is no declared answer to which governs, and choosing either would manufacture one. This is
+  // the same refusal the registry-conflict path already makes: two recorded intentions that disagree
+  // go back to a human rather than being resolved by position in a list.
+  if (present.length > 1) {
+    return result(STATE.ENFORCEMENT_ERROR,
+      `${target} holds ${present.length} of the adoption markers ${scope?.standardId ?? "these standards"} ` +
+        `admits (${present.join(", ")}), and the contract states no precedence among them. Which one ` +
+        `governs is not something this enforcer may decide by position in a list; name it with --policy, ` +
+        "or have the pack declare a precedence rule",
+      { standards, gate: gateReport, scope: scopeReport,
+        policy: { path: null, source: policySource, digest: null, markers: [...markers], markerSource, present } });
+  }
+
+  const policyPath = policy
+    ? path.resolve(policy)
+    : path.join(target, present[0] ?? markers[0]);
 
   // R1 — where an external registry names the policy for this (repository x pack), that naming is
   // authoritative and defaulting is refused.
@@ -573,7 +662,10 @@ export async function enforce({
     // Name the path that was actually looked for, not the constant. Once the path is a parameter,
     // "contains no project-policy.yml" is a misleading sentence to print about a run that was told
     // to read something else entirely.
-    const looked = policySource === "explicit" ? policyPath : POLICY_FILE;
+    // Name what was actually looked for. Once the set is the pack's, printing one constant would
+    // tell an operator to create a file this pack may not even admit — and where the pack declares
+    // several, "contains no project-policy.yml" is false about a search that looked for more.
+    const looked = policySource === "explicit" ? policyPath : markers.join(" or ");
     return result(STATE.NOT_ADOPTED,
       governed
         ? `${scope.repoName ?? scope.repoId} is recorded in scope for these standards by ${scopeReport.decision.reviewedBy} ` +

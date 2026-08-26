@@ -50,7 +50,7 @@ const EVALUATOR = [
   "  policyBody: body === null ? null : body.trim() }));",
 ].join("\n");
 
-async function release(dir) {
+async function release(dir, { schemaVersion = "1.2.0", adoption, initMarkers = null } = {}) {
   const repo = path.join(dir, "standards");
   await mkdir(path.join(repo, "scripts"), { recursive: true });
   git(["init", "--quiet", "-b", "main"], repo);
@@ -59,12 +59,22 @@ async function release(dir) {
   git(["config", "commit.gpgsign", "false"], repo);
   await writeFile(path.join(repo, "VERSION"), "1.0.0\n");
   await writeFile(path.join(repo, "standards-adapter.json"), JSON.stringify({
-    schemaVersion: "1.1.0",
+    schemaVersion,
     standard: { id: STANDARD },
     evaluation: { entrypoint: "scripts/standards.mjs",
       arguments: ["evaluate", "--dir={target}", "--policy={policy}", "--json"] },
     result: { statuses: ["COMPLIANT", "NON_COMPLIANT"], passing: ["COMPLIANT"] },
+    ...(adoption === undefined ? {} : { adoption }),
   }, null, 2));
+  // A DECOY, and the whole point of case 6. This is the shape of the private implementation FE-21
+  // was tempted to read: the pack's own `init` naming a marker set the published contract does not.
+  // Discovery must not see it.
+  if (initMarkers) {
+    await writeFile(path.join(repo, "scripts/init.mjs"),
+      `const POLICY_MARKERS = ${JSON.stringify(initMarkers)};
+export default POLICY_MARKERS;
+`);
+  }
   await writeFile(path.join(repo, "scripts/standards.mjs"), EVALUATOR);
   git(["add", "-A"], repo);
   git(["commit", "--quiet", "-m", "a release that reports the policy it read"], repo);
@@ -79,55 +89,130 @@ async function release(dir) {
  * marker set decides anything. Where the registry names a policy or the caller passes one, the
  * filename was never in question.
  */
-async function run(files) {
+async function run(files, packOptions = {}, explicitPolicy = null) {
   const dir = await mkdtemp(path.join(tmpdir(), "adoption-marker-"));
   try {
-    const { repo, sha } = await release(dir);
+    const { repo, sha } = await release(dir, packOptions);
     const target = path.join(dir, "target");
     await mkdir(target, { recursive: true });
     for (const name of files) await writeFile(path.join(target, name), POLICY_BODY);
     return await enforce({
       target, standardsRepo: repo, tag: "v1.0.0", sha,
       cacheRoot: path.join(dir, "cache"),
+      ...(explicitPolicy ? { policy: path.join(target, explicitPolicy) } : {}),
     });
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
 }
 
-// --- Known-positive: the spelling that already worked must keep working ---
+// --- Legacy Enforcer compatibility: what a pre-1.2.0 contract keeps, and what it does not gain ---
 
-test("adoption · project-policy.yml is adopted, and is handed to the authority", async () => {
-  const r = await run(["project-policy.yml"]);
-  assert.notEqual(r.state, STATE.NOT_ADOPTED, `.yml must remain adopted, got: ${r.why ?? ""}`);
+const LEGACY = { schemaVersion: "1.1.0" };
+const DECLARES_BOTH = { adoption: { policyFiles: ["project-policy.yml", "project-policy.yaml"] } };
+const DECLARES_YAML = { adoption: { policyFiles: ["project-policy.yaml"] } };
+
+test("legacy · a pre-1.2.0 contract keeps project-policy.yml, because that is what it shipped under", async () => {
+  const r = await run(["project-policy.yml"], LEGACY);
   assert.equal(r.state, STATE.EVALUATED);
-  assert.equal(r.report.policyRead, r.policy.path,
-    "the policy whose presence established adoption must be the exact policy handed to the authority");
+  assert.equal(r.report.policyRead, r.policy.path);
   assert.match(r.policy.path, /project-policy\.yml$/u);
 });
 
-// --- The specimen: the defect, stated as the outcome and not as a mechanism ---
-
-test("adoption · a policy the authority admits is not reported unadopted", async () => {
-  const r = await run(["project-policy.yaml"]);
-  assert.notEqual(
+test("legacy · a pre-1.2.0 contract does NOT gain .yaml, and the cost is the point", async () => {
+  const r = await run(["project-policy.yaml"], LEGACY);
+  assert.equal(
     r.state, STATE.NOT_ADOPTED,
-    "a repository whose only policy is project-policy.yaml has adopted — FinancialStandards' own " +
-    `init says so — and must reach the authority rather than being refused here. Got: ${r.why ?? ""}`,
+    "the legacy set is this enforcer's own history, not a claim about any pack. A contract that " +
+    "cannot say anything about adoption must not have a second spelling inferred for it — that " +
+    "would make the consumer authoritative over what adoption of this pack means",
   );
+});
+
+// --- The declaration doing its work ---
+
+test("adoption · a contract declaring project-policy.yaml makes it adopted", async () => {
+  const r = await run(["project-policy.yaml"], DECLARES_YAML);
+  assert.notEqual(r.state, STATE.NOT_ADOPTED, `declared .yaml must be discovered. Got: ${r.detail ?? ""}`);
   assert.equal(r.state, STATE.EVALUATED);
   assert.equal(r.report.policyRead, r.policy.path,
     "the policy whose presence established adoption must be the exact policy handed to the authority");
   assert.match(r.policy.path, /project-policy\.yaml$/u);
 });
 
+test("adoption · the declared set is the whole set — .yml still works where the pack admits it", async () => {
+  const r = await run(["project-policy.yml"], DECLARES_BOTH);
+  assert.equal(r.state, STATE.EVALUATED);
+  assert.match(r.policy.path, /project-policy\.yml$/u);
+});
+
+// --- Mutation: remove the declaration and the specimen must go red again ---
+
+test("adoption · deleting the declaration makes the .yaml specimen fail again", async () => {
+  const declared = await run(["project-policy.yaml"], DECLARES_YAML);
+  assert.equal(declared.state, STATE.EVALUATED, "guard: the declared case must be green first");
+  const withdrawn = await run(["project-policy.yaml"], {});
+  assert.equal(
+    withdrawn.state, STATE.NOT_ADOPTED,
+    "with the adoption block withdrawn the enforcer must fall back to the legacy set and refuse " +
+    "again. If this stays green, .yaml is being discovered by something other than the declaration",
+  );
+});
+
 // --- Known-negative: the boundary must stay a boundary ---
 
 test("adoption · an unsupported filename is still NOT_ADOPTED", async () => {
-  const r = await run(["standards-policy.yml"]);
+  const r = await run(["standards-policy.yml"], DECLARES_BOTH);
   assert.equal(
     r.state, STATE.NOT_ADOPTED,
-    "widening the marker set must not widen it to anything policy-shaped; a filename no authority " +
-    "admits is not adoption, and treating it as such would trade a false negative for a false positive",
+    "a declared set is finite and exact; a filename no pack admits is not adoption, and treating " +
+    "it as such would trade a false negative for a false positive",
   );
+});
+
+test("discovery · a pack's private init.mjs is not a declaration, and must not be read", async () => {
+  const r = await run(["project-policy.yaml"], {
+    schemaVersion: "1.1.0",
+    initMarkers: ["project-policy.yml", "project-policy.yaml"],
+  });
+  assert.equal(
+    r.state, STATE.NOT_ADOPTED,
+    "this pack's private implementation names .yaml and its published contract does not. Discovery " +
+    "reads the contract. If this goes green, the enforcer is deriving adoption from implementation " +
+    "code the pack never published as its interface — which is the substitution FE-21 was opened to refuse",
+  );
+});
+
+// --- Ambiguity: fail toward the existing configuration-error state, never an arbitrary pick ---
+
+test("ambiguity · two admitted markers with no precedence is ENFORCEMENT_ERROR, not a choice", async () => {
+  const r = await run(["project-policy.yml", "project-policy.yaml"], DECLARES_BOTH);
+  assert.equal(
+    r.state, STATE.ENFORCEMENT_ERROR,
+    "order in policyFiles is not precedence, so there is no declared answer to which governs. " +
+    "Picking one by position would manufacture an answer the contract does not contain",
+  );
+  assert.match(r.detail, /project-policy\.yml/u);
+  assert.match(r.detail, /project-policy\.yaml/u);
+  assert.match(r.detail, /precedence/u);
+});
+
+test("ambiguity · --policy resolves it, because the caller named the file", async () => {
+  const r = await run(["project-policy.yml", "project-policy.yaml"], DECLARES_BOTH, "project-policy.yaml");
+  assert.equal(r.state, STATE.EVALUATED, "an explicit invocation was never ambiguous");
+  assert.match(r.policy.path, /project-policy\.yaml$/u);
+  assert.equal(r.policy.source, "explicit");
+});
+
+// --- Contract shape: fail closed, never partially interpreted ---
+
+test("contract · an adoption block below 1.2.0 is rejected, not silently dropped", async () => {
+  const r = await run(["project-policy.yaml"], { schemaVersion: "1.1.0", ...DECLARES_YAML });
+  assert.notEqual(
+    r.state, STATE.EVALUATED,
+    "a declaration at a version that does not admit it must not be honoured; honouring it would " +
+    "retroactively widen what 1.1.0 means for every contract already released under it",
+  );
+  assert.equal(r.state, STATE.ENFORCEMENT_ERROR);
+  assert.match(r.detail, /1\.2\.0/u, "the rejection must name the version that would admit it");
 });

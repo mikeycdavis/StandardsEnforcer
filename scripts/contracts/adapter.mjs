@@ -62,7 +62,21 @@ export const ADAPTER_FILENAME = "standards-adapter.json";
 export const PLACEHOLDERS_BY_VERSION = Object.freeze({
   "1.0.0": Object.freeze(["{target}"]),
   "1.1.0": Object.freeze(["{target}", "{policy}"]),
+  // 1.2.0 adds no placeholder. It exists because `adoption` is a new thing a contract may SAY, and
+  // the version is what tells an older enforcer it cannot read this declaration in full.
+  "1.2.0": Object.freeze(["{target}", "{policy}"]),
 });
+
+/**
+ * The versions that admit an `adoption` block, gated exactly as placeholders are.
+ *
+ * Same argument, same direction: a contract stamped 1.1.0 is held to 1.1.0, so a pack that declares
+ * adoption markers without moving its version is rejected rather than read. Widening what 1.1.0
+ * admits would retroactively change the meaning of every contract already released under it, and an
+ * enforcer built before 1.2.0 would silently drop the declaration and fall back to a filename the
+ * pack never named — which is the FE-21 failure arriving through the mechanism meant to fix it.
+ */
+export const ADOPTION_FROM_VERSION = Object.freeze(["1.2.0"]);
 
 /** The versions this enforcer implements. Anything else is rejected, never partially interpreted. */
 export const SUPPORTED_SCHEMA_VERSIONS = Object.freeze(Object.keys(PLACEHOLDERS_BY_VERSION));
@@ -173,6 +187,64 @@ function entrypointViolations(entrypoint) {
  * rather than throwing is what lets pack CI print all of them at once, and lets the enforcer decide
  * for itself that any violation at all is `ENFORCEMENT_ERROR`.
  */
+/**
+ * A declared adoption marker names one file in the target's root, and nothing else.
+ *
+ * The schema's pattern already excludes separators, so these checks are the ones a pattern cannot
+ * make legible: what the author actually did wrong, and why a marker set is not a path vocabulary.
+ * Adoption is a question about the root of a governed repository; a marker that could point into a
+ * subdirectory, out of the tree, or at a device would turn "has this repository adopted" into "can
+ * this contract read a file", which is a different and much larger permission.
+ */
+function policyFileViolations(files) {
+  const out = [];
+  if (!Array.isArray(files)) return out; // the schema said so already
+  const seen = new Map();
+  files.forEach((file, i) => {
+    if (typeof file !== "string" || file.length === 0) return; // likewise
+    const at = `$.adoption.policyFiles[${i}]`;
+    if (path.isAbsolute(file) || /^[a-zA-Z]:/u.test(file)) {
+      out.push(
+        `${at} must be a filename in the target's root, and ${JSON.stringify(file)} is absolute. ` +
+          `Adoption is a property of the governed repository; an absolute path names a file that ` +
+          `repository does not own.`,
+      );
+    }
+    if (file.includes("/") || file.includes("\\")) {
+      out.push(
+        `${at} must be a bare filename, and ${JSON.stringify(file)} contains a path separator. A ` +
+          `marker set is not a search path: nesting would make "adopted" depend on where the ` +
+          `enforcer looked rather than on what the repository declares at its root.`,
+      );
+    }
+    if (file === "." || file === "..") {
+      out.push(`${at} must stay inside the target, and ${JSON.stringify(file)} does not.`);
+    }
+    if (/[*?\[\]]/u.test(file)) {
+      out.push(
+        `${at} is ${JSON.stringify(file)}, which looks like a glob. The set is finite and exact by ` +
+          `design — a pattern would let a repository adopt this pack by accident, with a filename ` +
+          `neither the pack nor the enforcer ever named.`,
+      );
+    }
+    // Normalised duplicates, not literal ones — the schema's uniqueItems already caught those. Two
+    // spellings that name one file on a case-insensitive filesystem would make the ambiguity rule
+    // below fire on a repository holding a single policy.
+    const key = file.toLowerCase();
+    if (seen.has(key)) {
+      out.push(
+        `${at} is ${JSON.stringify(file)}, which names the same file as ` +
+          `$.adoption.policyFiles[${seen.get(key)}] on a case-insensitive filesystem. One marker ` +
+          `spelled twice would read as two markers present, and stall adoption on ambiguity that ` +
+          `does not exist.`,
+      );
+      return;
+    }
+    seen.set(key, i);
+  });
+  return out;
+}
+
 export function validateAdapter(declaration) {
   const violations = validate(declaration, schema());
 
@@ -216,6 +288,20 @@ export function validateAdapter(declaration) {
         }
       }
     });
+  }
+
+  // `adoption`, gated on the declared version exactly as the placeholders above are.
+  if (declaration?.adoption !== undefined) {
+    if (!ADOPTION_FROM_VERSION.includes(declaredVersion)) {
+      violations.push(
+        `$.adoption is declared, which the enforcer does not read at schemaVersion ` +
+          `${JSON.stringify(declaredVersion)}. Adoption markers are admitted from schemaVersion ` +
+          `${ADOPTION_FROM_VERSION.join(", ")}; declaring that version is the fix, and it correctly ` +
+          `makes this contract unreadable to enforcers that predate the declaration rather than ` +
+          `letting them fall back to a filename this pack never named.`,
+      );
+    }
+    violations.push(...policyFileViolations(declaration.adoption?.policyFiles));
   }
 
   // `passing` must be a subset of `statuses`. JSON Schema cannot say this, and it is the check that
@@ -271,4 +357,22 @@ export function readAdapter(file) {
     throw new AdapterContractError(`${file} is not parseable JSON: ${cause.message}`, [cause.message]);
   }
   return assertAdapterConforms(parsed, file);
+}
+
+/**
+ * The adoption markers a validated contract declares, or `null` where it declares none.
+ *
+ * `null` and `[]` are different answers and only one of them is representable: the schema requires
+ * `policyFiles` to be non-empty, so "declared nothing" can only ever be the absence of the block.
+ * The distinction is the whole point — a caller must be able to tell "this pack named its markers"
+ * from "this pack said nothing", because the second is what legacy compatibility answers and the
+ * first is what overrides it. Returning `[]` for both would collapse them and let a pack that said
+ * nothing look like a pack that admitted nothing.
+ *
+ * Reading lives here, beside the validation, so that the enforcer never reaches into the shape of a
+ * declaration it did not validate — the same reason `bindArguments` is not spelled in two modules.
+ */
+export function declaredAdoptionMarkers(contract) {
+  const files = contract?.adoption?.policyFiles;
+  return Array.isArray(files) && files.length > 0 ? Object.freeze([...files]) : null;
 }

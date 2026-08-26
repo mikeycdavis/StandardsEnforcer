@@ -5,17 +5,30 @@
   "description": "How one standards pack declares the way it is invoked and the way its result is read. The pack owns its contract; StandardsEnforcer owns this schema. Declarative only — no code, no command semantics, no discovery. Every field below was forced by a real pack recorded in artifacts/evidence/2026-08-09-interface-inventory.md; a field nothing forced is absent, and adding one is a schemaVersion change.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "standard", "evaluation", "result"],
+  "required": [
+    "schemaVersion",
+    "standard",
+    "evaluation",
+    "result"
+  ],
   "properties": {
-    "$schema": { "type": "string" },
+    "$schema": {
+      "type": "string"
+    },
     "schemaVersion": {
-      "description": "Matched exactly against the set this enforcer implements. An unrecognised version is ENFORCEMENT_ERROR, never a best-effort read — the enforcer must not guess what a contract it does not understand is asking for. The version is not a label: it selects which placeholders may appear in `evaluation.arguments`. 1.0.0 admits {target} alone; 1.1.0 additionally admits {policy}. A 1.0.0 contract using {policy} is a violation and not an implicit upgrade, because widening what 1.0.0 admits would retroactively change the meaning of every contract already released under it — and a pack cannot re-release history. A 1.1.0 contract is correctly unreadable to an enforcer built before 1.1.0 existed: that enforcer rejects it on this field rather than dropping the binding it cannot perform.",
-      "enum": ["1.0.0", "1.1.0"]
+      "description": "Matched exactly against the set this enforcer implements. An unrecognised version is ENFORCEMENT_ERROR, never a best-effort read — the enforcer must not guess what a contract it does not understand is asking for. The version is not a label: it selects which placeholders may appear in `evaluation.arguments`. 1.0.0 admits {target} alone; 1.1.0 additionally admits {policy}. A 1.0.0 contract using {policy} is a violation and not an implicit upgrade, because widening what 1.0.0 admits would retroactively change the meaning of every contract already released under it — and a pack cannot re-release history. A 1.1.0 contract is correctly unreadable to an enforcer built before 1.1.0 existed: that enforcer rejects it on this field rather than dropping the binding it cannot perform. 1.2.0 additionally admits the optional `adoption` block, which declares which root policy filenames constitute adoption of this pack. The same rule governs it: `adoption` in a contract stamped below 1.2.0 is a violation and not an implicit upgrade. Its absence at any version means the pack has declared nothing, NOT that the enforcer may assume a set on the pack's behalf.",
+      "enum": [
+        "1.0.0",
+        "1.1.0",
+        "1.2.0"
+      ]
     },
     "standard": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id"],
+      "required": [
+        "id"
+      ],
       "properties": {
         "id": {
           "description": "Stable identifier for the pack, used to name it in the enforcer's result. Not a display name and never reused.",
@@ -27,7 +40,10 @@
     "evaluation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["entrypoint", "arguments"],
+      "required": [
+        "entrypoint",
+        "arguments"
+      ],
       "properties": {
         "entrypoint": {
           "description": "Path to the CLI within the pack's own checkout. FORCED BY PredictionStandards, whose entry is scripts/predictions.mjs where every other pack uses scripts/standards.mjs.",
@@ -38,7 +54,9 @@
           "description": "The authoritative verdict invocation, literally. FORCED BY the divergence in every dimension at once: the verdict subcommand is `validate` in Engineering, Betting, Mathematics and Innovation, `check` in Financial and Health, and `evaluate` in MachineLearning; the target is positional in some and `--dir=<path>` in others; and Financial takes `--policy <path>` space-separated where others use `=`. No aliasing, preference ordering or discovery may be inferred from this array — `check` exists in Betting and Innovation and answers a DIFFERENT question in both, executing cleanly and returning a verdict-shaped object, so a pack that does not name its verdict command literally cannot be invoked safely. The {policy} placeholder, admitted from schemaVersion 1.1.0, is FORCED BY FinancialStandards: its `check` resolves an absent `--policy` to the standards pack's OWN project-policy.yml, so pointed at a target it audits the target's documents against Financial's policy, labels the report `\"project\": \"FinancialStandards\"`, and exits 0 — a confident verdict about the wrong thing, recorded as finding F of artifacts/evidence/2026-08-09-interface-inventory.md. {target} cannot express it: {target} names the subject being evaluated, {policy} names the governing policy, and a contract that conflated them would evaluate the subject against itself. Financial's form is `--policy <path>` as two argv elements; a contract declaring `--policy={policy}` would be rejected by Financial's own parser as an unknown flag, so the array is the exact argv and the enforcer never joins, splits or reorders it.",
           "type": "array",
           "minItems": 1,
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "contains": {
             "description": "At least one argument must carry the {target} placeholder, so a contract cannot declare an invocation that never says what to evaluate. Matched as a SUBSTRING, not as a whole argument: Betting passes the target positionally as `{target}` while MachineLearning, Mathematics and Innovation embed it as `--dir={target}`. This was written as `const` until 2026-08-10, which admitted only the positional form — a constraint that excluded three of the four released contracts and went unnoticed for as long as nothing executed the schema. See artifacts/evidence/2026-08-10-conformance-boundary-built.md.",
             "type": "string",
@@ -50,20 +68,50 @@
     "result": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["statuses", "passing"],
+      "required": [
+        "statuses",
+        "passing"
+      ],
       "properties": {
         "statuses": {
           "description": "The pack's COMPLETE status vocabulary, read from the top-level `status` key of its JSON. Required so that an unrecognised status fails closed rather than being treated as merely not-passing: those are different problems. FORCED BY the vocabularies not being one alphabet — Engineering has four values and no BLOCKED_BY_INVARIANT, and PredictionStandards uses SUPPORTED / SUPPORTED_WITH_EXCEPTIONS / INSUFFICIENTLY_SUPPORTED.",
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
-          "items": { "type": "string", "minLength": 1 }
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         },
         "passing": {
           "description": "The closed subset of `statuses` on which a merge may proceed, declared by the pack. Present not because the packs disagree — all six provable packs pass on COMPLIANT and COMPLIANT_WITH_EXCEPTIONS — but because ADR 0001 forbids the enforcer holding the knowledge that COMPLIANT means passing. A status outside this set is not passing, including one outside `statuses` entirely.",
           "type": "array",
           "uniqueItems": true,
-          "items": { "type": "string", "minLength": 1 }
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "adoption": {
+      "description": "Which root-relative filenames, if present in a target repository, constitute that repository having adopted THIS pack. Admitted from schemaVersion 1.2.0. FORCED BY the false negative recorded as FE-21: adoption was decided by one filename hardcoded in the enforcer, so a pack admitting a second spelling had repositories the enforcer called unadopted while the pack itself called them governed -- and because adoption is decided before the pack is ever invoked, the pack never got to contradict the diagnosis. The declaration lives here because the question is the pack's to answer: a consumer that inferred the set from a pack's private `init` implementation would be making itself authoritative over what adoption of that pack means. Absence is not a licence to infer one; see the enforcer's legacy compatibility note.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policyFiles"
+      ],
+      "properties": {
+        "policyFiles": {
+          "description": "A non-empty, finite list of exact root-relative filenames -- not globs, not directories, not paths. ORDER IS NOT PRECEDENCE. Nothing in this contract makes an earlier entry win, and the enforcer does not treat it as though it did: where a target holds more than one admitted marker the run fails toward a configuration error rather than choosing, because picking one silently is exactly the quiet resolution this contract exists to prevent. A pack that needs precedence must have it stated in the contract before the enforcer can act on it.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._-]+$"
+          }
         }
       }
     }
