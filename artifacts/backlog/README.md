@@ -23,8 +23,8 @@ derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/
 
 | Status | Items |
 | --- | ---: |
-| ○ Not started | 8 |
-| ◑ In progress | 6 |
+| ○ Not started | 7 |
+| ◑ In progress | 7 |
 | ◒ Blocked | 2 |
 | ● Complete | 21 |
 | **Total** | **37** |
@@ -53,6 +53,7 @@ derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/
 - ◑ [EP-06](./items/EP-06.md) — Self-assurance — this repository's own evidence must establish what it reports
 - ◑ [FE-04](./items/FE-04.md) — M4 — the enforcement root against live GitHub
 - ◒ [FE-09](./items/FE-09.md) — Make BYPASS_USED reachable
+- ◑ [FE-21](./items/FE-21.md) — A policy the authority admits is a policy this enforcer must find
 - ◑ [IN-01](./items/IN-01.md) — Enforcement a governed repository cannot weaken
 - ◒ [ST-07](./items/ST-07.md) — Validate the required-workflows remedy against a real organisation ruleset
 - ◑ [TH-01](./items/TH-01.md) — Enforced standards compliance across the portfolio
@@ -75,7 +76,7 @@ _Nothing marked ready._
         - ● **[ST-05](./items/ST-05.md)** Adapter provenance bound to the verified release
       - ● **[FE-13](./items/FE-13.md)** A cache marker is not proof of current identity
       - ● **[FE-15](./items/FE-15.md)** Concurrent processes share a mutable cache root
-      - ○ **[FE-21](./items/FE-21.md)** A policy the authority admits is a policy this enforcer must find
+      - ◑ **[FE-21](./items/FE-21.md)** A policy the authority admits is a policy this enforcer must find
     - ◑ **[EP-02](./items/EP-02.md)** The enforcement root — a gate the governed pull request cannot satisfy _(2/3)_
       - ● **[FE-03](./items/FE-03.md)** M2 — a gate is a required check, not a file
       - ◑ **[FE-04](./items/FE-04.md)** M4 — the enforcement root against live GitHub _(1/2)_
