@@ -72,3 +72,41 @@ test("diagrams · every canonical source has a rendered companion", () => {
     assert.match(read(svg).slice(0, 400), /<svg/u, `docs/${svg} is not an SVG`);
   }
 });
+
+/** Mermaid keywords and aliases, which say nothing about whether a render is current. */
+const STRUCTURAL = new Set([
+  "sequencediagram", "flowchart", "participant", "autonumber", "subgraph", "standardsenforcer",
+]);
+
+/**
+ * Distinctive long words in a diagram source — the vocabulary a render must contain if it is a
+ * render OF THAT SOURCE. Single words, because mermaid wraps label text at spaces, so a phrase may
+ * be split across `tspan`s while a word is not.
+ */
+function vocabulary(mmd) {
+  const words = mmd.match(/[A-Za-z_]{10,}/gu) ?? [];
+  return [...new Set(words)].filter((w) => !STRUCTURAL.has(w.toLowerCase()));
+}
+
+test("diagrams · a rendered SVG contains the vocabulary of the source it claims to render", () => {
+  // THIS ARRIVED THE HONEST WAY. The two assertions above proved a fenced block matched its `.mmd`
+  // and that an SVG existed beside it — and both passed while that SVG was a render of the PREVIOUS
+  // revision, because mermaid-cli had rejected the new source with a parse error and exited without
+  // writing the file. Three green diagram assertions over a stale picture.
+  //
+  // A full render comparison needs `@mermaid-js/mermaid-cli` in the CI image, which means an install
+  // step, which `no-install-invariant` would then have to learn about; `docs/local-ci.md` records the
+  // decision against that and this does not reverse it. What CAN be established without a renderer is
+  // that the words of the source appear in the picture. It is not proof the layout is current — a
+  // re-worded label is caught, a moved arrow is not — and it catches exactly the case that occurred:
+  // a source edited, and a render that never happened.
+  for (const source of SOURCES) {
+    const svg = read(source.replace(/\.mmd$/u, ".svg"));
+    const missing = vocabulary(read(source)).filter((w) => !svg.includes(w));
+
+    assert.deepEqual(missing, [],
+      `docs/${source} contains words its rendered SVG does not: ${missing.join(", ")}. The render is ` +
+      "stale, or mermaid-cli failed and the failure was not noticed — it exits without writing the " +
+      "file on a parse error. Regenerate with the command in architecture.md and read its output");
+  }
+});

@@ -31,7 +31,7 @@
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
+import { accessSync, constants, existsSync, lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -96,6 +96,58 @@ const LEGACY_ADOPTION_MARKERS = Object.freeze([POLICY_FILE]);
  */
 function policyDigest(file) {
   return "sha256:" + createHash("sha256").update(readFileSync(file)).digest("hex");
+}
+
+/**
+ * What stands between this path and being read as a policy — `null` where nothing does.
+ *
+ * WHY THIS EXISTS. `existsSync` answers a question about a NAME. It is equally true of a directory,
+ * a FIFO, a socket and a device node, and adoption was decided by it. A directory called
+ * `project-policy.yml` was therefore adoption, and the read that followed threw `EISDIR` out of
+ * `enforce()` itself — around `result()`, which is the one construction point where INV-E1 and the
+ * recorded-decision requirement live. An exception is the only way out of this function that goes
+ * around them, and a stack trace naming `readFileSync` tells a gate nothing about standards.
+ *
+ * ABSENCE IS NOT THIS FUNCTION'S BUSINESS. `ENOENT` returns `null`, because "there is nothing here"
+ * is exactly what `NOT_ADOPTED` is for and the caller reaches it by its own route. Every other
+ * failure to inspect is an unresolved condition and is reported as one.
+ *
+ * TWO KINDS, AND THE DIFFERENCE DECIDES A CASE. `not-a-file` is a judgement about what the path IS,
+ * reached without reading it: a directory cannot be a governing policy document, so it is not a
+ * candidate and never was. `unreadable` is the absence of a judgement: the path has exactly the shape
+ * a policy has, and whether it is one is unknown because its bytes were never read. Collapsing the
+ * two lets a readable marker be selected beside an unknown one, which is manufacture rather than
+ * resolution — see the candidate set below.
+ *
+ * `statSync`, NOT `lstatSync`: a symlink pointing at a real policy is a real policy. The entrypoint
+ * containment rules are about executing code out of a verified checkout; this is a document in the
+ * governed repository, which the governed repository is entitled to arrange as it likes.
+ */
+function policyObstruction(file) {
+  let stat;
+  try {
+    stat = statSync(file);
+  } catch (e) {
+    if (e?.code === "ENOENT") return null;
+    // Not knowable either way. Grouped with `unreadable` because the shared property is that the
+    // enforcer could not establish what this path is, and that is the property the caller acts on.
+    return { kind: "unreadable",
+      why: `${file} could not be inspected (${e?.code ?? e?.message}), so whether this repository ` +
+        "adopted could not be established" };
+  }
+  if (!stat.isFile()) {
+    return { kind: "not-a-file",
+      why: `${file} is ${stat.isDirectory() ? "a directory" : "not a regular file"}, so it cannot ` +
+        "be read as a policy: adoption is a policy document, not an occupied name" };
+  }
+  try {
+    accessSync(file, constants.R_OK);
+  } catch (e) {
+    return { kind: "unreadable",
+      why: `${file} is a regular file that cannot be read (${e?.code ?? e?.message}), so whether it ` +
+        "is another policy governing this repository is unknown — not absent" };
+  }
+  return null;
 }
 
 /**
@@ -632,7 +684,46 @@ export async function enforce({
     }
   }
 
-  const present = policy ? [] : markers.filter((name) => existsSync(path.join(target, name)));
+  // A CANDIDATE IS A POLICY, NOT AN OCCUPIED NAME — and an occupied name that is not a policy comes
+  // in two kinds that must not be collapsed.
+  //
+  //   present     a readable regular file: a candidate, and its contents are knowable
+  //   unresolved  a regular file that could not be read: it has exactly the shape a policy has, and
+  //               whether it IS one is unknown, because nothing read it
+  //   obstruction a name occupied by something that cannot be a policy document at all
+  //
+  // The third is excluded on what it IS, decided without reading it: a directory cannot be the
+  // governing policy, so it was never a competitor. The second is excluded on nothing — the
+  // judgement was never made. Treating them alike is what let a readable marker be selected beside
+  // an unknown one, which is manufacture rather than resolution.
+  const present = [];
+  const unresolved = [];
+  const obstructions = [];
+  if (!policy) {
+    for (const name of markers) {
+      const file = path.join(target, name);
+      if (!existsSync(file)) continue;
+      const obstacle = policyObstruction(file);
+      if (obstacle === null) present.push(name);
+      else if (obstacle.kind === "unreadable") unresolved.push(obstacle.why);
+      else obstructions.push(obstacle.why);
+    }
+  }
+
+  // OBSTRUCTION IS NOT ABSENCE, and this is the load-bearing choice rather than an implementation
+  // detail. Dropping an unusable marker from the candidate set and saying nothing would leave the run
+  // reporting NOT_ADOPTED — *there is nothing here* — about a repository where the name is occupied
+  // by something the enforcer could not read. Under a recorded in-scope disposition that is
+  // blockable, and it instructs an operator to create a file whose name is already taken. It is the
+  // same shape as the wrong-pack defect: a true condition reported as a different, blockable one.
+  // INV-E1 says an unestablished condition is reported as itself.
+  if (present.length === 0 && (unresolved.length > 0 || obstructions.length > 0)) {
+    return result(STATE.ENFORCEMENT_ERROR,
+      `whether ${target} has adopted could not be established: ${[...unresolved, ...obstructions].join("; ")}`,
+      { standards, gate: gateReport, scope: scopeReport,
+        policy: { path: null, source: policySource, digest: null, markers: [...markers], markerSource,
+          unresolved, obstructions } });
+  }
 
   // AMBIGUITY FAILS TOWARD UNCERTAINTY, using the state that already means "this run could not be
   // configured", never a new one and never a silent pick.
@@ -649,6 +740,32 @@ export async function enforce({
         "or have the pack declare a precedence rule",
       { standards, gate: gateReport, scope: scopeReport,
         policy: { path: null, source: policySource, digest: null, markers: [...markers], markerSource, present } });
+  }
+
+  // AN UNREADABLE CANDIDATE IS AN UNKNOWN COMPETITOR, AND AN UNKNOWN MAY NOT BE SELECTED AGAINST.
+  //
+  // One readable marker beside a DIRECTORY is resolved: a directory cannot be the governing policy,
+  // so there was only ever one candidate. One readable marker beside an unreadable REGULAR FILE is
+  // not resolved at all. That file has the shape a policy has, sits under a name this pack itself
+  // admits, and the contract states no precedence among the names — so evaluating the readable one
+  // would report a verdict about one policy while a second, of unknown content, stood beside it
+  // equally entitled to govern. That is the ambiguity refusal's own reasoning applied to a candidate
+  // whose only distinguishing feature is that nobody could read it.
+  //
+  // INV-E1, one notch more precisely than the branch above: unreadable is UNKNOWN, and an unknown
+  // may not be converted into a uniquely selected policy. The way out is to restore access or to
+  // name the governing file, which is a decision with an owner rather than a guess with none.
+  if (present.length === 1 && unresolved.length > 0) {
+    return result(STATE.ENFORCEMENT_ERROR,
+      `${target} holds a readable ${present[0]}, and ${unresolved.length === 1 ? "another declared " +
+        "adoption marker whose contents could not be read" : `${unresolved.length} other declared ` +
+        "adoption markers whose contents could not be read"}: ${unresolved.join("; ")}. An unreadable ` +
+        `file is unknown, not absent — it may be another policy ${scope?.standardId ?? "these standards"} ` +
+        "admits — and the contract states no precedence among these names, so which one governs " +
+        "cannot be established. Restore read access, or name the governing policy with --policy",
+      { standards, gate: gateReport, scope: scopeReport,
+        policy: { path: null, source: policySource, digest: null, markers: [...markers], markerSource,
+          present, unresolved, obstructions } });
   }
 
   const policyPath = policy
@@ -707,8 +824,36 @@ export async function enforce({
       { standards, gate: gateReport, scope: scopeReport, governed, policy: { path: policyPath, source: policySource, digest: null } });
   }
 
-  // Computed once the file is known to exist, and reported on every outcome downstream of here.
-  const policyReport = { path: policyPath, source: policySource, digest: policyDigest(policyPath) };
+  // KNOWN TO EXIST IS NOT KNOWN TO BE READABLE, and the guard above is not enough on its own: an
+  // explicit `--policy` never passes through the marker filter at all, so `--policy=<a directory>`
+  // reached this line and threw. The check is repeated here rather than hoisted into the filter
+  // because the two routes are genuinely different — one asks *did this repository adopt*, the other
+  // was told which file to read — and a check that only guards the first leaves the identical crash
+  // on the second.
+  const obstruction = policyObstruction(policyPath);
+  if (obstruction !== null) {
+    return result(STATE.ENFORCEMENT_ERROR, obstruction.why,
+      { standards, gate: gateReport, scope: scopeReport,
+        policy: { path: policyPath, source: policySource, digest: null } });
+  }
+
+  // Computed once the file is known to be readable, and reported on every outcome downstream of here.
+  //
+  // Wrapped as well as guarded, and the two are not redundant. The guard above produces the SENTENCE
+  // — a directory reads differently from a permission failure, and an operator needs to know which.
+  // This catch produces the GUARANTEE: nothing observed about a file is still true by the time it is
+  // read, and the invariant being defended is that no filesystem exception leaves `enforce()`.
+  let digest;
+  try {
+    digest = policyDigest(policyPath);
+  } catch (e) {
+    return result(STATE.ENFORCEMENT_ERROR,
+      `${policyPath} could not be read (${e?.code ?? e?.message}), so no verdict can be attributed ` +
+      "to a known policy",
+      { standards, gate: gateReport, scope: scopeReport,
+        policy: { path: policyPath, source: policySource, digest: null } });
+  }
+  const policyReport = { path: policyPath, source: policySource, digest };
 
   // `enforce`'s subject IS the governed root — it enforces against a repository. The policy is passed
   // separately anyway, so that the day a caller evaluates a subpath, the policy does not follow it.

@@ -22,7 +22,7 @@ The one invariant that shapes every module:
 |---|---|
 | Language / runtime | JavaScript, ES modules (`.mjs`), Node **≥ 18** (`engines` in `package.json`); CI runs Node 20 |
 | Dependencies | **None.** No `dependencies`, no `devDependencies`, no lockfile, no install step — deliberate: an install is a second thing that can differ between the machine that reviewed a release and the machine that runs it |
-| Test runner | `node --test` (built-in), invoked as `npm test`; 12 test files, ~3,100 lines, 163 tests |
+| Test runner | `node --test` (built-in), invoked as `npm test`; 33 test files, ~8,579 lines, 382 cases |
 | Schema validation | `scripts/contracts/jsonschema.mjs` — a hand-written JSON Schema 2020-12 subset evaluator, adopted from StandardsOrchestrator, that **throws on any keyword it cannot enforce** |
 | Platform access | The `gh` CLI, spawned as a subprocess (`scripts/platform/github.mjs`). No HTTP client, no stored credentials |
 | Git access | The `git` CLI, spawned as a subprocess (`scripts/identity.mjs`) |
@@ -244,8 +244,12 @@ invoked**.
 
 Adoption is the presence, in the target, of a marker the **pinned release declares** under
 `adoption.policyFiles`. `LEGACY_ADOPTION_MARKERS` — frozen at `["project-policy.yml"]` — is what a
-release predating that declaration falls back to, and it must never grow. Absence is `NOT_ADOPTED`,
-which is **not** non-compliance, and which reads more strongly when scope confirmed the repository is
+release predating that declaration falls back to, and it must never grow. A marker counts only if it
+is a **readable regular file**. An occupied name that is not one is either an *obstruction* — a
+directory, excluded on what it is — or *unresolved*: a regular file nobody could read, which may be
+another policy and is therefore refused rather than excluded. Both are reported as
+`ENFORCEMENT_ERROR` rather than folded into absence. Absence is `NOT_ADOPTED`, which
+is **not** non-compliance, and which reads more strongly when scope confirmed the repository is
 governed. Because the vocabulary belongs to the release, the release must be the right one before it
 is read: see the two identity gates above.
 
@@ -469,7 +473,7 @@ about GitHub, not a gap in this adapter.
 
 The adapter does not decide whether a gate is adequate. That is `gate.mjs`.
 
-### Tests — `test/` (32 files, ~8,145 lines, 368 cases: 342 run on this host, 26 skipped for capability)
+### Tests — `test/` (33 files, ~8,579 lines, 382 cases: 352 run on this host, 30 skipped for capability)
 
 **Responsibility:** Holding the boundaries that comments only assert.
 
@@ -541,10 +545,34 @@ A pull request opened against a governed repository, end to end:
    silent here and is reported in full at step 10, which is what keeps adapter-less releases on
    `NOT_ADOPTED`.
 9. Adoption is decided against the markers **that release declares** under `adoption.policyFiles`,
-   or `LEGACY_ADOPTION_MARKERS` where it declares none. More than one present → `ENFORCEMENT_ERROR`,
-   because order in the list is not precedence and choosing by position would manufacture an answer
-   the contract does not give. None present → `NOT_ADOPTED`, exit `4`, phrased more strongly when
-   scope confirmed the repository is governed: *"it is governed and has not adopted."*
+   or `LEGACY_ADOPTION_MARKERS` where it declares none. **A candidate is a readable regular file, not
+   an occupied name** — `existsSync` is equally true of a directory, and a directory called
+   `project-policy.yml` used to be adoption until the read threw `EISDIR` out of `enforce()`
+   entirely. So each occupied name is classified: readable policies are candidates, and anything else
+   is one of two other things, and the difference decides a case:
+
+   - **obstruction** — a name occupied by something that *cannot* be a policy document at all, such
+     as a directory. Excluded on what it **is**, decided without reading it, so it was never a
+     candidate and excluding it invents nothing.
+   - **unresolved** — a regular file whose bytes could not be read. It has exactly the shape a policy
+     has, under a name the pack itself admits, and whether it *is* one is **unknown**. Excluded on
+     nothing: the judgement was never made.
+
+   From that, five outcomes. More than one candidate → `ENFORCEMENT_ERROR`, because order in the list
+   is not precedence and choosing by position would manufacture an answer the contract does not give.
+   **Exactly one candidate beside any unresolved name → `ENFORCEMENT_ERROR`**, because the unknown
+   file may be a second policy equally entitled to govern, and selecting the readable one is not
+   resolution but manufacture — this is INV-E1 one notch more precisely than the next clause: *an
+   unreadable file is unknown, not absent, and an unknown may not be converted into a uniquely
+   selected policy.* Exactly one candidate beside only obstructions → evaluate it; a directory cannot
+   compete. No candidate but at least one obstruction or unresolved name → `ENFORCEMENT_ERROR`,
+   **not `NOT_ADOPTED`**: something is there and the enforcer could not read it, and reporting
+   absence would be a blockable finding telling an operator to create a file whose name is already
+   taken. Nothing occupied at all → `NOT_ADOPTED`, exit `4`, phrased more strongly when scope
+   confirmed the repository is governed: *"it is governed and has not adopted."* The same readability
+   check guards the chosen path before its digest is taken, because an explicit `--policy` never
+   passes through the marker filter at all — and naming one is also how an operator resolves an
+   unresolved candidate deliberately.
 10. `runOfficialEvaluator()` (`scripts/enforce.mjs:102`) calls `loadAdapter()`, which reads
     `standards-adapter.json` **from the verified checkout only**, validates it against the schema plus
     the three cross-field checks, and confirms the resolved entrypoint is still inside the checkout.
@@ -715,8 +743,13 @@ sequenceDiagram
                     CLI-->>WF: STANDARDS_IDENTITY_MISMATCH, exit 4 — before one byte of its adoption vocabulary is read
                 else identity agrees, or nothing was scoped to disagree with
                     ADAPT-->>CLI: adoption.policyFiles (absent or unreadable → the legacy marker)
-                    alt the target holds more than one declared marker
+                    alt no declared name is a readable policy, but one is occupied
+                        CLI-->>WF: ENFORCEMENT_ERROR, exit 4 — obstruction is not absence
+                    else the target holds more than one readable declared marker
                         CLI-->>WF: ENFORCEMENT_ERROR, exit 4 (order in the list is not precedence)
+                    else one readable marker, beside a declared name holding a regular file nobody could read
+                        Note over CLI,PACK: unreadable is UNKNOWN rather than absent<br/>a directory cannot be a policy so it is excluded on what it is<br/>an unread file may be a second policy that this pack admits<br/>and no precedence is declared so selecting one manufactures certainty
+                        CLI-->>WF: ENFORCEMENT_ERROR, exit 4 — restore access, or name the policy with --policy
                     else the target holds none of them
                         CLI-->>WF: NOT_ADOPTED, exit 4 (governed and has not adopted)
                     else adopted
