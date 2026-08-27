@@ -41,6 +41,8 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
+import { materialise } from "../scripts/identity.mjs";
+
 const git = (args, cwd) => spawnSync("git", args, { encoding: "utf8", cwd, windowsHide: true });
 
 /** The oracle repository, or `null` when none was named. No default: unset is unset. */
@@ -153,3 +155,48 @@ export function oracleAt(tag) {
  * https://github.com/mikeycdavis/MachineLearningStandards/blob/e30a84c6ffd74b9401d9e3ec0ffe08fb8cfa703d/artifacts/adr/0010-published-release-tags-are-public-authorities.md
  */
 export const ORACLE_TAGS = ["v1.4.0", "v1.5.0", "v1.6.0"];
+
+/**
+ * The SUBJECT a test evaluates, as distinct from the AUTHORITY that evaluates it (ST-14).
+ *
+ * Two identities travel through every oracle-dependent test and only one of them has ever been
+ * pinned:
+ *
+ *     authority identity   which standards implementation executes   -- resolveIdentity, verified
+ *     subject identity     which repository bytes are evaluated      -- ORACLE_REPO, whatever it is
+ *
+ * `ORACLE_REPO` is a host working tree. It is a transport for an object database and nothing about
+ * it is fixed: it can be edited, checked out elsewhere, or rebased while a suite is mid-run, and an
+ * assertion about an evaluation result then depends on bytes no one recorded. That is the defect
+ * ST-14 files, and the authority half already shows what the remedy looks like.
+ *
+ * @param {string} hostRepo  a git repository to take the subject FROM (never evaluated in place)
+ * @param {string} sha       the commit whose bytes are the subject
+ * @param {string} cacheRoot where the materialised subject lives
+ * @returns {{ok: boolean, dir: string|null, sha: string, frozen: boolean, why: string|null}}
+ */
+export function oracleSubject(hostRepo, sha, cacheRoot) {
+  // THE SAME VERIFIED ROUTE THE AUTHORITY ALREADY USES, and deliberately not a second one.
+  // `materialise` clones from the object database, detaches onto the SHA, and re-verifies the
+  // checkout with `checkoutIsExactly` before returning it. Reusing it means the subject and the
+  // authority are frozen by one mechanism with one set of guarantees; a bespoke copy here would be
+  // a second definition of "these bytes are that commit" that could drift from the first.
+  //
+  // A COPY OF THE WORKING TREE WOULD NOT DO. Copying whatever `hostRepo` currently holds fixes the
+  // bytes for the run but pins them to no identity: the result would be reproducible only by whoever
+  // still had that directory. What makes an assertion checkable later is that the bytes are named.
+  // A CACHE ROOT OF ITS OWN, and this is load-bearing rather than tidiness. `materialise` keys an
+  // entry by SHA alone, and the subject's commit is routinely the authority's commit -- an oracle
+  // evaluated under its own release is the whole point of these tests. Sharing a root would hand
+  // both roles the same directory, and `resolveIdentity` would then verify the authority, find the
+  // subject's state, and REPAIR it out from under the run. Discovered by the liveness test below:
+  // mutating the subject changed nothing, because the next enforce silently restored it.
+  const materialised = materialise(hostRepo, sha, path.join(cacheRoot, "subject"));
+  if (!materialised.ok) {
+    // NO FALLBACK. Returning the host on failure would restore the defect behind a helper that
+    // reports success -- an unknown reported as a pass, which is the one thing this repository
+    // refuses everywhere else. A test that cannot establish its subject does not have one.
+    return { ok: false, dir: null, sha, frozen: false, why: materialised.why };
+  }
+  return { ok: true, dir: materialised.dir, sha, frozen: true, why: null };
+}

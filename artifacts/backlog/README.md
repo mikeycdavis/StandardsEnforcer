@@ -13,10 +13,10 @@ Work on this project classified with the Extended Agile Hierarchy. Every item is
 [`items/`](./items/); its YAML frontmatter is the source of truth, and the figures on this page are
 derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/backlog.mjs).
 
-**20 of 29 leaf items complete — 69%**
+**21 of 29 leaf items complete — 72%**
 
 ```
-████████████████████████████░░░░░░░░░░░░  69%
+█████████████████████████████░░░░░░░░░░░  72%
 ```
 
 ## Status
@@ -24,9 +24,9 @@ derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/
 | Status | Items |
 | --- | ---: |
 | ○ Not started | 6 |
-| ◑ In progress | 8 |
+| ◑ In progress | 7 |
 | ◒ Blocked | 2 |
-| ● Complete | 22 |
+| ● Complete | 23 |
 | **Total** | **38** |
 
 ## The hierarchy
@@ -44,7 +44,7 @@ derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/
 
 | Theme | Progress | Done | Remaining |
 | --- | --- | ---: | ---: |
-| [TH-01 Enforced standards compliance across the portfolio](./items/TH-01.md) | `██████████░░░░` 69% | 20 | 9 |
+| [TH-01 Enforced standards compliance across the portfolio](./items/TH-01.md) | `██████████░░░░` 72% | 21 | 8 |
 
 ## In flight
 
@@ -56,7 +56,6 @@ derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/
 - ◑ [FE-21](./items/FE-21.md) — A policy the authority admits is a policy this enforcer must find
 - ◑ [IN-01](./items/IN-01.md) — Enforcement a governed repository cannot weaken
 - ◒ [ST-07](./items/ST-07.md) — Validate the required-workflows remedy against a real organisation ruleset
-- ◑ [ST-14](./items/ST-14.md) — Oracle-backed evidence names an immutable identity for the authority and a mutable working tree for the subject
 - ◑ [TH-01](./items/TH-01.md) — Enforced standards compliance across the portfolio
 
 ## Ready to pick up
@@ -65,8 +64,8 @@ _Nothing marked ready._
 
 ## Everything
 
-- ◑ **[TH-01](./items/TH-01.md)** Enforced standards compliance across the portfolio _(20/29)_
-  - ◑ **[IN-01](./items/IN-01.md)** Enforcement a governed repository cannot weaken _(20/29)_
+- ◑ **[TH-01](./items/TH-01.md)** Enforced standards compliance across the portfolio _(21/29)_
+  - ◑ **[IN-01](./items/IN-01.md)** Enforcement a governed repository cannot weaken _(21/29)_
     - ◑ **[EP-01](./items/EP-01.md)** Authority transport — run a pack's own evaluator under a pinned identity _(8/9)_
       - ● **[FE-01](./items/FE-01.md)** M1 — run the official standards implementation and report what it said
       - ● **[FE-02](./items/FE-02.md)** M2 — contract-driven authority transport _(5/5)_
@@ -94,13 +93,13 @@ _Nothing marked ready._
       - ○ **[FE-10](./items/FE-10.md)** Reviewer identity beyond a configured list
       - ○ **[FE-11](./items/FE-11.md)** Cross-pack dependency ordering
       - ● **[FE-12](./items/FE-12.md)** Scope dispositions keyed per pack, not hardcoded to machine-learning
-    - ◑ **[EP-06](./items/EP-06.md)** Self-assurance — this repository's own evidence must establish what it reports _(6/7)_
+    - ◑ **[EP-06](./items/EP-06.md)** Self-assurance — this repository's own evidence must establish what it reports _(7/7)_
       - ● **[FE-14](./items/FE-14.md)** A skipped oracle is not a passing integration
       - ● **[ST-08](./items/ST-08.md)** Authoritative container CI must assert the symlink capability it depends on
       - ● **[ST-10](./items/ST-10.md)** The backlog tracker claims to be derived, and no executable derivation exists
       - ● **[ST-11](./items/ST-11.md)** A structural guard must fail when it cannot find what it guards
       - ● **[ST-12](./items/ST-12.md)** Audit every test that derives structure from source text, before deciding whether the tree needs normalising
       - ● **[ST-13](./items/ST-13.md)** The authoritative suite must be this repository's tests, not everything mounted beneath it
-      - ◑ **[ST-14](./items/ST-14.md)** Oracle-backed evidence names an immutable identity for the authority and a mutable working tree for the subject
+      - ● **[ST-14](./items/ST-14.md)** Oracle-backed evidence names an immutable identity for the authority and a mutable working tree for the subject
     - ○ **[ST-09](./items/ST-09.md)** scripts/ci.sh fails under Git Bash on Windows
 
