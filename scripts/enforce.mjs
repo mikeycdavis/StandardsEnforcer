@@ -272,7 +272,9 @@ export function runOfficialEvaluator(standardsDir, { target, policyPath, expectS
     return { ok: false, why: e.message, exitCode: null, report: null, contract: null };
   }
   const { contract, entrypoint } = loaded;
-  // R2 — the release must be the pack the caller asked for.
+  // R2 — the release must be the pack the caller asked for. ADR 0005 (amendment, 2026-08-26)
+  // records this gate and the earlier one as two non-redundant gates; neither may be removed on
+  // the grounds that the other exists, and this one may not be moved earlier.
   //
   // Checked HERE, after the adapter is loaded and before anything is spawned, because a verdict that
   // exists gets quoted: discovering afterwards that the wrong pack answered leaves the wrong answer
@@ -592,6 +594,37 @@ export async function enforce({
       }
       // Absent: stay silent. `runOfficialEvaluator` reports it in full where it always did.
     }
+
+    // IDENTITY BEFORE VOCABULARY. Asked here, on the loaded contract, before a single byte of its
+    // adoption declaration is read. ADR 0005 (amendment, 2026-08-26) and docs/architecture.md hold
+    // the invariant; docs/architecture-sequence.mmd depicts this gate, so it cannot be deleted as
+    // an apparent accident.
+    //
+    // Without this the wrong pack decided adoption. Scope asks for A, the pinned release declares B,
+    // and B's `policyFiles` became the set the target was searched for — so a repository that had
+    // adopted A correctly reported NOT_ADOPTED, naming a filename belonging to a pack the operator
+    // never asked about. Under a confirmed in-scope disposition that is a blockable delinquency
+    // finding, and R2 never ran to contradict it because it sits past the point this path returns
+    // from. A true condition, the wrong release, reported as a different and blockable one.
+    //
+    // THIS DOES NOT MOVE R2, and R2 must not move. Its own note records why: travelling earlier
+    // would put scope resolution behind the evaluator seam, which scope-seam-invariance.test.mjs
+    // exists to prevent. This gate protects the pre-invocation adoption logic; R2 stays where it is
+    // as defence in depth for the seam, and identity-before-adoption.test.mjs asserts both still
+    // fire on the paths that reach them.
+    //
+    // Silent without a scoped standard, because with nothing asked for no release can be the wrong
+    // one. An unscoped run has no id to disagree with, and refusing every release for failing to
+    // match nothing would be a new defect in place of the old one.
+    if (contract && scope?.standardId && contract.standard.id !== scope.standardId) {
+      return result(STATE.STANDARDS_IDENTITY_MISMATCH,
+        `the invocation asked for ${JSON.stringify(scope.standardId)} and the pinned release declares ` +
+          `itself ${JSON.stringify(contract.standard.id)}; a verdict from the wrong pack is not a ` +
+          "verdict about this standard, and its adoption markers are not this standard's either",
+        { standards, gate: gateReport, scope: scopeReport,
+          policy: { path: null, source: policySource, digest: null } });
+    }
+
     const declared = contract ? declaredAdoptionMarkers(contract) : null;
     if (declared) {
       markers = declared;

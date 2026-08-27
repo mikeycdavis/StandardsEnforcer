@@ -182,3 +182,78 @@ Hostile provenance tests, all failing closed:
   it is the intended cost.
 - ADR 0001's boundary gains a second edge. The first: the enforcer must not reimplement the
   standards. The second: nobody else may redefine them either.
+
+---
+
+## Amendment, 2026-08-26 — subject identity: the release must be the pack that was *asked for*
+
+**Status:** accepted. Raised by the wrong-pack-before-adoption defect found on merged PR #34
+(finding F2), remedied in `fix/identity-before-adoption-vocabulary`.
+
+The chain above verifies that a release is **the one that was pinned**. It does not verify that the
+pinned release is **the one that was asked for**, and those are different questions. Every step
+passes for a genuinely verified release of the wrong pack: the tag resolves, the commit matches, the
+checkout is exactly the reviewed release, the adapter is read from that checkout and from nowhere
+else. Provenance is perfect. The pack is wrong.
+
+That gap had a consequence, because `adoption.policyFiles` gave the release a second kind of
+authority. Scope asks for pack `A`; the pinned triple points at a verified release of pack `B`; `B`'s
+declared marker vocabulary became the set the target was searched for. A repository that had adopted
+`A` correctly was reported `NOT_ADOPTED` — under a confirmed in-scope disposition, a **blockable
+delinquency finding** — and told to create a filename belonging to a pack its operators never asked
+about. INV-E1 in its plainest form: a true condition reported as a different, blockable one.
+
+### The invariant, extended
+
+The invariant above named four properties sharing one provenance. It gains a fifth, and a
+precondition on all of them:
+
+> **Evaluator code, invocation declaration, native-status vocabulary, passing-set interpretation and
+> adoption vocabulary must share one verified release identity — and that identity must be the one
+> the invocation named, established before any of the five is consumed.**
+
+`adoption.policyFiles` is **pre-invocation authority metadata**. It is consumed before the evaluator
+is spawned, so a check that lives at the evaluator seam is, for it, a check that never runs.
+
+### Two gates, deliberately, and neither is redundant
+
+```text
+scope resolved
+      ↓
+adapter loaded from the verified checkout        (this ADR, unchanged)
+      ↓
+declared standard.id == the scoped standard      ← the early gate: protects the metadata below
+      ↓
+adoption vocabulary may now be consumed
+      ↓
+evaluator seam — runOfficialEvaluator
+      ↓
+declared standard.id == the invocation's id      ← R2: defence in depth for the seam itself
+      ↓
+spawn
+```
+
+**R2 is not superseded and MUST NOT be moved.** Its own note records why travelling earlier is
+forbidden: it would put scope resolution behind the evaluator seam, which
+`test/scope-seam-invariance.test.mjs` exists to prevent. It also guards a wider surface than the
+early gate — `runOfficialEvaluator` is exported and has callers that never pass through the adoption
+path, and a gate is only worth what its narrowest caller gets.
+
+Equally, the early gate is not made redundant by R2. It answers the same question at a point R2
+cannot reach, about data R2 never sees. Removing either on the grounds that the other exists
+reintroduces one of the two defects.
+
+The early gate is **silent when no standard was scoped**. With nothing asked for, no release can be
+the wrong one, and refusing every release for failing to match nothing would be a new defect in place
+of the old one.
+
+`test/identity-before-adoption.test.mjs` holds this: both gates asserted to fire on the paths that
+reach them, and the ordering proved load-bearing by a falsifier. Its negative property is asserted
+rather than inferred — the same mismatch is run against three different wrong-pack vocabularies and
+the whole result must be invariant under them and must name none of their filenames.
+
+### What this does not decide
+
+Whether a consumer may extend a pack's marker set. It may not — `LEGACY_ADOPTION_MARKERS` is frozen
+and carries that prohibition at its definition — but the authority boundary behind it is recorded in
+no ADR. That gap is tracked separately and is deliberately not resolved here.

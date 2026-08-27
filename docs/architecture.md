@@ -207,10 +207,22 @@ call if either source errors.
 invoked**.
 
 - `enforce({target, standardsRepo, tag, sha, cacheRoot, gate, platform, scope, today})` — the whole
-  sequence. The order is deliberate: **identity → enforcement root → scope → adoption → official
-  evaluation → pass-through**, and every step before the last can only produce a non-passing state.
-  Identity is first because running an unverified implementation and *then* discovering it was the
-  wrong one means a verdict already exists — and a verdict that exists gets quoted.
+  sequence. The order is deliberate: **release identity → enforcement root → scope → adapter loaded
+  → declared standard identity → adoption → official evaluation → pass-through**, and every step
+  before the last can only produce a non-passing state. Identity is first because running an
+  unverified implementation and *then* discovering it was the wrong one means a verdict already
+  exists — and a verdict that exists gets quoted.
+- **Two identity gates, and the second does not supersede the first.** `resolveIdentity` answers *is
+  this the release that was pinned*. It cannot answer *is this the pack that was asked for*, because
+  a genuinely verified release of the wrong pack satisfies it completely. That second question is
+  asked twice, deliberately. The early gate protects the **pre-invocation authority metadata** — the
+  adoption vocabulary a release declares, which otherwise decided adoption before anyone asked
+  whether the release was the right one. **R2**, inside `runOfficialEvaluator`, remains where it is
+  as defence in depth for every caller of that seam, including callers that never went through the
+  adoption path, and **must not be moved earlier**: its own note records that travelling earlier
+  would put scope resolution behind the evaluator seam, which `test/scope-seam-invariance.test.mjs`
+  exists to prevent. ADR 0005 records the invariant; `test/identity-before-adoption.test.mjs`
+  asserts both gates still fire on the paths that reach them.
 - `result(state, detail, extra, passing)` — the single construction point for every result. It is
   where `REQUIRES_RECORDED_DECISION` is enforced, so no future branch can reach the passing set
   through an absence; a state in that set produced without `reviewedBy`/`reviewedAt`/`reason` is
@@ -230,9 +242,12 @@ invoked**.
   `NOT_EVALUATED`* is why it no longer does.
 - `render(r)` / `parseArgs(argv)` / `main()` — human output, argument parsing, process exit.
 
-`POLICY_FILE = "project-policy.yml"` — its presence in the target is adoption. Its absence is
-`NOT_ADOPTED`, which is **not** non-compliance, and which reads more strongly when scope confirmed
-the repository is governed.
+Adoption is the presence, in the target, of a marker the **pinned release declares** under
+`adoption.policyFiles`. `LEGACY_ADOPTION_MARKERS` — frozen at `["project-policy.yml"]` — is what a
+release predating that declaration falls back to, and it must never grow. Absence is `NOT_ADOPTED`,
+which is **not** non-compliance, and which reads more strongly when scope confirmed the repository is
+governed. Because the vocabulary belongs to the release, the release must be the right one before it
+is read: see the two identity gates above.
 
 ### The state vocabulary — `scripts/states.mjs` (146 lines)
 
@@ -454,7 +469,7 @@ about GitHub, not a gap in this adapter.
 
 The adapter does not decide whether a gate is adequate. That is `gate.mjs`.
 
-### Tests — `test/` (12 files, ~3,134 lines, 163 tests)
+### Tests — `test/` (32 files, ~8,145 lines, 368 cases: 342 run on this host, 26 skipped for capability)
 
 **Responsibility:** Holding the boundaries that comments only assert.
 
@@ -517,20 +532,35 @@ A pull request opened against a governed repository, end to end:
    invariant `test/scope-seam-invariance.test.mjs` exists to hold. Failure → `SCOPE_REVIEW_REQUIRED` or `SCOPE_REGISTRY_INVALID`, exit `4`.
    `out-of-scope` → `OUT_OF_SCOPE`, exit `0`, rendered explicitly as *"Nothing was evaluated. This is
    an exclusion, not a pass."*
-8. `existsSync(target/project-policy.yml)` decides adoption. Absent → `NOT_ADOPTED`, exit `4`, phrased
-   more strongly when scope confirmed the repository is governed: *"it is governed and has not
-   adopted."*
-9. `runOfficialEvaluator()` (`scripts/enforce.mjs:102`) calls `loadAdapter()`, which reads
-   `standards-adapter.json` **from the verified checkout only**, validates it against the schema plus
-   the three cross-field checks, and confirms the resolved entrypoint is still inside the checkout.
-   The declared argv runs **once**, `{target}` substituted.
-10. The report's top-level `status` must be a member of *this release's own declared* `statuses`. If
+8. `loadAdapter(identity.dir)` reads the pinned release's `standards-adapter.json`, and **the first
+   thing asked of it is who it says it is**. Where the invocation named a standard and the release
+   declares a different one → `STANDARDS_IDENTITY_MISMATCH`, exit `4`, **before one byte of that
+   release's adoption vocabulary is read**. `resolveIdentity` at step 4 cannot catch this: a
+   genuinely verified release of the wrong pack passes it completely. A contract that exists and
+   cannot be read at this schema version is `ENFORCEMENT_ERROR`; one that is simply absent stays
+   silent here and is reported in full at step 10, which is what keeps adapter-less releases on
+   `NOT_ADOPTED`.
+9. Adoption is decided against the markers **that release declares** under `adoption.policyFiles`,
+   or `LEGACY_ADOPTION_MARKERS` where it declares none. More than one present → `ENFORCEMENT_ERROR`,
+   because order in the list is not precedence and choosing by position would manufacture an answer
+   the contract does not give. None present → `NOT_ADOPTED`, exit `4`, phrased more strongly when
+   scope confirmed the repository is governed: *"it is governed and has not adopted."*
+10. `runOfficialEvaluator()` (`scripts/enforce.mjs:102`) calls `loadAdapter()`, which reads
+    `standards-adapter.json` **from the verified checkout only**, validates it against the schema plus
+    the three cross-field checks, and confirms the resolved entrypoint is still inside the checkout.
+    It then asks the identity question **again** — **R2** — and refuses a release declaring a
+    standard the invocation did not ask for, before anything is spawned. Step 8 does not supersede
+    this and does not replace it: R2 defends every caller of the seam, including callers that never
+    passed through the adoption path, and it stays at the seam because moving it earlier would put
+    scope resolution behind that seam. The declared argv then runs **once**, `{target}` and
+    `{policy}` substituted.
+11. The report's top-level `status` must be a member of *this release's own declared* `statuses`. If
     it is not, that is an unknown, and INV-E1 says an unknown is not a pass →
     `ENFORCEMENT_ERROR`, exit `4`.
-11. `passing = contract.result.passing.includes(status)`. **That is the entirety of the enforcer's
+12. `passing = contract.result.passing.includes(status)`. **That is the entirety of the enforcer's
     opinion about the verdict.** No score, no summary count, no denominator is consulted;
     `test/authority-boundary.test.mjs` is what keeps that true.
-12. `result(STATE.EVALUATED, …, passing)` builds the envelope with the pack's report carried
+13. `result(STATE.EVALUATED, …, passing)` builds the envelope with the pack's report carried
     verbatim under `report` and its own answer under `authority.status`. `exitFor()` projects it to
     `0` or `1`. If the gate was never checked, `authoritative` is `false` and the render says so.
 
@@ -644,6 +674,7 @@ sequenceDiagram
     participant ID as identity.mjs
     participant GATE as gate.mjs + platform/github.mjs
     participant SCOPE as scope.mjs + footprint.mjs
+    participant ADAPT as standards-adapter.json<br/>(verified checkout)
     participant PACK as Pack evaluator<br/>(verified checkout)
 
     PR->>WF: opens — the organisation ruleset requires the check
@@ -675,16 +706,32 @@ sequenceDiagram
                 CLI-->>WF: OUT_OF_SCOPE, exit 0 (an exclusion, not a pass)
             else in-scope
                 SCOPE-->>CLI: in-scope + decision
-                alt target has no project-policy.yml
-                    CLI-->>WF: NOT_ADOPTED, exit 4 (governed and has not adopted)
-                else adopted
-                    CLI->>PACK: run declared entrypoint + arguments, {target} substituted
-                    alt no JSON, unrunnable, or an undeclared status
-                        PACK-->>CLI: unusable output
-                        CLI-->>WF: ENFORCEMENT_ERROR, exit 4
-                    else a declared status
-                        PACK-->>CLI: {status, ...} verbatim
-                        CLI-->>WF: EVALUATED + passing from the pack's own set, exit 0 or 1
+                CLI->>ADAPT: loadAdapter(verified checkout) — the declaration, not yet its vocabulary
+                alt present but unreadable at this schema version
+                    ADAPT-->>CLI: contract error
+                    CLI-->>WF: ENFORCEMENT_ERROR, exit 4
+                else declared standard.id is not the scoped standard
+                    ADAPT-->>CLI: standard.id
+                    CLI-->>WF: STANDARDS_IDENTITY_MISMATCH, exit 4 — before one byte of its adoption vocabulary is read
+                else identity agrees, or nothing was scoped to disagree with
+                    ADAPT-->>CLI: adoption.policyFiles (absent or unreadable → the legacy marker)
+                    alt the target holds more than one declared marker
+                        CLI-->>WF: ENFORCEMENT_ERROR, exit 4 (order in the list is not precedence)
+                    else the target holds none of them
+                        CLI-->>WF: NOT_ADOPTED, exit 4 (governed and has not adopted)
+                    else adopted
+                        Note over CLI,PACK: R2 — the same identity question, asked again inside the seam.<br/>Not superseded by the check above and not moved: it defends<br/>every caller of runOfficialEvaluator, including those that<br/>never passed through the adoption path.
+                        CLI->>PACK: loadAdapter, re-check standard.id, then run declared argv with {target} and {policy}
+                        alt the release declares a standard the invocation did not ask for
+                            PACK-->>CLI: refused before anything is spawned
+                            CLI-->>WF: STANDARDS_IDENTITY_MISMATCH, exit 4
+                        else no JSON, unrunnable, or an undeclared status
+                            PACK-->>CLI: unusable output
+                            CLI-->>WF: ENFORCEMENT_ERROR, exit 4
+                        else a declared status
+                            PACK-->>CLI: {status, ...} verbatim
+                            CLI-->>WF: EVALUATED + passing from the pack's own set, exit 0 or 1
+                        end
                     end
                 end
             end
