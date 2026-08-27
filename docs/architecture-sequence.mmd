@@ -47,8 +47,13 @@ sequenceDiagram
                     CLI-->>WF: STANDARDS_IDENTITY_MISMATCH, exit 4 — before one byte of its adoption vocabulary is read
                 else identity agrees, or nothing was scoped to disagree with
                     ADAPT-->>CLI: adoption.policyFiles (absent or unreadable → the legacy marker)
-                    alt the target holds more than one declared marker
+                    alt no declared name is a readable policy, but one is occupied
+                        CLI-->>WF: ENFORCEMENT_ERROR, exit 4 — obstruction is not absence
+                    else the target holds more than one readable declared marker
                         CLI-->>WF: ENFORCEMENT_ERROR, exit 4 (order in the list is not precedence)
+                    else one readable marker, beside a declared name holding a regular file nobody could read
+                        Note over CLI,PACK: unreadable is UNKNOWN rather than absent<br/>a directory cannot be a policy so it is excluded on what it is<br/>an unread file may be a second policy that this pack admits<br/>and no precedence is declared so selecting one manufactures certainty
+                        CLI-->>WF: ENFORCEMENT_ERROR, exit 4 — restore access, or name the policy with --policy
                     else the target holds none of them
                         CLI-->>WF: NOT_ADOPTED, exit 4 (governed and has not adopted)
                     else adopted
