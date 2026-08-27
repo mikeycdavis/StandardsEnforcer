@@ -153,3 +153,31 @@ export function oracleAt(tag) {
  * https://github.com/mikeycdavis/MachineLearningStandards/blob/e30a84c6ffd74b9401d9e3ec0ffe08fb8cfa703d/artifacts/adr/0010-published-release-tags-are-public-authorities.md
  */
 export const ORACLE_TAGS = ["v1.4.0", "v1.5.0", "v1.6.0"];
+
+/**
+ * The SUBJECT a test evaluates, as distinct from the AUTHORITY that evaluates it (ST-14).
+ *
+ * Two identities travel through every oracle-dependent test and only one of them has ever been
+ * pinned:
+ *
+ *     authority identity   which standards implementation executes   -- resolveIdentity, verified
+ *     subject identity     which repository bytes are evaluated      -- ORACLE_REPO, whatever it is
+ *
+ * `ORACLE_REPO` is a host working tree. It is a transport for an object database and nothing about
+ * it is fixed: it can be edited, checked out elsewhere, or rebased while a suite is mid-run, and an
+ * assertion about an evaluation result then depends on bytes no one recorded. That is the defect
+ * ST-14 files, and the authority half already shows what the remedy looks like.
+ *
+ * @param {string} hostRepo  a git repository to take the subject FROM (never evaluated in place)
+ * @param {string} sha       the commit whose bytes are the subject
+ * @param {string} cacheRoot where the materialised subject lives
+ * @returns {{ok: boolean, dir: string|null, sha: string, frozen: boolean, why: string|null}}
+ */
+export function oracleSubject(hostRepo, sha, cacheRoot) {
+  // ST-14 RED SPECIMEN. This is what every oracle-dependent test does today, named so the property
+  // can be asserted against it: the subject IS the mutable host checkout. `frozen: false` is the
+  // honest label -- nothing here fixes any bytes, and `sha` is a claim about the repository's HEAD
+  // rather than about what will be read off disk.
+  void cacheRoot;
+  return { ok: true, dir: hostRepo, sha, frozen: false, why: null };
+}
