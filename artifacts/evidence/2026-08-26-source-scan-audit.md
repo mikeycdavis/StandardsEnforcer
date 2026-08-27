@@ -14,13 +14,25 @@ than taken.
 
 > **The counts below are historical-at-execution, and were already stale within a day.** They
 > describe the surface at `721a97b`, which is what the audit actually ran against. `main` now
-> enumerates **30** files: `test/adoption-marker.test.mjs` arrived with #34/#35 while this audit was
-> in review. It was checked rather than assumed — its three `readFileSync` occurrences are strings
-> inside a *generated* evaluator script, so it performs no read of repository source and falls in
-> the same excluded category as `test/policy-path.test.mjs`. **The zero-class-3 conclusion is
-> unchanged.** The number is a measurement with a timestamp; the conclusion is the finding. Recorded
-> here rather than by editing the counts, because a denominator silently updated to match today is
-> no longer evidence of what was executed.
+> enumerates **32** files. Three arrived with #34/#35 while this audit was in review, and each has
+> been classified rather than assumed:
+>
+> | Added test | Reads repository source? | Mutation under CRLF | Class |
+> | --- | --- | --- | --- |
+> | `test/adoption-marker.test.mjs` | no — its three `readFileSync` occurrences are strings inside a *generated* evaluator script | n/a, excluded | excluded, as `test/policy-path.test.mjs` |
+> | `test/diagram-sync.test.mjs` | yes — reads `docs/architecture.md`, derives fenced blocks | a fenced block made to differ from its `.mmd` | live, fail=1 → **1** |
+> | `test/identity-before-adoption.test.mjs` | yes — `slurp()`s ADR 0005, `scripts/enforce.mjs`, and `docs/architecture-sequence.mmd` | each of its three read subjects mutated in turn | live, fail=1 each → **1** |
+>
+> **The zero-class-3 conclusion holds for the 32-file surface, not only the historical 29.** The
+> number is a measurement with a timestamp; the conclusion is the finding. Recorded here rather than
+> by editing the counts, because a denominator silently updated to match today is no longer evidence
+> of what was executed.
+>
+> **An earlier version of this note said 30 and named only `adoption-marker`. That was wrong**, and
+> wrong in a specific way worth recording: the surface was enumerated in the primary worktree, which
+> sits at `721a97b` rather than on `main`, so the measurement reported the audit's own stale
+> denominator back as the current one. The two omitted tests were caught in review of
+> [PR #37](https://github.com/mikeycdavis/StandardsEnforcer/pull/37). Re-measure on the commit being described, not in whatever tree is open.
 
 `scripts/test-surface.mjs` enumerates the surface, so the audit has an exact population rather than
 whatever a search happened to reach. This is ST-13's fix doing work it was not built for.
