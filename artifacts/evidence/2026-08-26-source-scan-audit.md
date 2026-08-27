@@ -12,6 +12,16 @@ than taken.
 
 ## The denominator, stated rather than sampled
 
+> **The counts below are historical-at-execution, and were already stale within a day.** They
+> describe the surface at `721a97b`, which is what the audit actually ran against. `main` now
+> enumerates **30** files: `test/adoption-marker.test.mjs` arrived with #34/#35 while this audit was
+> in review. It was checked rather than assumed — its three `readFileSync` occurrences are strings
+> inside a *generated* evaluator script, so it performs no read of repository source and falls in
+> the same excluded category as `test/policy-path.test.mjs`. **The zero-class-3 conclusion is
+> unchanged.** The number is a measurement with a timestamp; the conclusion is the finding. Recorded
+> here rather than by editing the counts, because a denominator silently updated to match today is
+> no longer evidence of what was executed.
+
 `scripts/test-surface.mjs` enumerates the surface, so the audit has an exact population rather than
 whatever a search happened to reach. This is ST-13's fix doing work it was not built for.
 
