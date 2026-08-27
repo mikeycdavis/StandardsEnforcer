@@ -13,9 +13,9 @@ than taken.
 ## The denominator, stated rather than sampled
 
 > **The counts below are historical-at-execution, and were already stale within a day.** They
-> describe the surface at `721a97b`, which is what the audit actually ran against. `main` now
-> enumerates **32** files. Three arrived with #34/#35 while this audit was in review, and each has
-> been classified rather than assumed:
+> describe the surface at `721a97b`, which is what the audit actually ran against. **At `6587b23`**
+> the surface had grown to **32** files — three arrived with #34/#35 while this audit was in review,
+> and each was classified rather than assumed:
 >
 > | Added test | Reads repository source? | Mutation under CRLF | Class |
 > | --- | --- | --- | --- |
@@ -27,6 +27,18 @@ than taken.
 > number is a measurement with a timestamp; the conclusion is the finding. Recorded here rather than
 > by editing the counts, because a denominator silently updated to match today is no longer evidence
 > of what was executed.
+>
+> Two more have landed since, taking the surface at `bd23a32` to **34**:
+> `test/oracle-subject-identity.test.mjs` (#36) does read repository source and is class 1 — it went
+> red on a planted alias rename, recorded in
+> [its own evidence](2026-08-27-oracle-subject-identity.md); and
+> `test/adoption-marker-usability.test.mjs` (#38) joins the excluded category, its `readFileSync`
+> calls being strings in a generated evaluator script plus a probe of a temporary file it creates
+> itself.
+>
+> **Every count here now names the commit it was taken at**, because this note has already had to be
+> corrected once for carrying a floating one. A surface figure with no commit beside it is a claim
+> that quietly expires.
 >
 > **An earlier version of this note said 30 and named only `adoption-marker`. That was wrong**, and
 > wrong in a specific way worth recording: the surface was enumerated in the primary worktree, which
