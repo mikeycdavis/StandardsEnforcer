@@ -250,7 +250,7 @@ export function runOfficialEvaluator(standardsDir, { target, policyPath, expectS
   try {
     loaded = loadAdapter(standardsDir);
   } catch (e) {
-    return { ok: false, why: e.message, exitCode: null, report: null, contract: null };
+    return { ok: false, why: e.message, exitCode: null, signal: null, report: null, contract: null };
   }
   const { contract, entrypoint } = loaded;
   // R2 — the release must be the pack the caller asked for.
@@ -318,7 +318,7 @@ export function runOfficialEvaluator(standardsDir, { target, policyPath, expectS
   try {
     argv = bindArguments(contract, { "{target}": target, "{policy}": policyPath });
   } catch (e) {
-    return { ok: false, why: e.message, exitCode: null, report: null, contract };
+    return { ok: false, why: e.message, exitCode: null, signal: null, report: null, contract };
   }
   const r = spawnSync(process.execPath, [entrypoint, ...argv], {
     encoding: "utf8",
@@ -326,19 +326,68 @@ export function runOfficialEvaluator(standardsDir, { target, policyPath, expectS
     windowsHide: true,
   });
   if (r.error) {
-    return { ok: false, why: `the evaluator could not be run (${r.error.message})`, exitCode: null, report: null, contract };
+    return { ok: false, why: `the evaluator could not be run (${r.error.message})`, exitCode: null, signal: null, report: null, contract };
   }
   if (!r.stdout || !r.stdout.trim()) {
     const reason = (r.stderr || "").trim().split("\n")[0] || `the evaluator exited ${r.status} and printed nothing`;
-    return { ok: false, why: reason, exitCode: r.status, report: null, contract };
+    return { ok: false, why: reason, exitCode: r.status, signal: r.signal ?? null, report: null, contract };
   }
   let report;
   try {
     report = JSON.parse(r.stdout);
   } catch {
-    return { ok: false, why: "the evaluator did not return JSON", exitCode: r.status, report: null, contract };
+    return { ok: false, why: "the evaluator did not return JSON", exitCode: r.status, signal: r.signal ?? null, report: null, contract };
   }
-  return { ok: true, why: null, exitCode: r.status, report, contract };
+
+  // FE-16 — A DECLARED PASS IS NOT ENOUGH ON ITS OWN.
+  //
+  // Everything above this point asks whether the evaluator produced a readable answer. This asks
+  // whether the process that produced it finished. Until FE-16 the two were never separated:
+  // `r.status` was carried as data and never consulted, `r.signal` had no field at all, and a pack
+  // could assert in the same breath that it passed and that it did not complete.
+  //
+  // THE DECISION LIVES HERE rather than in `enforce()` because this is the only place holding both
+  // facts at once — the pack's own declared passing set, and what its process did. `enforce()`
+  // already maps `ok: false` to ENFORCEMENT_ERROR, so the state machine is left alone and the
+  // property holds for every caller of this seam rather than only for callers that came through it.
+  //
+  // THE BOUNDARY IS CONTRADICTION, NOT ARITHMETIC. A rule of the form "any nonzero exit is an
+  // enforcement error" cannot be adopted: MachineLearningStandards exits 2 while declaring
+  // NOT_EVALUATED, which is a legitimate evaluation its own contract describes, and refusing it
+  // would break an authority behaving exactly as specified. See arm E of
+  // artifacts/evidence/2026-08-16-fe16-red-replay.md.
+  const signal = r.signal ?? null;
+  const declaredStatus = typeof report?.status === "string" ? report.status : null;
+  const declaredPassing = declaredStatus !== null && contract.result.passing.includes(declaredStatus);
+
+  // A signalled evaluator is unestablished whatever it declared, so this is checked first and does
+  // not consult the passing set. The measured shape is that `exitCode` is ALREADY null on a signal —
+  // what was missing was any record that a signal occurred, leaving an operator with an absent exit
+  // code and no reason for it. The remedy adds the signal rather than rescuing the null.
+  if (signal !== null) {
+    return {
+      ok: false,
+      why: `the evaluator was terminated by ${signal} after printing ` +
+        `${declaredStatus === null ? "a report" : JSON.stringify(declaredStatus)}, so it did not ` +
+        `complete and what it printed establishes nothing`,
+      exitCode: r.status, signal, report: null, contract,
+    };
+  }
+
+  // The contradiction. No meaning attaches to WHICH nonzero code occurred — arms A and B of the
+  // replay differ only in the number, 1 against 42, and must gate identically — so the code travels
+  // as evidence and is never interpreted.
+  if (declaredPassing && r.status !== 0) {
+    return {
+      ok: false,
+      why: `the evaluator declared ${JSON.stringify(declaredStatus)}, which its own contract declares ` +
+        `passing, and then exited ${r.status}. A process that did not complete successfully cannot ` +
+        `establish a pass, and this enforcer will not choose between the two claims`,
+      exitCode: r.status, signal, report: null, contract,
+    };
+  }
+
+  return { ok: true, why: null, exitCode: r.status, signal, report, contract };
 }
 
 // ---------------------------------------------------------------------------
@@ -596,8 +645,13 @@ export async function enforce({
   if (!run.ok) {
     // R2's refusal is an identity failure, not a generic one. STANDARDS_IDENTITY_MISMATCH already
     // carries "nobody can say which standards ran", which is exactly what a wrong-pack release means.
+    // The process facts travel with the refusal. Before FE-16 this branch dropped them, so a run
+    // refused for not completing produced a payload with no exit code and no signal in it — the
+    // operator was told the enforcement failed and given nothing to act on. `null` where the
+    // evaluator never ran is the truthful value, and is not the same as absent.
     return result(run.identityMismatch ? STATE.STANDARDS_IDENTITY_MISMATCH : STATE.ENFORCEMENT_ERROR,
-      run.why, { standards, gate: gateReport, scope: scopeReport, policy: policyReport });
+      run.why, { standards, gate: gateReport, scope: scopeReport, policy: policyReport,
+        standardsExitCode: run.exitCode ?? null, standardsSignal: run.signal ?? null });
   }
 
   const status = run.report?.status;
