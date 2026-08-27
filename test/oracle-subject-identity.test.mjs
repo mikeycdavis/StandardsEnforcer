@@ -37,19 +37,60 @@ import { testFiles } from "../scripts/test-surface.mjs";
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 /**
- * The identifiers this repository's suites bind the raw `ENFORCER_ORACLE_REPO` path to.
+ * The expressions that carry the raw `ENFORCER_ORACLE_REPO` path.
  *
- * `ORACLE.repo` is the value itself; `MLS` and `ORACLE_REPO` are the two names it is currently
- * given. Listed rather than pattern-matched, so a new alias is a deliberate addition here instead
- * of something a regex silently accepts.
+ * These are DERIVED from each file rather than listed, because a list only ever names the spellings
+ * that existed when it was written. `const subjectRoot = ORACLE.repo` is an ordinary refactor, and
+ * against a fixed list it reinstates the whole defect while leaving this guard green — which is the
+ * vacuous-guard shape the suite this file belongs to exists to refuse.
+ *
+ * The roots are the environment variable and the name `test-support/oracle.mjs` exports for it.
+ * `oracleAt(...)` returns an object whose `repo` field is that same path, so any binding holding one
+ * is a root too, and `ORACLE` is included by name so a specimen can be checked without calling it.
  */
-const HOST_PATH_ALIASES = ["MLS", "ORACLE_REPO", "ORACLE.repo"];
+const ORACLE_ENV = "process.env.ENFORCER_ORACLE_REPO";
 
-/** `target:` bound to one of those aliases, or a path joined onto one. */
+function oracleAliases(code) {
+  const holders = new Set(["ORACLE"]);
+  for (const m of code.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*oracleAt\s*\(/gu)) {
+    holders.add(m[1]);
+  }
+
+  const tainted = new Set([ORACLE_ENV, "ORACLE_REPO"]);
+  for (const h of holders) tainted.add(`${h}.repo`);
+
+  // A fixpoint, because aliasing chains: `const MLS = ORACLE.repo`, then `const subject = MLS`.
+  for (let changed = true; changed; ) {
+    changed = false;
+    const add = (name) => {
+      if (name && !tainted.has(name)) {
+        tainted.add(name);
+        changed = true;
+      }
+    };
+    // `const NAME = <an expression already known to be the host path>`
+    for (const m of code.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([^;\n]+)/gu)) {
+      if (tainted.has(m[2].trim().replace(/[;,]$/u, ""))) add(m[1]);
+    }
+    // `const { repo } = ORACLE`, and `const { repo: NAME } = ORACLE`
+    for (const m of code.matchAll(/(?:const|let|var)\s*\{([^}]*)\}\s*=\s*([A-Za-z_$][\w$]*)/gu)) {
+      if (!holders.has(m[2])) continue;
+      for (const part of m[1].split(",")) {
+        const [key, alias] = part.split(":").map((piece) => piece.trim());
+        if (key === "repo") add(alias || key);
+      }
+    }
+  }
+  return tainted;
+}
+
+const escapeForRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+
+/** `target:` bound to one of those expressions, or a path joined onto one. */
 function hostTreeAsSubject(code) {
   const hits = [];
-  for (const alias of HOST_PATH_ALIASES) {
-    const a = alias.replace(".", "\\.");
+  for (const alias of oracleAliases(code)) {
+    const a = escapeForRegExp(alias);
     // `target: MLS` — the subject IS the host tree.
     const asTarget = new RegExp(`target:\\s*${a}\\b`, "gu");
     // `path.join(MLS, …)` — a path built from the host tree, which is the same defect with a
@@ -96,21 +137,61 @@ test("subject · no oracle-dependent assertion takes the host oracle path as its
 
 test("subject · the guard can see a violation, so its silence means something", async () => {
   // A prohibition that cannot demonstrate a positive is indistinguishable from a broken matcher.
-  // These are the four shapes that were live in `test/enforce.test.mjs` before this item.
+  // The first four shapes were live in `test/enforce.test.mjs` before this item. The rest are
+  // refactors that a fixed list of spellings would wave through while the defect came straight
+  // back — which is why the aliases are derived from the code instead of enumerated.
   const specimen = [
+    'const ORACLE = oracleAt(TAG);',
+    'const MLS = ORACLE.repo;',
     'const r = await enforce({ ...identity(), target: MLS });',
     'const d = runOfficialEvaluator(id.dir, { target: MLS, policyPath: path.join(MLS, "p.yml") });',
     'await enforce({ ...identity(), target: ORACLE_REPO });',
     'await enforce({ ...identity(), target: ORACLE.repo });',
+    // renamed — the exact refactor a hardcoded list misses
+    'const subjectRoot = ORACLE.repo;',
+    'await enforce({ ...identity(), target: subjectRoot });',
+    // destructured, plain and renamed
+    'const { repo } = ORACLE;',
+    'await enforce({ ...identity(), target: repo });',
+    'const { repo: hostTree } = ORACLE;',
+    'await enforce({ ...identity(), target: hostTree });',
+    // aliased through a chain, so one hop is not the limit
+    'const hop = MLS;',
+    'const further = hop;',
+    'await enforce({ ...identity(), target: further });',
+    // and the environment variable read straight through
+    'await enforce({ ...identity(), target: process.env.ENFORCER_ORACLE_REPO });',
   ].join("\n");
 
   const found = hostTreeAsSubject(specimen).map((h) => h.text);
-  assert.ok(found.length >= 5, `the matcher missed a known violation shape: ${JSON.stringify(found)}`);
-  assert.ok(found.includes("target: MLS"), "the plain `target: MLS` form is not matched");
-  assert.ok(found.includes("path.join(MLS,"), "the joined-path form is not matched");
-  assert.ok(found.includes("target: ORACLE_REPO"), "the ORACLE_REPO alias is not matched");
-  assert.ok(found.includes("target: ORACLE.repo"), "the ORACLE.repo alias is not matched");
+  const required = [
+    "target: MLS",
+    "path.join(MLS,",
+    "target: ORACLE_REPO",
+    "target: ORACLE.repo",
+    "target: subjectRoot",
+    "target: repo",
+    "target: hostTree",
+    "target: further",
+    "target: process.env.ENFORCER_ORACLE_REPO",
+  ];
+  for (const shape of required) {
+    assert.ok(found.includes(shape),
+      `the matcher missed \`${shape}\`, so a refactor to that shape would restore the defect ` +
+      `silently. Found: ${JSON.stringify(found)}`);
+  }
 
   // And that it does not fire on the remedy, or this guard forbids its own fix.
   assert.deepEqual(hostTreeAsSubject('await enforce({ ...identity(), target: id.dir });'), []);
+  // Nor on a materialised checkout that merely passed THROUGH the host path to get there.
+  assert.deepEqual(
+    hostTreeAsSubject([
+      'const ORACLE = oracleAt(TAG);',
+      'const MLS = ORACLE.repo;',
+      'const subject = resolveIdentity({ repo: MLS, tag: TAG, sha: SHA, cacheRoot: CACHE }).dir;',
+      'await enforce({ ...identity(), target: subject });',
+    ].join("\n")),
+    [],
+    "the repair materialises from the host path; treating that as a violation would forbid the fix",
+  );
 });

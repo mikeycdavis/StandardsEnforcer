@@ -126,6 +126,50 @@ Red before the repair, naming all five occurrences:
   - []
 ```
 
+### The aliases are derived, not listed
+
+The guard first carried a hardcoded list of the three spellings the host path had here — `MLS`,
+`ORACLE_REPO`, `ORACLE.repo`. Review of this change ([PR #36]) pointed out that a list only names the
+spellings that existed when it was written, and that an ordinary rename walks straight past it:
+
+```js
+const subjectRoot = ORACLE.repo;
+await enforce({ ...identity(), target: subjectRoot });
+```
+
+That is the defect in full, and the listed guard passed it. **The objection is correct**, and it is
+this repository's own vacuous-guard shape — a prohibition that reports success because it was
+looking for the wrong string.
+
+The aliases are now derived per file, by propagation from the roots
+(`process.env.ENFORCER_ORACLE_REPO`, the `ORACLE_REPO` export, and the `repo` field of any
+`oracleAt(...)` result) to a fixpoint, so renames, destructuring, and multi-hop chains are carried.
+Verified by planting the reviewer's exact refactor in `test/enforce.test.mjs` — both its sites, the
+declaration and the use:
+
+```
+guard with the renamed alias present    2 tests, 1 pass, 1 fail
+                                        + 'test/enforce.test.mjs: target: subjectRoot'
+guard with it removed                   2 tests, 2 pass, 0 fail
+```
+
+The positive case now carries those shapes too, and a second negative case requiring the matcher not
+to fire on a subject that merely *passed through* the host path to be materialised — otherwise the
+guard would forbid its own remedy.
+
+**A first attempt at this falsifier was a partial no-op**: the declaration was planted, the use was
+not, and the guard's green was read as a miss. It was caught by asserting both sites rather than
+asserting the file had changed. Recorded because it is the same harness defect
+[ST-12](../backlog/items/ST-12.md) found and fixed, arriving one level down — a mutation with two
+sites needs both asserted, not just a non-empty diff.
+
+**What it still does not catch.** Taint that leaves the file, passes through a function parameter, or
+is carried in an object field is not tracked; this is a lexical scan, not a type system. A rename
+inside one file is covered; laundering the path through a helper in another is not. The reviewer's
+alternative — a behavioural regression that poisons the host tree and requires a red — would close
+that, at the cost of a test that can only run where an oracle is configured. Not taken here; recorded
+as the next move if this guard is ever defeated.
+
 ## Suite
 
 | Surface | tests | pass | fail | skipped |
