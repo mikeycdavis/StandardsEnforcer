@@ -27,7 +27,7 @@ import { fileURLToPath } from "node:url";
 import { enforce, runOfficialEvaluator } from "../scripts/enforce.mjs";
 import { STATE, PASSING, REQUIRES_RECORDED_DECISION, REACHABLE, exitFor, EXIT } from "../scripts/states.mjs";
 import { verifyTagResolvesTo, resolveIdentity } from "../scripts/identity.mjs";
-import { oracleAt } from "../test-support/oracle.mjs";
+import { oracleAt, oracleSubject } from "../test-support/oracle.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // v1.6.0: the first release declaring adapter schemaVersion 1.1.0, so binding {policy} through the
@@ -55,6 +55,14 @@ async function scratch(fn) {
 }
 
 const identity = () => ({ standardsRepo: MLS, tag: TAG, sha: SHA, cacheRoot: CACHE });
+
+// THE SUBJECT, WHICH IS NOT THE AUTHORITY (ST-14). `identity()` above pins which standards
+// implementation executes. It says nothing about which bytes are evaluated, and until this line the
+// answer was "whatever ORACLE_REPO happens to contain" -- a host working tree that can be edited or
+// checked out elsewhere mid-run. Both halves are now object-addressed by the same verified route.
+// `test/oracle-subject-identity.test.mjs` holds the property and the falsifiers.
+const SUBJECT = MLS_AVAILABLE ? oracleSubject(MLS, SHA, CACHE) : { ok: false, dir: null, why: ORACLE.skip };
+const NEEDS_SUBJECT = { skip: SUBJECT.ok ? false : `the oracle subject could not be materialised: ${SUBJECT.why}` };
 
 // ===========================================================================
 // INV-E1 — no unknown becomes a pass
@@ -151,6 +159,11 @@ test("identity · a tag pointing somewhere else is a mismatch, and the report na
   assert.match(v.why, new RegExp(SHA));
 });
 
+// NOT A SUBJECT, and established by execution rather than by reading (ST-14). `enforce` checks the
+// target exists and then returns on the unresolvable identity before anything is evaluated, so no
+// byte of this target is ever read. `oracle-subject-identity.test.mjs` proves it: two targets
+// sharing no content produce an identical answer. Freezing it would be a meaningless edit made to
+// satisfy the shape of a sentence.
 test("identity · a declared identity that does not resolve produces no verdict at all", NEEDS_ORACLE, async () => {
   const r = await enforce({ ...identity(), sha: "0".repeat(40), target: MLS });
   assert.equal(r.state, STATE.STANDARDS_IDENTITY_MISMATCH);
@@ -205,8 +218,8 @@ test("adoption · NOT_ADOPTED does not claim the repository should have adopted"
 // The oracle: reproduce the official result, by the official route
 // ===========================================================================
 
-test("oracle · MachineLearningStandards under its own v1.4.0 reproduces the recorded verdict", NEEDS_ORACLE, async () => {
-  const r = await enforce({ ...identity(), target: MLS });
+test("oracle · MachineLearningStandards under its own v1.4.0 reproduces the recorded verdict", NEEDS_SUBJECT, async () => {
+  const r = await enforce({ ...identity(), target: SUBJECT.dir });
   // At v1.4.0 this asserted COMPLIANT. v1.5.0 repaired the false green, and this repository declares
   // every domain rule not-applicable — so the honest official result is now NOT_EVALUATED, which its
   // contract does not declare passing. The enforcer reports that without knowing what the word means.
@@ -217,13 +230,16 @@ test("oracle · MachineLearningStandards under its own v1.4.0 reproduces the rec
   assert.equal(r.standards.sha, SHA);
 });
 
-test("oracle · the enforcer's payload IS the official evaluator's output, not a recomputation", NEEDS_ORACLE, async () => {
+test("oracle · the enforcer's payload IS the official evaluator's output, not a recomputation", NEEDS_SUBJECT, async () => {
   // The M1 claim's second half, tested directly. Run the official CLI out of the verified checkout,
   // then run the enforcer, and require the reports to agree field by field. Anything the enforcer
   // computed for itself would show up here as a difference.
   const id = resolveIdentity({ repo: MLS, tag: TAG, sha: SHA, cacheRoot: CACHE });
-  const direct = runOfficialEvaluator(id.dir, { target: MLS, policyPath: path.join(MLS, "project-policy.yml") });
-  const viaEnforcer = await enforce({ ...identity(), target: MLS });
+  // Both sides read the same frozen bytes. The assertion is content-invariant but was never
+  // time-invariant: over a mutable tree, anything changing between the two runs surfaced here as a
+  // field-level difference with no local cause.
+  const direct = runOfficialEvaluator(id.dir, { target: SUBJECT.dir, policyPath: path.join(SUBJECT.dir, "project-policy.yml") });
+  const viaEnforcer = await enforce({ ...identity(), target: SUBJECT.dir });
 
   assert.equal(direct.ok, true);
   assert.equal(viaEnforcer.report.status, direct.report.status);

@@ -41,6 +41,8 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
+import { materialise } from "../scripts/identity.mjs";
+
 const git = (args, cwd) => spawnSync("git", args, { encoding: "utf8", cwd, windowsHide: true });
 
 /** The oracle repository, or `null` when none was named. No default: unset is unset. */
@@ -174,10 +176,27 @@ export const ORACLE_TAGS = ["v1.4.0", "v1.5.0", "v1.6.0"];
  * @returns {{ok: boolean, dir: string|null, sha: string, frozen: boolean, why: string|null}}
  */
 export function oracleSubject(hostRepo, sha, cacheRoot) {
-  // ST-14 RED SPECIMEN. This is what every oracle-dependent test does today, named so the property
-  // can be asserted against it: the subject IS the mutable host checkout. `frozen: false` is the
-  // honest label -- nothing here fixes any bytes, and `sha` is a claim about the repository's HEAD
-  // rather than about what will be read off disk.
-  void cacheRoot;
-  return { ok: true, dir: hostRepo, sha, frozen: false, why: null };
+  // THE SAME VERIFIED ROUTE THE AUTHORITY ALREADY USES, and deliberately not a second one.
+  // `materialise` clones from the object database, detaches onto the SHA, and re-verifies the
+  // checkout with `checkoutIsExactly` before returning it. Reusing it means the subject and the
+  // authority are frozen by one mechanism with one set of guarantees; a bespoke copy here would be
+  // a second definition of "these bytes are that commit" that could drift from the first.
+  //
+  // A COPY OF THE WORKING TREE WOULD NOT DO. Copying whatever `hostRepo` currently holds fixes the
+  // bytes for the run but pins them to no identity: the result would be reproducible only by whoever
+  // still had that directory. What makes an assertion checkable later is that the bytes are named.
+  // A CACHE ROOT OF ITS OWN, and this is load-bearing rather than tidiness. `materialise` keys an
+  // entry by SHA alone, and the subject's commit is routinely the authority's commit -- an oracle
+  // evaluated under its own release is the whole point of these tests. Sharing a root would hand
+  // both roles the same directory, and `resolveIdentity` would then verify the authority, find the
+  // subject's state, and REPAIR it out from under the run. Discovered by the liveness test below:
+  // mutating the subject changed nothing, because the next enforce silently restored it.
+  const materialised = materialise(hostRepo, sha, path.join(cacheRoot, "subject"));
+  if (!materialised.ok) {
+    // NO FALLBACK. Returning the host on failure would restore the defect behind a helper that
+    // reports success -- an unknown reported as a pass, which is the one thing this repository
+    // refuses everywhere else. A test that cannot establish its subject does not have one.
+    return { ok: false, dir: null, sha, frozen: false, why: materialised.why };
+  }
+  return { ok: true, dir: materialised.dir, sha, frozen: true, why: null };
 }
