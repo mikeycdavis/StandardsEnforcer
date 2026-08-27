@@ -6,6 +6,7 @@ sequenceDiagram
     participant ID as identity.mjs
     participant GATE as gate.mjs + platform/github.mjs
     participant SCOPE as scope.mjs + footprint.mjs
+    participant ADAPT as standards-adapter.json<br/>(verified checkout)
     participant PACK as Pack evaluator<br/>(verified checkout)
 
     PR->>WF: opens — the organisation ruleset requires the check
@@ -37,16 +38,32 @@ sequenceDiagram
                 CLI-->>WF: OUT_OF_SCOPE, exit 0 (an exclusion, not a pass)
             else in-scope
                 SCOPE-->>CLI: in-scope + decision
-                alt target has no project-policy.yml
-                    CLI-->>WF: NOT_ADOPTED, exit 4 (governed and has not adopted)
-                else adopted
-                    CLI->>PACK: run declared entrypoint + arguments, {target} substituted
-                    alt no JSON, unrunnable, or an undeclared status
-                        PACK-->>CLI: unusable output
-                        CLI-->>WF: ENFORCEMENT_ERROR, exit 4
-                    else a declared status
-                        PACK-->>CLI: {status, ...} verbatim
-                        CLI-->>WF: EVALUATED + passing from the pack's own set, exit 0 or 1
+                CLI->>ADAPT: loadAdapter(verified checkout) — the declaration, not yet its vocabulary
+                alt present but unreadable at this schema version
+                    ADAPT-->>CLI: contract error
+                    CLI-->>WF: ENFORCEMENT_ERROR, exit 4
+                else declared standard.id is not the scoped standard
+                    ADAPT-->>CLI: standard.id
+                    CLI-->>WF: STANDARDS_IDENTITY_MISMATCH, exit 4 — before one byte of its adoption vocabulary is read
+                else identity agrees, or nothing was scoped to disagree with
+                    ADAPT-->>CLI: adoption.policyFiles (absent or unreadable → the legacy marker)
+                    alt the target holds more than one declared marker
+                        CLI-->>WF: ENFORCEMENT_ERROR, exit 4 (order in the list is not precedence)
+                    else the target holds none of them
+                        CLI-->>WF: NOT_ADOPTED, exit 4 (governed and has not adopted)
+                    else adopted
+                        Note over CLI,PACK: R2 — the same identity question, asked again inside the seam.<br/>Not superseded by the check above and not moved: it defends<br/>every caller of runOfficialEvaluator, including those that<br/>never passed through the adoption path.
+                        CLI->>PACK: loadAdapter, re-check standard.id, then run declared argv with {target} and {policy}
+                        alt the release declares a standard the invocation did not ask for
+                            PACK-->>CLI: refused before anything is spawned
+                            CLI-->>WF: STANDARDS_IDENTITY_MISMATCH, exit 4
+                        else no JSON, unrunnable, or an undeclared status
+                            PACK-->>CLI: unusable output
+                            CLI-->>WF: ENFORCEMENT_ERROR, exit 4
+                        else a declared status
+                            PACK-->>CLI: {status, ...} verbatim
+                            CLI-->>WF: EVALUATED + passing from the pack's own set, exit 0 or 1
+                        end
                     end
                 end
             end
