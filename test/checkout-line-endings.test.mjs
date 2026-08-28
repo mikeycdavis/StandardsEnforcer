@@ -138,7 +138,10 @@ test("line endings · every tracked file's translation is declared, not left to 
     return;
   }
 
-  const undeclared = trackedFiles().filter((f) => declaredEol(f.attr) === "undeclared");
+  const tracked = trackedFiles();
+  assert.ok(tracked.length > 0, "git listed no tracked files, so this check would examine nothing");
+
+  const undeclared = tracked.filter((f) => declaredEol(f.attr) === "undeclared");
 
   assert.deepEqual(
     undeclared.map((f) => f.file),
@@ -155,7 +158,10 @@ test("line endings · the working tree materialises what was declared", (t) => {
     return;
   }
 
-  const wrong = trackedFiles().filter((f) => {
+  const tracked = trackedFiles();
+  assert.ok(tracked.length > 0, "git listed no tracked files, so this check would examine nothing");
+
+  const wrong = tracked.filter((f) => {
     const declared = declaredEol(f.attr);
     if (declared === "undeclared" || declared === "untranslated") return false;
     // `none` means the file contains no line terminator at all — nothing was translated.
@@ -178,7 +184,10 @@ test("line endings · no committed blob carries CRLF", (t) => {
 
   // If a CRLF blob were committed, `eol=lf` would still yield an LF working tree and the assertions
   // above would pass while the history itself held the corruption.
-  const stored = trackedFiles().filter((f) => f.index === "crlf");
+  const tracked = trackedFiles();
+  assert.ok(tracked.length > 0, "git listed no tracked files, so this check would examine nothing");
+
+  const stored = tracked.filter((f) => f.index === "crlf");
   assert.deepEqual(stored.map((f) => f.file), [], "committed blobs must be LF");
 });
 
@@ -186,8 +195,11 @@ test("line endings · nothing on disk carries CRLF except where this repository 
   // The one assertion needing no git metadata, so it is the one that runs inside the container. It
   // reads the bytes — the only thing available there, and the only thing that matters to a consumer
   // that opens the file.
+  const scanned = walk(REPO);
+  assert.ok(scanned.length > 0, "the walk found no files, so the byte-level check would read nothing");
+
   const offenders = [];
-  for (const rel of walk(REPO)) {
+  for (const rel of scanned) {
     if (exemptFromLf(rel)) continue;
     let buf;
     try {

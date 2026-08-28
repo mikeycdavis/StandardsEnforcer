@@ -102,7 +102,10 @@ test("diagrams · a rendered SVG contains the vocabulary of the source it claims
   // a source edited, and a render that never happened.
   for (const source of SOURCES) {
     const svg = read(source.replace(/\.mmd$/u, ".svg"));
-    const missing = vocabulary(read(source)).filter((w) => !svg.includes(w));
+    const words = vocabulary(read(source));
+    assert.ok(words.length > 0, `docs/${source} yielded no comparable words, so this check would compare nothing`);
+
+    const missing = words.filter((w) => !svg.includes(w));
 
     assert.deepEqual(missing, [],
       `docs/${source} contains words its rendered SVG does not: ${missing.join(", ")}. The render is ` +

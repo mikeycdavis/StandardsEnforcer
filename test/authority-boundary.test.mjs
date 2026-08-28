@@ -150,6 +150,8 @@ function occurrences(text, token) {
  */
 
 function scan(tokens) {
+  assert.ok(tokens.length > 0, "no tokens were passed, so this scan would find nothing to forbid");
+
   const violations = [];
   for (const file of FILES) {
     const text = code(file);

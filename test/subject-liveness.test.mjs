@@ -7,10 +7,15 @@
  * filed for — a filter-derived verdict, assertions only inside the iteration, and an `every`
  * predicate — have nothing in common at the verdict end, and everything in common at the subject end.
  *
- * WHAT THIS DOES NOT DO. It does not close the shape space. Two specimens in `fixtures/escapes/`
- * still pass, and they are kept as executable record rather than described in prose: if a later
- * change catches one, the test below fails and says so, so the gap cannot quietly change size in
- * either direction. ST-16 stays open on exactly that residue.
+ * WHAT THIS DOES NOT DO. It does not close the shape space, and no number of attack rounds can show
+ * that it has. `fixtures/escapes/` holds one specimen per shape known NOT to be rejected, and
+ * `KNOWN_ESCAPES` below is the list of them. It holds exactly one: a verdict written with a foreign
+ * assertion library, which reaches its verdict through neither `node:assert` nor `throw` and so is
+ * invisible to the mechanism. The dialect test below is its compensating control, not its closure.
+ *
+ * The list is a CLAIM, checked against the directory in both directions, so the gap cannot change
+ * size without the suite saying so. What has actually been attacked — nine adversarial rounds, and
+ * what each one found — is recorded in `artifacts/evidence/2026-08-28-subject-liveness.md`.
  */
 
 import test from "node:test";
@@ -37,6 +42,17 @@ const fixtures = (kind) => {
   assert.ok(names.length > 0, `no ${kind} specimens were found, so the cases below would prove nothing`);
   return names.map((n) => [n, path.join(dir, n)]);
 };
+
+/**
+ * The shapes ST-16 is known NOT to reject, as filenames in `fixtures/escapes/`.
+ *
+ * `ternary.mjs` and `join-empty.mjs` were the first round's residue and are now in `caught/`. What
+ * remains is the foreign-dialect shape, which is a limit of what this mechanism READS rather than a
+ * sink it failed to recognise. The test below compares this list against the directory, so a new
+ * escape has to be recorded here to be added and a closed one has to be moved out; the gap cannot
+ * change size in either direction without the suite saying so.
+ */
+const KNOWN_ESCAPES = ["foreign-assert.mjs"];
 
 test("subject · every consumed collection in the surface was proven to have elements", () => {
   const files = testFiles(ROOT);
@@ -72,18 +88,50 @@ test("subject · the mechanism fires on every shape it claims to catch", () => {
 });
 
 test("subject · the shapes it does not catch are recorded, not forgotten", () => {
-  // Asserting the gap rather than describing it. Closing one of these should be a deliberate act
-  // that updates ST-16, not a silent improvement nobody records — and equally, the gap must not
-  // widen without the suite noticing.
-  const caught = [];
-  for (const [name, file] of fixtures("escapes")) {
-    if (vacuousSubjects(scan(file)).length > 0) caught.push(name);
-  }
+  // Asserting the gap rather than describing it, in both directions. `entries` is asserted non-empty
+  // first because the directory carries a README: without that, an escapes/ deleted wholesale would
+  // make this test pass by examining nothing — the very defect ST-16 exists to reject, in the test
+  // that polices ST-16's own residue.
+  const entries = fs.readdirSync(path.join(FIXTURES, "escapes"));
+  assert.ok(entries.length > 0, "fixtures/escapes/ is empty of everything, including its README");
+
+  const specimens = entries.filter((n) => n.endsWith(".mjs")).sort();
   assert.deepEqual(
-    caught,
+    specimens,
+    KNOWN_ESCAPES,
+    "the escape corpus and KNOWN_ESCAPES disagree. Adding a newly found escape means adding both; " +
+      "closing one means moving the specimen into caught/ and removing it from the list. Either way " +
+      "the change belongs in ST-16's record.",
+  );
+
+  const nowCaught = specimens.filter((n) => vacuousSubjects(scan(path.join(FIXTURES, "escapes", n))).length > 0);
+  assert.deepEqual(
+    nowCaught,
     [],
     "a known-uncaught shape is now caught. That is good news: move the specimen into caught/ and " +
-      "record it against ST-16, whose remaining gap is exactly this directory.",
+      "record the closure against ST-16.",
+  );
+});
+
+test("subject · the assertion dialect the mechanism assumes is the one the surface uses", () => {
+  // The compensating control for the single known escape. The mechanism reads verdicts written with
+  // `node:assert` or `throw`; a foreign assertion library reaches a verdict through neither and its
+  // loops read as data shaping. That assumption is currently true of every file in the surface, and
+  // this is what keeps it true — adopting another library fails here rather than silently widening
+  // `fixtures/escapes/`. It is a guard on the assumption, NOT a closure of the gap.
+  const files = testFiles(ROOT);
+  assert.ok(files.length > 0, "the authoritative surface is empty, so this guard would examine nothing");
+
+  const foreign = files
+    .filter((f) => !/from\s+"node:assert/u.test(fs.readFileSync(f, "utf8")))
+    .map((f) => path.relative(ROOT, f).split(path.sep).join("/"));
+
+  assert.deepEqual(
+    foreign,
+    [],
+    "a file in the authoritative surface does not import node:assert. The subject-liveness mechanism " +
+      "cannot read verdicts written in another library's dialect, so this file's loops would be " +
+      "invisible to it. Either keep the dialect, or extend the mechanism and record it against ST-16.",
   );
 });
 
@@ -103,6 +151,16 @@ test("subject · a proof of liveness is accepted, in each form an honest test us
     'const rows = [1, 2]; for (const r of rows) { assert.ok(r); }',
     'assert.ok(items.some((i) => i.ok));',
     'for (const c of a.controls) c.source = "rulesets";',
+    // Liveness proved AFTER the loop. The rule is file-level, and an author who asserts the bound at
+    // the end of the test has proved exactly as much as one who asserts it at the start. This was
+    // written as an attack specimen in round eight and reclassified when it turned out to be honest.
+    'const files = discover(); for (const f of files) assert.ok(ok(f)); assert.ok(files.length > 0);',
+    // A verdict list iterated to build a message: `findings` empty is the SUCCESS, and its subject
+    // `RECORDS` is proven above it.
+    'const RECORDS = read(); assert.ok(RECORDS.length > 0); const findings = check(RECORDS); const out = []; for (const f of findings) out.push(f.kind); assert.deepEqual(out, []);',
+    // `notEqual(x.length, 0)` is a lower bound written as a refusal. Also written as an attack
+    // specimen and reclassified: it proves exactly what `assert.ok(x.length > 0)` proves.
+    'const files = discover(); assert.notEqual(files.length, 0); for (const f of files) assert.ok(ok(f));',
   ];
   for (const code of live) {
     assert.deepEqual(vacuousSubjects(code), [], `an honest shape was flagged: ${code}`);

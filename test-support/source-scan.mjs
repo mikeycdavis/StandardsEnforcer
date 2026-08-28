@@ -60,6 +60,13 @@ export function stripComments(source, { strings = false } = {}) {
   // What we are currently inside of. `code` is the only state that can open a comment.
   let state = "code";
   let quote = "";
+  // A template interpolation is CODE, not string content, so `${...}` is left intact while the
+  // literal text around it is blanked. Before this, `assert.equal(`${xs.filter(p)}`, "")` scanned to
+  // `assert.equal(`      `, "")` — the verdict, its subject and its consumption all invisible to
+  // every scanner in this repository. The stack holds the brace depth at which each interpolation
+  // began, so a `}` closing an object inside the interpolation does not end it early.
+  const interpolations = [];
+  let braces = 0;
   // The last significant code character, which is how a `/` is told apart: after a value it divides,
   // after an operator or a `(` it opens a regex literal.
   let prev = "";
@@ -73,6 +80,18 @@ export function stripComments(source, { strings = false } = {}) {
       if (c === "/" && next === "*") { state = "block"; out.push("  "); i += 2; continue; }
       if (c === '"' || c === "'" || c === "`") { state = "string"; quote = c; out.push(c); i += 1; continue; }
       if (c === "/" && prev !== "" && !/[\w$)\]]/u.test(prev)) { state = "regex"; out.push(c); i += 1; continue; }
+      if (c === "{") braces += 1;
+      else if (c === "}") {
+        if (interpolations.length > 0 && braces === interpolations[interpolations.length - 1]) {
+          interpolations.pop();
+          state = "string";
+          quote = "`";
+          out.push(c);
+          i += 1;
+          continue;
+        }
+        braces -= 1;
+      }
       out.push(c);
       if (!/\s/u.test(c)) prev = c;
       i += 1;
@@ -95,6 +114,14 @@ export function stripComments(source, { strings = false } = {}) {
     }
 
     // string or regex: only the terminator matters, and a backslash defers it by one.
+    if (state === "string" && quote === "`" && c === "$" && next === "{") {
+      interpolations.push(braces);
+      state = "code";
+      prev = "{";
+      out.push("${");
+      i += 2;
+      continue;
+    }
     if (c === "\\") { out.push(strings ? "  " : c + (next ?? "")); i += 2; continue; }
     if ((state === "string" && c === quote) || (state === "regex" && c === "/")) {
       state = "code";
