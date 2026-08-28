@@ -28,6 +28,8 @@ test("oracle · a run that claims to be authoritative has an authoritative oracl
     return;
   }
 
+  assert.ok(ORACLE_TAGS.length > 0, "no oracle tags are declared, so requiring the oracle would require nothing");
+
   const probes = ORACLE_TAGS.map((tag) => ({ tag, ...oracleAt(tag) }));
   const missing = probes.filter((p) => !p.available);
 
