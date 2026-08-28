@@ -50,7 +50,11 @@ export async function readSource(url) {
  * comments, the three string forms, and regex literals — enough for this repository's source, and
  * callers assert that stripping left their code intact rather than trusting it blindly.
  */
-export function stripComments(source) {
+export function stripComments(source, { strings = false } = {}) {
+  // `strings: true` also blanks string and regex BODIES, keeping their delimiters. A scan whose
+  // subject is other tests needs it: a specimen like "assert.ok(xs.length > 0)" held as data would
+  // otherwise satisfy a rule about what the file asserts. Default false, so every existing caller
+  // is unaffected.
   const out = [];
   let i = 0;
   // What we are currently inside of. `code` is the only state that can open a comment.
@@ -91,7 +95,7 @@ export function stripComments(source) {
     }
 
     // string or regex: only the terminator matters, and a backslash defers it by one.
-    if (c === "\\") { out.push(c, next ?? ""); i += 2; continue; }
+    if (c === "\\") { out.push(strings ? "  " : c + (next ?? "")); i += 2; continue; }
     if ((state === "string" && c === quote) || (state === "regex" && c === "/")) {
       state = "code";
       prev = c === "/" ? ")" : c;
@@ -99,7 +103,8 @@ export function stripComments(source) {
       i += 1;
       continue;
     }
-    out.push(c);
+    // Newlines are kept even when blanking, so line numbers survive here too.
+    out.push(strings && c !== "\n" ? " " : c);
     i += 1;
   }
 
