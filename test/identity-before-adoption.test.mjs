@@ -198,6 +198,7 @@ test("identity · the wrong pack's declared markers cannot influence the result 
     results.push(await run(pack, await subject("project-policy.yml")));
   }
 
+  assert.ok(results.length > 0, "no vocabulary was exercised, so the loop below would assert nothing");
   for (const r of results) {
     assert.equal(r.state, results[0].state, "the outcome varied with the wrong pack's vocabulary");
     assert.equal(r.detail, results[0].detail, "the message varied with the wrong pack's vocabulary");

@@ -77,6 +77,7 @@ const oracleSubject = () => resolveIdentity({ repo: MLS, tag: TAG, sha: SHA, cac
 // ===========================================================================
 
 test("INV-E1 · every state outside the passing set exits non-zero", () => {
+  assert.ok(Object.values(STATE).length > 0, "an empty state vocabulary would assert nothing here");
   for (const state of Object.values(STATE)) {
     const code = exitFor(state);
     if (PASSING.has(state)) assert.equal(code, EXIT.OK, `${state} should be a pass`);

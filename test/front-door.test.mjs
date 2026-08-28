@@ -67,6 +67,9 @@ test("front door · the README documents exactly the states the code has", () =>
   const documented = rows.map((r) => r.name);
   const real = Object.values(STATE);
 
+  assert.ok(documented.length > 0, "the README states table is empty, so it documents nothing");
+  assert.ok(real.length > 0, "the code defines no states, so there is nothing to document");
+
   const invented = documented.filter((n) => !real.includes(n));
   assert.deepEqual(
     invented,
