@@ -381,6 +381,7 @@ test("states · SCOPE_REVIEW_REQUIRED and OUT_OF_SCOPE are reachable; only BYPAS
 
 test("states · every passing state is a verdict or carries a recorded human decision", () => {
   // The bound on M3's widening of PASSING. A future state cannot join it by attrition.
+  assert.ok(PASSING.size > 0, "an empty PASSING would make the bound below vacuous");
   for (const s of PASSING) {
     assert.ok(REQUIRES_RECORDED_DECISION.has(s),
       `${s} may not be a passing state without being a recorded decision`);

@@ -63,6 +63,16 @@ export function livenessAssertions(code) {
     }
   }
 
+  // A Set states its liveness as `.size`, not `.length`. ST-16 found this by flagging
+  // `assert.ok(produced.size > 0)` in host-governance.test.mjs — an honest liveness assertion this
+  // helper could not see. Recognising it can only ever remove a flag, never add one.
+  for (const m of code.matchAll(/assert[.]ok\s*[(]\s*([A-Za-z_$][\w$.]*)[.]size\s*(>=?)\s*(\d+)/gu)) {
+    if (m[2] === ">" ? Number(m[3]) >= 0 : Number(m[3]) >= 1) hits.add(m[1]);
+  }
+  for (const m of code.matchAll(/assert[.](?:equal|strictEqual)\s*[(]\s*([A-Za-z_$][\w$.]*)[.]size\s*,\s*(\d+)/gu)) {
+    if (Number(m[2]) > 0) hits.add(m[1]);
+  }
+
   // An exact count is a stronger liveness claim than a bound, provided the count is not zero.
   for (const m of code.matchAll(/assert[.](?:equal|strictEqual)\s*[(]\s*([A-Za-z_$][\w$.]*)[.]length\s*,\s*(\d+)/gu)) {
     if (Number(m[2]) > 0) hits.add(m[1]);

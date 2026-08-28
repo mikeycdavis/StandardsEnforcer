@@ -93,6 +93,7 @@ test("backlog · the tracker is claimed to be derived, and says how it is checke
  * author who reaches ST-89 gets a failure that says what to do rather than a puzzle to solve.
  */
 test("model · the ids reserved for mutation specimens are not allocated to real items", () => {
+  assert.ok(RECORDS.length > 0, "no backlog items were read, so this guard would check nothing");
   const taken = RECORDS.map((r) => r.data.id).filter((id) => /-9\d$/u.test(id ?? ""));
   assert.deepEqual(taken, [],
     "a real backlog item has taken an id reserved for this file's synthetic specimens; renumber " +

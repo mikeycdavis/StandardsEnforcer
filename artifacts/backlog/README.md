@@ -23,8 +23,8 @@ derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/
 
 | Status | Items |
 | --- | ---: |
-| ○ Not started | 7 |
-| ◑ In progress | 7 |
+| ○ Not started | 6 |
+| ◑ In progress | 8 |
 | ◒ Blocked | 2 |
 | ● Complete | 24 |
 | **Total** | **40** |
@@ -56,6 +56,7 @@ derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/
 - ◑ [FE-21](./items/FE-21.md) — A policy the authority admits is a policy this enforcer must find
 - ◑ [IN-01](./items/IN-01.md) — Enforcement a governed repository cannot weaken
 - ◒ [ST-07](./items/ST-07.md) — Validate the required-workflows remedy against a real organisation ruleset
+- ◑ [ST-16](./items/ST-16.md) — A verdict over an empty subject must fail whatever shape derived it
 - ◑ [TH-01](./items/TH-01.md) — Enforced standards compliance across the portfolio
 
 ## Ready to pick up
@@ -102,6 +103,6 @@ _Nothing marked ready._
       - ● **[ST-13](./items/ST-13.md)** The authoritative suite must be this repository's tests, not everything mounted beneath it
       - ● **[ST-14](./items/ST-14.md)** Oracle-backed evidence names an immutable identity for the authority and a mutable working tree for the subject
       - ● **[ST-15](./items/ST-15.md)** A guard that examined nothing must not be able to report success
-      - ○ **[ST-16](./items/ST-16.md)** A verdict over an empty subject must fail whatever shape derived it
+      - ◑ **[ST-16](./items/ST-16.md)** A verdict over an empty subject must fail whatever shape derived it
     - ○ **[ST-09](./items/ST-09.md)** scripts/ci.sh fails under Git Bash on Windows
 
