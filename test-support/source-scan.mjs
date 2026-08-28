@@ -70,6 +70,8 @@ export function stripComments(source, { strings = false } = {}) {
   // The last significant code character, which is how a `/` is told apart: after a value it divides,
   // after an operator or a `(` it opens a regex literal.
   let prev = "";
+  // Whether the regex literal being scanned is currently inside a `[...]` character class.
+  let escapedClass = false;
 
   while (i < source.length) {
     const c = source[i];
@@ -79,7 +81,7 @@ export function stripComments(source, { strings = false } = {}) {
       if (c === "/" && next === "/") { state = "line"; out.push("  "); i += 2; continue; }
       if (c === "/" && next === "*") { state = "block"; out.push("  "); i += 2; continue; }
       if (c === '"' || c === "'" || c === "`") { state = "string"; quote = c; out.push(c); i += 1; continue; }
-      if (c === "/" && prev !== "" && !/[\w$)\]]/u.test(prev)) { state = "regex"; out.push(c); i += 1; continue; }
+      if (c === "/" && prev !== "" && !/[\w$)\]]/u.test(prev)) { state = "regex"; escapedClass = false; out.push(c); i += 1; continue; }
       if (c === "{") braces += 1;
       else if (c === "}") {
         if (interpolations.length > 0 && braces === interpolations[interpolations.length - 1]) {
@@ -123,7 +125,14 @@ export function stripComments(source, { strings = false } = {}) {
       continue;
     }
     if (c === "\\") { out.push(strings ? "  " : c + (next ?? "")); i += 2; continue; }
-    if ((state === "string" && c === quote) || (state === "regex" && c === "/")) {
+    // A `/` inside a regex CHARACTER CLASS does not end the literal. Without this,
+    // `/^[a-z]+:\/\/([^/@]+)@/i` ended at the `/` in `[^/@]`, the `@]+)@` that followed was read as
+    // code, and the `/` before `i` opened a second regex that blanked live source until the next
+    // slash. One real module lost its remaining exports that way, and every scanner in this
+    // repository — ST-15's and ST-16's included — was blind to them.
+    if (state === "regex" && !escapedClass && c === "[") escapedClass = true;
+    else if (state === "regex" && escapedClass && c === "]") escapedClass = false;
+    if ((state === "string" && c === quote) || (state === "regex" && c === "/" && !escapedClass)) {
       state = "code";
       prev = c === "/" ? ")" : c;
       out.push(c);
