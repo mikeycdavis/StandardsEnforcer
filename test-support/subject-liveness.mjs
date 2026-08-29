@@ -33,6 +33,7 @@
 
 import { livenessAssertions } from "./verdict-liveness.mjs";
 import { assertionCalls, refutesEmptiness, receiverBefore, balancedParens, splitTopLevel } from "./assertion-shape.mjs";
+import { verdictBearingNames } from "./helper-attribution.mjs";
 
 export { receiverBefore };
 
@@ -179,11 +180,24 @@ export function assertingHelpers(code) {
  *
  * Recognising only the token `assert` would have let the whole throwing dialect through, which is
  * not an exotic dialect — it is how a helper reports a problem when it has no assert in scope.
+ *
+ * `imported` carries names this file imports from repository modules whose definitions reach a
+ * verdict, resolved by `verdict-language.mjs`. It defaults to empty, so every caller that passes only
+ * a string — including this module's own unit tests — behaves exactly as before. Without it, a
+ * wrapper imported from a sibling module defeated the mechanism as thoroughly as no wrapper at all.
+ *
+ * `verdictBearingNames` supplies the rest: names in THIS file that reach a verdict, found by locating
+ * function bodies structurally rather than by enumerating the syntaxes a function can be declared in.
+ * That enumeration lost to six ordinary spellings in one adversarial round.
  */
-export function bodyAsserts(code, body) {
+export function bodyAsserts(code, body, imported = new Set()) {
   if (/assert\s*[.(]/u.test(body) || /\bthrow\b/u.test(body)) return true;
-  for (const name of assertingHelpers(code)) {
-    if (new RegExp(String.raw`\b${name}\s*\(`, "u").test(body)) return true;
+  // A verdict-bearing name may be CALLED (`check(f)`), used as a RECEIVER (`H.check(f)`,
+  // `M.get("len")(f)`, `box.verdict`), INDEXED, or TAGGED (`` must`...` ``). Testing only for
+  // `name(` missed six of round eleven's twenty shapes, every one of which reached its verdict
+  // through a name the attribution had already identified correctly.
+  for (const name of new Set([...assertingHelpers(code), ...verdictBearingNames(code), ...imported])) {
+    if (new RegExp("\\b" + name + "\\s*(?:[(.[`]|\\?\\.)", "u").test(body)) return true;
   }
   return false;
 }
@@ -215,8 +229,11 @@ export function bodyAccumulates(code, body) {
  * Every consumption in this file that would succeed on an empty subject, as `{ subject, via }`.
  * `subject` is source text, not a value: this is a scan, and it says so rather than pretending to
  * resolve aliases.
+ *
+ * `imported` is passed through to `bodyAsserts`; see there for what it carries and why it defaults
+ * to empty.
  */
-export function consumptions(code) {
+export function consumptions(code, imported = new Set()) {
   const found = [];
   const grounded = groundedNames(code);
 
@@ -230,7 +247,7 @@ export function consumptions(code) {
    * build a failure message would be reported as a vacuous verdict over that list.
    */
   const isVerdict = (body, subject) =>
-    bodyAsserts(code, body) || (bodyAccumulates(code, body) && !groundedExpr(subject));
+    bodyAsserts(code, body, imported) || (bodyAccumulates(code, body) && !groundedExpr(subject));
 
   // for (const x of S) { ... } — verdict-bearing only if the body asserts.
   // `?? []` and `|| []` are absorbed: `for (const f of files ?? [])` iterates `files`, and the
@@ -310,7 +327,7 @@ export function consumptions(code) {
     const cat = /^\s*\}?\s*catch\s*(?:\([^)]*\))?\s*\{/u.exec(after);
     if (!cat) continue;
     const catchBody = blockAt(after, cat.index + cat[0].length - 1);
-    if (!bodyAsserts(code, catchBody)) continue;
+    if (!bodyAsserts(code, catchBody, imported)) continue;
     for (const f of tryBody.matchAll(forOf)) {
       found.push({ subject: f[1], via: "try-catch" });
     }
@@ -354,7 +371,7 @@ export function consumptions(code) {
     const head = balancedParens(code, m.index + m[0].length - 1);
     if (head === null) continue;
     const body = blockAt(code, m.index + m[0].length + head.length + 1);
-    if (!bodyAsserts(code, body)) continue;
+    if (!bodyAsserts(code, body, imported)) continue;
     for (const d of head.matchAll(/(?:\?)?\.(?:some|find|filter|map|flatMap)\s*\(/gu)) {
       const recv = receiverBefore(head, d.index);
       if (recv !== "") {
@@ -370,7 +387,7 @@ export function consumptions(code) {
     const head = balancedParens(code, m.index + m[0].length - 1);
     if (head === null) continue;
     const body = blockAt(code, m.index + m[0].length + head.length + 1);
-    if (!bodyAsserts(code, body)) continue;
+    if (!bodyAsserts(code, body, imported)) continue;
     for (const d of head.matchAll(/(?:\?)?\.(?:filter|map|flatMap)\s*\(/gu)) {
       const recv = receiverBefore(head, d.index);
       if (recv !== "") {
@@ -732,9 +749,9 @@ function balanced(code, open, o, c) {
 }
 
 /** The subjects this file consumes vacuum-safely without ever proving they had elements. */
-export function vacuousSubjects(code) {
+export function vacuousSubjects(code, imported = new Set()) {
   const out = [];
-  for (const c of consumptions(code)) {
+  for (const c of consumptions(code, imported)) {
     // Liveness is tested at EVERY link of the chain, not only at its end. `SOURCES` is bound from
     // `readdirSync(DOCS).filter(...).sort()` and proven by `assert.ok(SOURCES.length >= 2)`; walking
     // past that name to `readdirSync(DOCS)` and asking about liveness there flagged an honest test

@@ -7,15 +7,24 @@
  * filed for — a filter-derived verdict, assertions only inside the iteration, and an `every`
  * predicate — have nothing in common at the verdict end, and everything in common at the subject end.
  *
- * WHAT THIS DOES NOT DO. It does not close the shape space, and no number of attack rounds can show
- * that it has. `fixtures/escapes/` holds one specimen per shape known NOT to be rejected, and
- * `KNOWN_ESCAPES` below is the list of them. It holds exactly one: a verdict written with a foreign
- * assertion library, which reaches its verdict through neither `node:assert` nor `throw` and so is
- * invisible to the mechanism. The dialect test below is its compensating control, not its closure.
+ * ROUND THREE ADDS THE PREMISE. Reading a verdict at all assumes a language it is written in, and
+ * round two guarded that assumption by asking whether each surface file imports `node:assert`. That
+ * question is too weak: a file may import `node:assert`, assert with it, AND reach its verdict
+ * through something else entirely. `fixtures/unsupported/` holds three such files, each of which
+ * passes the old guard and escapes the liveness rules.
  *
- * The list is a CLAIM, checked against the directory in both directions, so the gap cannot change
- * size without the suite saying so. What has actually been attacked — nine adversarial rounds, and
- * what each one found — is recorded in `artifacts/evidence/2026-08-28-subject-liveness.md`.
+ * The question that closes is not "does this file use the dialect" but "can this file reach a
+ * verdict through anything the mechanism cannot read". `test-support/verdict-language.mjs` answers
+ * it by enumerating what a call can root at — an import, a declaration, a parameter, a language
+ * global — and reporting everything else. An unreadable verdict form makes the file UNSUPPORTED, and
+ * an unsupported file is an OFFENDER, never a skip: declining to analyse what it cannot read would
+ * be this guard committing the exact defect it exists to reject.
+ *
+ * WHAT THIS STILL DOES NOT DO. It does not close the shape space, and no number of attack rounds can
+ * show that it has. `fixtures/escapes/` holds one specimen per shape known NOT to be rejected, and
+ * `KNOWN_ESCAPES` below is the list of them, compared against the directory in both directions so
+ * the gap cannot change size without the suite saying so. What has actually been attacked is
+ * recorded in `artifacts/evidence/`.
  */
 
 import test from "node:test";
@@ -26,6 +35,7 @@ import { fileURLToPath } from "node:url";
 
 import { stripComments } from "../test-support/source-scan.mjs";
 import { vacuousSubjects, rootSubject, blockAt, receiverBefore } from "../test-support/subject-liveness.mjs";
+import { unsupportedReasons, verdictReachingImports } from "../test-support/verdict-language.mjs";
 import { testFiles } from "../scripts/test-surface.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -43,16 +53,73 @@ const fixtures = (kind) => {
   return names.map((n) => [n, path.join(dir, n)]);
 };
 
+/** A module as the analysers need it: RAW for import specifiers, stripped for code. */
+const moduleAt = (file) => {
+  const raw = fs.readFileSync(file, "utf8");
+  return { raw, src: stripComments(raw, { strings: true }), path: file };
+};
+
+/** Load a relative specifier against the module that wrote it, or null if it cannot be read. */
+const load = (spec, fromPath) => {
+  try {
+    return moduleAt(path.resolve(path.dirname(fromPath), spec));
+  } catch {
+    return null;
+  }
+};
+
+/** Everything wrong with one file: the verdict forms it cannot be read through, then its subjects. */
+const offencesIn = (file) => {
+  const mod = moduleAt(file);
+  const { names, unresolved } = verdictReachingImports(mod, { load });
+  return [
+    ...unsupportedReasons(mod.raw, mod.src).map((r) => `UNSUPPORTED ${r}`),
+    ...unresolved.map((r) => `UNSUPPORTED ${r}`),
+    ...vacuousSubjects(mod.src, names).map((v) => `VACUOUS ${v}`),
+  ];
+};
+
+/**
+ * The verdict forms the enforced dialect actually admits in this surface, as `assert.<name>`.
+ *
+ * This is the PREMISE made explicit. It is a claim about the repository, checked against the
+ * repository in both directions by the test below: a form used here and missing from this list, or
+ * listed here and used nowhere, both fail. Measured on 2026-08-28 as 1,025 assertion calls across
+ * the 36 enumerated files.
+ *
+ * `strictEqual` and `deepStrictEqual` are deliberately absent: every file imports
+ * `node:assert/strict`, under which `equal` IS `strictEqual`, so listing them would be describing a
+ * dialect this surface does not write.
+ */
+const ADMITTED_ASSERTIONS = [
+  "deepEqual", "doesNotMatch", "doesNotThrow", "equal", "fail", "match", "notDeepEqual", "notEqual",
+  "ok", "throws",
+];
+
 /**
  * The shapes ST-16 is known NOT to reject, as filenames in `fixtures/escapes/`.
  *
- * `ternary.mjs` and `join-empty.mjs` were the first round's residue and are now in `caught/`. What
- * remains is the foreign-dialect shape, which is a limit of what this mechanism READS rather than a
- * sink it failed to recognise. The test below compares this list against the directory, so a new
- * escape has to be recorded here to be added and a closed one has to be moved out; the gap cannot
- * change size in either direction without the suite saying so.
+ * `foreign-assert.mjs` was the residue after round two and is gone from this list: it now lives in
+ * `fixtures/unsupported/`, because the mechanism rejects the FILE rather than reading the shape.
+ * Rejection is a weaker and more honest thing than catching, and the tests below say which is which.
+ *
+ * The six here were found by round twelve, run against a mechanism it did not modify. **The list grew
+ * because the measurement reached further, not because the gap did** — every one of these escaped
+ * round two's mechanism as well, and nobody had attacked with them. Counting a gap for the first
+ * time is not the same as opening it.
+ *
+ * They are one fault, not six: attribution is by NAME, and a function is a VALUE that flows — out of
+ * a destructuring, out of a return, into an argument, through a derived collection, behind a computed
+ * key. `optional-subject.mjs` is the exception and is a subject shape rather than a helper shape.
  */
-const KNOWN_ESCAPES = ["foreign-assert.mjs"];
+const KNOWN_ESCAPES = [
+  "destructured-helper.mjs",
+  "factory-wrapper.mjs",
+  "foreach-byref.mjs",
+  "object-values.mjs",
+  "optional-subject.mjs",
+  "symbol-iterator.mjs",
+];
 
 test("subject · every consumed collection in the surface was proven to have elements", () => {
   const files = testFiles(ROOT);
@@ -61,21 +128,106 @@ test("subject · every consumed collection in the surface was proven to have ele
   const offenders = [];
   const scanned = [];
   for (const file of files) {
-    const code = scan(file);
-    assert.ok(code.length > 0, `${file} scanned to nothing`);
+    const rel = path.relative(ROOT, file).split(path.sep).join("/");
+    const found = offencesIn(file);
     scanned.push(file);
-    for (const subject of vacuousSubjects(code)) {
-      offenders.push(`${path.relative(ROOT, file).split(path.sep).join("/")}: ${subject}`);
-    }
+    for (const o of found) offenders.push(`${rel}: ${o}`);
   }
   assert.equal(scanned.length, files.length, "a file in the surface was not scanned");
 
   assert.deepEqual(
     offenders,
     [],
-    "a test derives a verdict from a collection it never proved was non-empty. If the collection " +
-      "is discovered at runtime, assert its length before the verdict; if it is a literal in the " +
-      "file, it is already exempt and this is a defect in the discriminator.",
+    "VACUOUS means a test derives a verdict from a collection it never proved was non-empty: assert " +
+      "its length before the verdict, or, if it is a literal in the file, this is a defect in the " +
+      "discriminator. UNSUPPORTED means the file can reach a verdict through something the mechanism " +
+      "cannot read, so its loops were never analysed at all — that is a rejection of the FILE, and " +
+      "the fix is to write the verdict in the enforced dialect or to extend the mechanism and record " +
+      "it against ST-16. It is never resolved by exempting the file.",
+  );
+});
+
+test("subject · the enforced dialect is the one the surface actually writes", () => {
+  // The premise, checked in both directions. A verdict form used here but unlisted means the
+  // mechanism has been reasoning about a dialect the surface has outgrown; a form listed but unused
+  // means the list is describing an imagined repository. Neither is allowed to pass quietly.
+  const files = testFiles(ROOT);
+  assert.ok(files.length > 0, "the authoritative surface is empty, so this guard would examine nothing");
+
+  const used = new Set();
+  for (const file of files) {
+    for (const m of moduleAt(file).src.matchAll(/\bassert\.(\w+)\s*\(/gu)) used.add(m[1]);
+  }
+  assert.ok(used.size > 0, "no assertion call was found anywhere in the surface, so this compares nothing");
+
+  assert.deepEqual(
+    [...used].sort(),
+    ADMITTED_ASSERTIONS,
+    "the assertion vocabulary of the surface and ADMITTED_ASSERTIONS disagree. Adding a form to the " +
+      "surface means proving the mechanism reads it — see the closure test below — and listing it here.",
+  );
+});
+
+test("subject · no admitted assertion form is a sink a derived collection escapes through", () => {
+  // Step three of the closure: every form the dialect admits either REFUTES emptiness or leaves the
+  // derivation flagged. There is no third outcome in which a form is simply not handled, because
+  // `refutesEmptiness` exempts a closed set and everything else falls through to `derived-assert`.
+  //
+  // The probe is uniform on purpose. A per-form specimen would prove the mechanism handles the
+  // specimens someone thought to write; running the SAME non-refuting derivation through every
+  // admitted form proves the property is about the form set, not about the examples.
+  // The expected value must be one that does NOT refute emptiness, or the probe measures the
+  // exemption instead of the sink. `[]` is that value for most forms — and its exact opposite for
+  // the negated ones, where `notEqual(xs, [])` is a lower bound and a perfectly good proof of
+  // liveness. Written uniformly, this test reported `notEqual` and `notDeepEqual` as fail-open sinks
+  // when the mechanism was right and the probe was wrong.
+  const nonRefuting = (name) => (/^not/u.test(name) ? "[1]" : "[]");
+  const missed = [];
+  for (const name of ADMITTED_ASSERTIONS) {
+    const code = `const files = discover(); assert.${name}(files.filter((f) => bad(f)), ${nonRefuting(name)});`;
+    if (vacuousSubjects(code).length === 0) missed.push(name);
+  }
+  assert.deepEqual(
+    missed,
+    [],
+    "an admitted assertion form let a collection reach a passing verdict without being examined. " +
+      "That is a fail-OPEN sink, which is the defect the assertion-shape inversion exists to remove.",
+  );
+});
+
+test("subject · a verdict form outside the recognised language is rejected, not skipped", () => {
+  // The falsification. Each specimen is written so the ROUND TWO guard passes — it imports
+  // node:assert and asserts with it — and so the liveness rules cannot see its verdict. Both halves
+  // are asserted here: if a specimen stopped escaping the liveness rules, this test would still pass
+  // while proving nothing about the language check, so the escape is asserted too.
+  const dir = path.join(FIXTURES, "unsupported");
+  const specimens = fs.readdirSync(dir).filter((n) => n.endsWith(".mjs")).sort();
+  assert.deepEqual(
+    specimens,
+    ["aliased-assert.mjs", "foreign-assert.mjs", "unknown-wrapper.mjs"],
+    "the falsifier corpus changed. Each of these is a distinct way to reach a verdict the mechanism " +
+      "cannot read — a foreign library, an unknown wrapper, and the dialect itself under another name.",
+  );
+
+  const notEscaping = [];
+  const notRejected = [];
+  for (const name of specimens) {
+    const mod = moduleAt(path.join(dir, name));
+    assert.ok(/node:assert/u.test(mod.raw), `${name} must import node:assert, or it falsifies nothing`);
+    if (vacuousSubjects(mod.src).length > 0) notEscaping.push(name);
+    if (unsupportedReasons(mod.raw, mod.src).length === 0) notRejected.push(name);
+  }
+  assert.deepEqual(
+    notEscaping,
+    [],
+    "a falsifier is now caught by the liveness rules themselves. That is good news, but it means this " +
+      "specimen no longer demonstrates the language boundary: move it to caught/ and write a new one.",
+  );
+  assert.deepEqual(
+    notRejected,
+    [],
+    "a file whose verdict form the mechanism cannot read was accepted. The required behaviour is to " +
+      "fail closed and reject the file, never to treat it as not applicable.",
   );
 });
 
@@ -104,34 +256,14 @@ test("subject · the shapes it does not catch are recorded, not forgotten", () =
       "the change belongs in ST-16's record.",
   );
 
-  const nowCaught = specimens.filter((n) => vacuousSubjects(scan(path.join(FIXTURES, "escapes", n))).length > 0);
+  // Checked with the WHOLE mechanism — liveness rules and language rejection together — because
+  // either one catching a specimen means the gap has closed and the record must move with it.
+  const nowCaught = specimens.filter((n) => offencesIn(path.join(FIXTURES, "escapes", n)).length > 0);
   assert.deepEqual(
     nowCaught,
     [],
     "a known-uncaught shape is now caught. That is good news: move the specimen into caught/ and " +
       "record the closure against ST-16.",
-  );
-});
-
-test("subject · the assertion dialect the mechanism assumes is the one the surface uses", () => {
-  // The compensating control for the single known escape. The mechanism reads verdicts written with
-  // `node:assert` or `throw`; a foreign assertion library reaches a verdict through neither and its
-  // loops read as data shaping. That assumption is currently true of every file in the surface, and
-  // this is what keeps it true — adopting another library fails here rather than silently widening
-  // `fixtures/escapes/`. It is a guard on the assumption, NOT a closure of the gap.
-  const files = testFiles(ROOT);
-  assert.ok(files.length > 0, "the authoritative surface is empty, so this guard would examine nothing");
-
-  const foreign = files
-    .filter((f) => !/from\s+"node:assert/u.test(fs.readFileSync(f, "utf8")))
-    .map((f) => path.relative(ROOT, f).split(path.sep).join("/"));
-
-  assert.deepEqual(
-    foreign,
-    [],
-    "a file in the authoritative surface does not import node:assert. The subject-liveness mechanism " +
-      "cannot read verdicts written in another library's dialect, so this file's loops would be " +
-      "invisible to it. Either keep the dialect, or extend the mechanism and record it against ST-16.",
   );
 });
 
