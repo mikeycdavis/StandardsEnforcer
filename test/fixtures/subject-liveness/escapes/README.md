@@ -14,48 +14,40 @@ direction without a test failing and saying so:
 
 ## What is here now
 
-**Nine specimens.** One left over from round twelve, eight found by round fourteen.
+**Five specimens**, and **none of them is an aliasing shape**. Round fifteen closed that whole family.
 
-### The aliasing group - seven of them, one fault
+| Specimen | Fault | Family |
+| --- | --- | --- |
+| `member-assign.mjs` | `o.c = chk` binds a carrier to a MEMBER PATH, which the binder scan skips so member paths are not read as declarations | flow |
+| `proto-call.mjs` | `Array.prototype.forEach.call(files, chk)` - the subject is an argument, not the receiver of `.forEach(` | consumption grammar |
+| `concat-literal.mjs` | `[].concat(files)` - a subject must begin with an identifier, so an array-literal receiver matches nothing | subject grammar |
+| `await-subject.mjs` | `for (const f of await load())` - the subject grammar does not admit `await` | subject grammar |
+| `symbol-iterator.mjs` | `staticallyNonEmpty` counts an object literal's own members as proof of what `Symbol.iterator` yields | liveness proof |
 
-Round thirteen taught the mechanism to follow a checker VALUE across three edges: containment in a
-declaration, a factory's return, and iteration of a collection. Round fourteen went one hop further
-and found the cheapest edge of all missing - a plain re-binding.
+`member-assign.mjs` is the only one in the flow family, and it is the one a further pass of the same
+analysis could close. The other four are three different mechanisms - consumption grammar, subject
+grammar, and what counts as evidence of liveness - and folding them into the flow analysis would be
+attributing them to a cause that measurement does not support.
 
-| Specimen | The hop |
-| --- | --- |
-| `alias-hop.mjs` | `const chk = mid` - a bare alias, no call, no construction |
-| `alias-ternary.mjs` | the alias is chosen by a ternary, so the initialiser is an expression |
-| `alias-nullish.mjs` | `chk ??= ...` binds with no declaration keyword, so containment has nothing to credit |
-| `alias-spread.mjs` | `[...base]` derives a collection from one holding a checker |
-| `alias-bind.mjs` | `.bind()` returns the function, and its body is not this file's to read |
-| `alias-map-get.mjs` | `Map.get()` retrieves it, same shape as a factory with a builtin callee |
-| `arg-passthrough.mjs` | the checker is an ARGUMENT, called through the parameter name |
+### On `symbol-iterator.mjs`
 
-The last two show the limit of the returns-a-function gate that makes round thirteen's flow edge
-safe: it asks what the callee hands back, and it can only ask that of a function whose body is in
-this file. `.bind()` and `Map.get()` are not.
+It is **not the fault it was filed as.** Round twelve recorded it as an attribution failure.
+Measurement disagrees: its consumption *is* found, its subject *is* `box`, and the loop asserts
+directly, so no attribution is needed. Sound for an array literal, whose members are its elements;
+unsound for an object consumed by `for-of`. Closing it changes what counts as evidence of liveness,
+and `Object.entries({ ... })` is a legitimate case where the member count *is* the proof.
 
-### The other two
+### The count went 1 -> 6 -> 9 -> 2 -> 5, and every move was measured
 
-`await-subject.mjs` is a SUBJECT shape - `for (const f of await load())`, which the subject grammar
-does not admit, so the loop is never a consumption.
+Each adversarial round is run against the mechanism it is attacking **and** against the previous one,
+so a growing list can be told apart from a widening gap:
 
-`symbol-iterator.mjs` is **not the fault it was filed as**. Round twelve recorded it as an attribution
-failure. Measurement disagrees: its consumption *is* found, its subject *is* `box`, and the loop
-asserts directly, so no attribution is needed. It escapes because `staticallyNonEmpty` counts an
-object literal's own members as proof the collection is non-empty - sound for an array literal, whose
-members are its elements, and unsound for an object consumed by `for-of`, where `Symbol.iterator`
-decides what is yielded. Here it yields from `files`, which may be empty. A false **proof of
-liveness**, not a lost name. Closing it changes what counts as evidence, and `Object.entries({ ... })`
-is a legitimate case where the member count *is* the proof; separating the two needs its own
-falsifier.
+| Round | vs previous mechanism | vs the one it attacked |
+| --- | --- | --- |
+| fourteen | 11 / 20 | 8 / 20 |
+| sixteen | 5 / 20 | 3 / 20 |
 
-### The list grew from one to nine, and that is the measurement moving
-
-The whole of round fourteen was run against the PREVIOUS mechanism as well as this one: **11 escapes
-there, 8 here.** Every one of the eight recorded here escaped both. Nothing that was caught before
-escapes now. Counting something for the first time is not the same as causing it.
+Nothing that was caught before escapes now, in either round.
 
 ## What left this directory
 

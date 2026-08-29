@@ -126,7 +126,10 @@ export function declarations(code) {
   // plain assignment. Attribution needs these because the INNERMOST containing binder is the one a
   // caller names — round eleven's default-parameter shape was attributed to the enclosing `const`
   // and so was never reachable by the name the loop actually called.
-  for (const m of code.matchAll(/([A-Za-z_$][\w$]*)\s*[:=](?![=>])\s*/gu)) {
+  // `(?:\?\?|\|\||&&)?=` so a LOGICAL ASSIGNMENT binds too. `chk ??= (f) => assert.ok(f)` declares
+  // nothing and initialises nothing, so neither the keyword scan above nor a plain `=` binder saw it,
+  // and the function body it holds had no name to be attributed to at all.
+  for (const m of code.matchAll(/([A-Za-z_$][\w$]*)\s*(?:\?\?|\|\||&&)?=(?![=>])\s*/gu)) {
     const before = code.slice(0, m.index).replace(/\s+$/u, "").slice(-1);
     if (/[\w$.]/u.test(before)) continue;
     const from = m.index + m[0].length;
@@ -194,6 +197,86 @@ function returnsFunction(body) {
 }
 
 /**
+ * Does this expression carry a checker, given the carriers found so far?
+ *
+ * THE INVERSION, AND THE POINT OF THIS WHOLE MODULE. Default to YES, and subtract the one case that
+ * is provably data: a carrier that is CALLED and does not hand back a function. `statesTable()` ran
+ * its assertions at that line and returned rows. Everything else — an alias, a ternary branch, a
+ * spread, an argument, a receiver, an element — is the function value still travelling.
+ *
+ * Round fourteen beat the previous version with seven ways of travelling in one sitting: `const chk
+ * = mid`, a ternary, `??=`, `[...base]`, `.bind()`, `Map.get()`, an argument. Enumerating those is
+ * the same mistake this module was written to end, three levels down: the sink space beat round two,
+ * the syntax space beat round eleven, and the flow space would beat any list of edges. **The set of
+ * ways a value can travel is open; the set of ways it stops is closed, and has one member.**
+ *
+ * It over-approximates, deliberately and in the required direction. A carrier mentioned for its name
+ * rather than its behaviour — `check.name` in a message — makes its binding a carrier too. That is
+ * fail-closed: it can cost a test an explicit liveness proof it did not strictly need, and it cannot
+ * let a verdict over an empty subject through. The 36-file surface is what holds the cost honest.
+ */
+function carries(text, names, bodyOf) {
+  for (const n of names) {
+    let asValue = false;
+    let asCallee = false;
+    for (const m of text.matchAll(new RegExp("\\b" + n + "\\b(\\s*\\()?", "gu"))) {
+      // CONSTRUCTION IS NOT A CALL WHOSE RESULT IS DATA. `new V()` yields an object holding V's
+      // methods: the checker has not stopped travelling, it has been wrapped. Folding `new` into the
+      // callee case dropped `class V { check(f) { assert.ok(f); } }` reached through
+      // `const v = new V()` — caught for eleven rounds, and lost the moment the edges were unified.
+      if (!m[1] || /\bnew\s+$/u.test(text.slice(0, m.index))) asValue = true;
+      else asCallee = true;
+    }
+    if (asValue) return true;
+    if (asCallee && returnsFunction(bodyOf.get(n) ?? "")) return true;
+  }
+  return false;
+}
+
+/** The index just past the balanced parenthesis opening at `open`, as inner text, or null. */
+function balanced(code, open) {
+  let depth = 0;
+  for (let i = open; i < code.length; i += 1) {
+    if (code[i] === "(") depth += 1;
+    else if (code[i] === ")") {
+      depth -= 1;
+      if (depth === 0) return code.slice(open + 1, i);
+    }
+  }
+  return null;
+}
+
+/** An argument list split on its top-level commas, so a nested call or literal does not split it. */
+function splitArgs(text) {
+  const out = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text[i];
+    if (c === "(" || c === "[" || c === "{") depth += 1;
+    else if (c === ")" || c === "]" || c === "}") depth -= 1;
+    else if (c === "," && depth === 0) {
+      out.push(text.slice(start, i));
+      start = i + 1;
+    }
+  }
+  out.push(text.slice(start));
+  return out.map((s) => s.trim());
+}
+
+/**
+ * The parameter NAMES of the function this declaration binds, or null if it does not bind one.
+ *
+ * Only plain identifiers are returned. A destructured or defaulted parameter has no single name for
+ * an argument to land in, and inventing one would connect an argument to something it did not bind.
+ */
+function parametersOf(code, decl) {
+  const head = /^\s*(?:=\s*)?(?:async\s*)?\(([^)]*)\)\s*(?:=>|\{)/u.exec(code.slice(decl.start, decl.start + 400));
+  if (!head) return null;
+  return splitArgs(head[1]).map((p) => (/^[A-Za-z_$][\w$]*$/u.test(p) ? p : null));
+}
+
+/**
  * Names in this file from which a verdict can be reached — however the function behind them is
  * written, and however far the function VALUE has travelled from where it was written.
  *
@@ -230,28 +313,19 @@ export function verdictBearingNames(code) {
   }
 
   // THE FLOW EDGES. Each moves a carrier across one binding. They run to fixpoint together, because
-  // a factory's result can land in a collection that a loop then iterates, and no single pass
-  // orders those correctly.
+  // a checker can come out of a factory, be re-bound, land in a collection and be iterated, and no
+  // single ordered pass gets every chain of those right.
   for (let changed = true; changed; ) {
     changed = false;
 
+    // BINDING. Any expression that carries a checker makes the name it is bound to a carrier. This
+    // is one rule, not one rule per way of writing a binding, and `carries` is where the judgement
+    // lives — see there for why it defaults to yes.
     for (const d of decls) {
       if (names.has(d.name)) continue;
-      const init = code.slice(d.start, d.end);
-      for (const n of names) {
-        // CONSTRUCTION. `class V { check(f) { assert.ok(f); } }` carries as `V`, but the loop calls
-        // `v.check(f)` on `const v = new V()`. Without this hop the instance is a different name
-        // from the class and the verdict is lost in the gap between them.
-        const constructed = new RegExp("\\bnew\\s+" + n + "\\s*\\(", "u").test(init);
-        // CALL RETURNING A FUNCTION. `const chk = make()` where `make` hands back a checker. Gated
-        // on what the callee returns, never on the mere mention of a carrier — see returnsFunction.
-        const handedBack = new RegExp("\\b" + n + "\\s*\\(", "u").test(init)
-          && returnsFunction(bodyOf.get(n) ?? "");
-        if (constructed || handedBack) {
-          names.add(d.name);
-          changed = true;
-          break;
-        }
+      if (carries(code.slice(d.start, d.end), names, bodyOf)) {
+        names.add(d.name);
+        changed = true;
       }
     }
 
@@ -261,9 +335,33 @@ export function verdictBearingNames(code) {
     // since `Object.values(handlers)` mentions `handlers` and is not equal to it.
     for (const m of code.matchAll(/for\s*(?:await\s*)?\(\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s+of\s+((?:[^()\n]|\([^()\n]*\))*)\)/gu)) {
       if (names.has(m[1])) continue;
-      if ([...names].some((n) => new RegExp("\\b" + n + "\\b", "u").test(m[2]))) {
+      if (carries(m[2], names, bodyOf)) {
         names.add(m[1]);
         changed = true;
+      }
+    }
+
+    // ARGUMENT. A parameter that RECEIVES a checker at any call site carries it, so the verdict is
+    // found inside a helper that was handed its check rather than holding one:
+    //
+    //     const run = (xs, fn) => { for (const f of xs) fn(f); };  run(files, chk);
+    //
+    // Nothing inside `run` names a carrier, and nothing at the call site is a loop. The verdict only
+    // becomes visible when the argument is connected to the parameter it lands in. Positional and
+    // one hop deep, which is all the shapes measured here need and all this can honestly claim.
+    for (const d of decls) {
+      const params = parametersOf(code, d);
+      if (params === null) continue;
+      for (const call of code.matchAll(new RegExp("\\b" + d.name + "\\s*\\(", "gu"))) {
+        const args = balanced(code, call.index + call[0].length - 1);
+        if (args === null) continue;
+        splitArgs(args).forEach((arg, i) => {
+          const p = params[i];
+          if (p && !names.has(p) && carries(arg, names, bodyOf)) {
+            names.add(p);
+            changed = true;
+          }
+        });
       }
     }
   }

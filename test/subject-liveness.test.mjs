@@ -119,25 +119,34 @@ const ADMITTED_ASSERTIONS = [
  * liveness, and `Object.entries({ ... })` is a legitimate case where the member count IS the proof.
  * Separating the two is its own work with its own falsifier, not a line in this change.
  *
- * THE OTHER EIGHT ARE ROUND FOURTEEN'S, run against the mechanism round thirteen left behind and not
- * modified since. Seven are ALIASING, one hop past what round thirteen closed: it follows the checker
- * value across containment, a factory's return, and iteration, and does not follow a plain
- * re-binding — `const chk = mid`, a ternary, `??=`, a spread, `.bind()`, `Map.get()`, or a checker
- * passed as an argument and called through the parameter. `await-subject.mjs` is a subject shape.
+ * ROUND FIFTEEN closed round fourteen's seven aliasing shapes, and they are now in `caught/`. It did
+ * it by inverting the flow question rather than by adding an edge per hop: an expression CARRIES a
+ * checker unless every mention of a carrier is a call whose result is data. The set of ways a value
+ * can travel is open; the set of ways it stops is closed and has one member.
  *
- * **The list is nine, and that is the measurement reaching further rather than the gap opening.** The
- * whole of round fourteen was run against the PREVIOUS mechanism too: it escaped 11 there and 8 here,
- * every one of these eight escaped both, and nothing that was caught before escapes now.
+ * `await-subject.mjs` remains, and like `symbol-iterator.mjs` it is deliberately out of scope for the
+ * flow work: the subject grammar does not admit `await`, so the loop is never a consumption at all.
+ * Both are recorded as their own faults rather than folded into the analysis that does not cover them.
+ *
+ * ROUND SIXTEEN then ran twenty new shapes against what round fifteen left behind, unmodified during
+ * the round, and found **three**. They are recorded here rather than patched, because patching them
+ * would make round sixteen stop counting and the next round would have to establish everything again:
+ *
+ *   `member-assign.mjs`   `o.c = chk` — a carrier assigned to a MEMBER PATH, which the binder scan
+ *                         skips deliberately so member paths are not read as declarations. The flow
+ *                         family, and the one of the three the same analysis could close.
+ *   `proto-call.mjs`      `Array.prototype.forEach.call(files, chk)` — consumption grammar.
+ *   `concat-literal.mjs`  `[].concat(files)` — subject grammar, same family as `await-subject.mjs`.
+ *
+ * **Five escapes, down from nine, and none of the five is an aliasing shape.** Every corpus was run
+ * against the previous mechanism as well as this one: round fourteen escaped 11 there and 0 here,
+ * round sixteen 5 there and 3 here, and nothing caught before escapes now.
  */
 const KNOWN_ESCAPES = [
-  "alias-bind.mjs",
-  "alias-hop.mjs",
-  "alias-map-get.mjs",
-  "alias-nullish.mjs",
-  "alias-spread.mjs",
-  "alias-ternary.mjs",
-  "arg-passthrough.mjs",
   "await-subject.mjs",
+  "concat-literal.mjs",
+  "member-assign.mjs",
+  "proto-call.mjs",
   "symbol-iterator.mjs",
 ];
 
