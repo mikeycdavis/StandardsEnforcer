@@ -103,21 +103,50 @@ const ADMITTED_ASSERTIONS = [
  * `fixtures/unsupported/`, because the mechanism rejects the FILE rather than reading the shape.
  * Rejection is a weaker and more honest thing than catching, and the tests below say which is which.
  *
- * The six here were found by round twelve, run against a mechanism it did not modify. **The list grew
- * because the measurement reached further, not because the gap did** — every one of these escaped
- * round two's mechanism as well, and nobody had attacked with them. Counting a gap for the first
- * time is not the same as opening it.
+ * Round twelve found six, run against a mechanism it did not modify. Round thirteen closed five of
+ * them and they now live in `caught/`: four to a data-flow model of attribution, and
+ * `optional-subject.mjs` to admitting `?.` in the subject grammar, which six other rules in the same
+ * mechanism already read.
  *
- * They are one fault, not six: attribution is by NAME, and a function is a VALUE that flows — out of
- * a destructuring, out of a return, into an argument, through a derived collection, behind a computed
- * key. `optional-subject.mjs` is the exception and is a subject shape rather than a helper shape.
+ * ONE REMAINS, AND IT IS NOT THE FAULT IT WAS FILED AS. Round twelve recorded all six as attribution
+ * failures. Measurement says `symbol-iterator.mjs` is not one: its consumption IS found and its
+ * subject IS `box`. It escapes because `staticallyNonEmpty` counts an object literal's own members as
+ * proof the collection is non-empty. That is sound for an array literal, whose members are its
+ * elements, and unsound for an object consumed by `for-of`, where `Symbol.iterator` decides what is
+ * yielded — here, from `files`, which may be empty. A false PROOF OF LIVENESS, not a lost name.
+ *
+ * It is left open rather than patched here because closing it changes what counts as evidence of
+ * liveness, and `Object.entries({ ... })` is a legitimate case where the member count IS the proof.
+ * Separating the two is its own work with its own falsifier, not a line in this change.
+ *
+ * ROUND FIFTEEN closed round fourteen's seven aliasing shapes, and they are now in `caught/`. It did
+ * it by inverting the flow question rather than by adding an edge per hop: an expression CARRIES a
+ * checker unless every mention of a carrier is a call whose result is data. The set of ways a value
+ * can travel is open; the set of ways it stops is closed and has one member.
+ *
+ * `await-subject.mjs` remains, and like `symbol-iterator.mjs` it is deliberately out of scope for the
+ * flow work: the subject grammar does not admit `await`, so the loop is never a consumption at all.
+ * Both are recorded as their own faults rather than folded into the analysis that does not cover them.
+ *
+ * ROUND SIXTEEN then ran twenty new shapes against what round fifteen left behind, unmodified during
+ * the round, and found **three**. They are recorded here rather than patched, because patching them
+ * would make round sixteen stop counting and the next round would have to establish everything again:
+ *
+ *   `member-assign.mjs`   `o.c = chk` — a carrier assigned to a MEMBER PATH, which the binder scan
+ *                         skips deliberately so member paths are not read as declarations. The flow
+ *                         family, and the one of the three the same analysis could close.
+ *   `proto-call.mjs`      `Array.prototype.forEach.call(files, chk)` — consumption grammar.
+ *   `concat-literal.mjs`  `[].concat(files)` — subject grammar, same family as `await-subject.mjs`.
+ *
+ * **Five escapes, down from nine, and none of the five is an aliasing shape.** Every corpus was run
+ * against the previous mechanism as well as this one: round fourteen escaped 11 there and 0 here,
+ * round sixteen 5 there and 3 here, and nothing caught before escapes now.
  */
 const KNOWN_ESCAPES = [
-  "destructured-helper.mjs",
-  "factory-wrapper.mjs",
-  "foreach-byref.mjs",
-  "object-values.mjs",
-  "optional-subject.mjs",
+  "await-subject.mjs",
+  "concat-literal.mjs",
+  "member-assign.mjs",
+  "proto-call.mjs",
   "symbol-iterator.mjs",
 ];
 

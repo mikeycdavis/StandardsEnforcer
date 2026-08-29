@@ -40,8 +40,16 @@ export { receiverBefore };
 /** Methods whose result is satisfied by an empty receiver. See the note above on `some`/`find`. */
 export const VACUOUS_METHODS = ["filter", "map", "flatMap", "every", "forEach"];
 
-/** An identifier, a member chain, or a single call — the receiver text we treat as the subject. */
-const SUBJECT = /[A-Za-z_$][\w$.]*(?:\([^()\n]*\))?/;
+/**
+ * An identifier, a member chain, or a single call — the receiver text we treat as the subject.
+ *
+ * `?.` is part of a member chain here, so `for (const f of files?.list)` has the subject `files?.list`
+ * rather than no subject at all. Every DERIVATION rule below already reads optional chaining —
+ * `(?:\?)?\.` appears in six of them — so admitting it in the subject makes one mechanism consistent
+ * with itself rather than adding a shape to it. The surface writes `?.` in seven of its files, so
+ * this is the repository's ordinary dialect and not an imagined one.
+ */
+const SUBJECT = /[A-Za-z_$](?:[\w$.]|\?\.)*(?:\([^()\n]*\))?/;
 
 /**
  * The body that `from` introduces. A braceless single-statement body is its own body and NOTHING
@@ -226,6 +234,19 @@ export function bodyAccumulates(code, body) {
 }
 
 /**
+ * An argument list that is a bare function REFERENCE, rewritten as the call it is about to become.
+ *
+ * `files.forEach(check)` hands `check` to a consumer whose entire job is to call it. Reading the
+ * argument as `check(` is what lets every rule that already recognises a verdict-bearing call see
+ * this one, instead of each rule growing a by-reference case of its own. Anything that is not a
+ * plain identifier or member path — an inline arrow, a call, a literal — is returned untouched.
+ */
+function callForm(args) {
+  const text = (args ?? "").trim();
+  return /^[A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*$/u.test(text) ? text + "(" : null;
+}
+
+/**
  * Every consumption in this file that would succeed on an empty subject, as `{ subject, via }`.
  * `subject` is source text, not a value: this is a scan, and it says so rather than pretending to
  * resolve aliases.
@@ -314,7 +335,19 @@ export function consumptions(code, imported = new Set()) {
   // Neither binds the result, so no rule about a derived collection can see them.
   const each = new RegExp(String.raw`(${SUBJECT.source})(?:\?)?\.(?:forEach|map|flatMap|filter|reduce)\s*\(`, "gu");
   for (const m of code.matchAll(each)) {
-    const body = blockAt(code, m.index + m[0].length);
+    const at = m.index + m[0].length;
+    // The callback is usually written inline, and then the body is the block that follows. It may
+    // also be passed BY REFERENCE — `files.forEach(check)` — and then there is no block here at all:
+    // the body that matters belongs to the name, and this loop saw an empty string and concluded the
+    // iteration reached no verdict. `forEach` is about to CALL what it was handed, so a bare
+    // reference is read as the call it is about to become, and the existing verdict rules see it
+    // without needing a rule of their own for the by-reference shape.
+    //
+    // Decided from the ARGUMENT LIST, not from the absence of a block: `blockAt` treats a braceless
+    // body as its own statement and so returns `check);` here rather than nothing, which is correct
+    // for every other caller and useless as a signal for this one.
+    const byReference = callForm(balancedParens(code, at - 1));
+    const body = byReference ?? blockAt(code, at);
     if (isVerdict(body, m[1])) found.push({ subject: m[1], via: "forEach" });
   }
 
