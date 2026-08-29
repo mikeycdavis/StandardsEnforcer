@@ -27,7 +27,7 @@ import { fileURLToPath } from "node:url";
 import { enforce, runOfficialEvaluator } from "../scripts/enforce.mjs";
 import { STATE, PASSING, REQUIRES_RECORDED_DECISION, REACHABLE, exitFor, EXIT } from "../scripts/states.mjs";
 import { verifyTagResolvesTo, resolveIdentity } from "../scripts/identity.mjs";
-import { oracleAt } from "../test-support/oracle.mjs";
+import { oracleAt, oracleSubject } from "../test-support/oracle.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // v1.6.0: the first release declaring adapter schemaVersion 1.1.0, so binding {policy} through the
@@ -63,14 +63,22 @@ const identity = () => ({ standardsRepo: MLS, tag: TAG, sha: SHA, cacheRoot: CAC
  * state it happens to be in. The authority half of the chain never trusts it; it resolves the tag,
  * verifies the SHA, and materialises a checkout from the object database. Passing `MLS` in as the
  * governed repository handed the evaluator the working tree instead, so an uncommitted edit on the
- * host reached the report while `standards.sha` still named the pinned commit. Measured: one
- * uncommitted edit moved `report.standardVersion` to a value present in no commit, with HEAD
- * unmoved and `standards.verified` still true.
+ * host reached the report while `standards.sha` still named the pinned commit.
  *
- * `resolveIdentity` is the same call the authority path makes, and it re-verifies a cache hit
- * rather than trusting the marker, so the bytes below are the bytes the SHA names.
+ * A CACHE ROOT OF ITS OWN, and it is load-bearing rather than tidiness. `materialise` keys an entry
+ * by SHA alone, and here the subject's commit IS the authority's commit — an oracle evaluated under
+ * its own release is the whole point of these tests. Resolving the subject through `CACHE` would
+ * hand both roles one directory, and the authority's own verification would then find the subject's
+ * state and repair it mid-run. Measured on that design: a mutation to the subject was silently
+ * restored before any assertion could observe it, so nothing downstream could establish that the
+ * subject was read at all. `oracleSubject` namespaces the subject beneath its own root.
  */
-const oracleSubject = () => resolveIdentity({ repo: MLS, tag: TAG, sha: SHA, cacheRoot: CACHE }).dir;
+const SUBJECT = MLS_AVAILABLE
+  ? oracleSubject(MLS, SHA, path.join(CACHE, "st14-subject"))
+  : { ok: false, dir: null, why: ORACLE.skip };
+const NEEDS_SUBJECT = {
+  skip: SUBJECT.ok ? false : `the oracle subject could not be materialised: ${SUBJECT.why}`,
+};
 
 // ===========================================================================
 // INV-E1 — no unknown becomes a pass
@@ -169,12 +177,13 @@ test("identity · a tag pointing somewhere else is a mismatch, and the report na
 });
 
 test("identity · a declared identity that does not resolve produces no verdict at all", NEEDS_ORACLE, async () => {
-  // The target is deliberately an empty scratch directory: identity fails before anything is
-  // evaluated, so what the subject *is* cannot affect the outcome. Naming the host tree here would
-  // still be naming it, and the prohibition is worth keeping unconditional rather than carving out
-  // the cases where it happens not to bite.
-  const r = await scratch(async (dir) =>
-    enforce({ ...identity(), sha: "0".repeat(40), target: dir }));
+  // NOT A SUBJECT, and established by execution rather than by reading. Identity fails before
+  // anything is evaluated, so the target's bytes are never consumed: `oracle-subject-identity`
+  // asserts that this call answers identically over the oracle checkout and over an empty directory
+  // — two targets sharing no content — in state, in the absence of a report, and in the message. An
+  // answer that is the same for two disjoint inputs is not a function of either one's bytes, so
+  // freezing this one would be an edit made to satisfy the shape of a sentence.
+  const r = await enforce({ ...identity(), sha: "0".repeat(40), target: MLS });
   assert.equal(r.state, STATE.STANDARDS_IDENTITY_MISMATCH);
   assert.equal(r.passing, false);
   assert.equal(r.report, undefined, "nothing was evaluated, so there is no verdict to quote");
@@ -227,8 +236,8 @@ test("adoption · NOT_ADOPTED does not claim the repository should have adopted"
 // The oracle: reproduce the official result, by the official route
 // ===========================================================================
 
-test("oracle · MachineLearningStandards under its own v1.4.0 reproduces the recorded verdict", NEEDS_ORACLE, async () => {
-  const r = await enforce({ ...identity(), target: oracleSubject() });
+test("oracle · MachineLearningStandards under its own v1.4.0 reproduces the recorded verdict", NEEDS_SUBJECT, async () => {
+  const r = await enforce({ ...identity(), target: SUBJECT.dir });
   // At v1.4.0 this asserted COMPLIANT. v1.5.0 repaired the false green, and this repository declares
   // every domain rule not-applicable — so the honest official result is now NOT_EVALUATED, which its
   // contract does not declare passing. The enforcer reports that without knowing what the word means.
@@ -239,7 +248,7 @@ test("oracle · MachineLearningStandards under its own v1.4.0 reproduces the rec
   assert.equal(r.standards.sha, SHA);
 });
 
-test("oracle · the enforcer's payload IS the official evaluator's output, not a recomputation", NEEDS_ORACLE, async () => {
+test("oracle · the enforcer's payload IS the official evaluator's output, not a recomputation", NEEDS_SUBJECT, async () => {
   // The M1 claim's second half, tested directly. Run the official CLI out of the verified checkout,
   // then run the enforcer, and require the reports to agree field by field. Anything the enforcer
   // computed for itself would show up here as a difference.
@@ -247,7 +256,7 @@ test("oracle · the enforcer's payload IS the official evaluator's output, not a
   // ST-14. Both runs take the SAME materialised checkout as the subject. Against the host tree this
   // comparison was content-invariant but not time-invariant: a tree edited between the two calls
   // produced a field-level difference with no local cause.
-  const subject = id.dir;
+  const subject = SUBJECT.dir;
   const direct = runOfficialEvaluator(id.dir, { target: subject, policyPath: path.join(subject, "project-policy.yml") });
   const viaEnforcer = await enforce({ ...identity(), target: subject });
 
