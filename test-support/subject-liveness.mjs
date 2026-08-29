@@ -43,13 +43,19 @@ export const VACUOUS_METHODS = ["filter", "map", "flatMap", "every", "forEach"];
 /**
  * An identifier, a member chain, or a single call — the receiver text we treat as the subject.
  *
+ * The receiver may be an ARRAY LITERAL, so `for (const f of [].concat(files))` has a subject at all.
+ * Requiring a subject to begin with an identifier meant a literal receiver matched nothing and the
+ * loop was not a consumption — and `[].concat(S)` is an ordinary way to copy a collection, whose
+ * emptiness is exactly `S`'s. A literal WITH elements is still proven live by `staticallyNonEmpty`,
+ * so admitting the receiver does not redden `for (const x of [1, 2])`.
+ *
  * `?.` is part of a member chain here, so `for (const f of files?.list)` has the subject `files?.list`
  * rather than no subject at all. Every DERIVATION rule below already reads optional chaining —
  * `(?:\?)?\.` appears in six of them — so admitting it in the subject makes one mechanism consistent
  * with itself rather than adding a shape to it. The surface writes `?.` in seven of its files, so
  * this is the repository's ordinary dialect and not an imagined one.
  */
-const SUBJECT = /[A-Za-z_$](?:[\w$.]|\?\.)*(?:\([^()\n]*\))?/;
+const SUBJECT = /(?:[A-Za-z_$]|\[[^\]\n]*\])(?:[\w$.]|\?\.)*(?:\([^()\n]*\))?/;
 
 /**
  * The body that `from` introduces. A braceless single-statement body is its own body and NOTHING
@@ -349,6 +355,25 @@ export function consumptions(code, imported = new Set()) {
     const byReference = callForm(balancedParens(code, at - 1));
     const body = byReference ?? blockAt(code, at);
     if (isVerdict(body, m[1])) found.push({ subject: m[1], via: "forEach" });
+  }
+
+  // Array.prototype.forEach.call(files, chk) — the same iteration with the subject moved out of the
+  // receiver position and into the first ARGUMENT. Every rule above reads the subject as whatever
+  // precedes the dot, and here that is `Array.prototype`, so the loop over `files` was invisible.
+  //
+  // `call` and `apply` are the only two forms of this: they are how a method is invoked on a
+  // receiver it was not reached through, which is exactly what moves the subject into the arguments.
+  const borrowed = /\.\s*(?:forEach|map|flatMap|filter|reduce|every)\s*\.\s*(?:call|apply)\s*\(/gu;
+  for (const m of code.matchAll(borrowed)) {
+    const args = balancedParens(code, m.index + m[0].length - 1);
+    if (args === null) continue;
+    const parts = splitTopLevel(args);
+    const subject = (parts[0] ?? "").trim();
+    if (subject === "" || !new RegExp(`^${SUBJECT.source}$`, "u").test(subject)) continue;
+    // The callback is the remaining argument, inline or by reference, read the same way as above.
+    const rest = parts.slice(1).join(",").trim();
+    const body = callForm(rest) ?? rest;
+    if (isVerdict(body, subject)) found.push({ subject, via: "borrowed-iteration" });
   }
 
   // try { for (const f of files) validate(f); } catch { assert.fail(...) } — the loop body reaches
