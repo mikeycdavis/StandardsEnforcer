@@ -191,3 +191,99 @@ skipped, none excluded.
   which *bytes* one consumes once it runs.
 - **It does not claim any historical run was wrong.** The finding is about the consumption path,
   established by construction. No past result is retracted.
+
+
+## Amendment — 2026-08-27: the subject and the authority were sharing a cache entry
+
+**Everything above stands as written and is not edited.** It recorded a real defect and a real
+remedy. What it could not report is that the remedy left the property it claimed unestablished, and
+that is recorded here rather than by rewriting it.
+
+The subject above is
+
+```js
+resolveIdentity({ repo: MLS, tag: TAG, sha: SHA, cacheRoot: CACHE }).dir;
+```
+
+— the authority's own call, with the authority's own `cacheRoot`. `materialise` keys an entry by SHA
+alone (`const dest = path.join(cacheRoot, sha)`, `scripts/identity.mjs`), and here the subject's
+commit **is** the authority's commit, because the oracle is evaluated under its own release. Both
+roles therefore resolved to one directory.
+
+Measured directly against that design, on `cf3dadf`:
+
+```text
+STEP 1  subject dir           …\<cache>\eda15a2f56299bc0acc29feb5516dd7c6b8e475d
+STEP 1  authority cache entry …\<cache>\eda15a2f56299bc0acc29feb5516dd7c6b8e475d
+STEP 1  SAME DIRECTORY?       true
+STEP 1  baseline applicable   0
+STEP 2  mutation written      true
+STEP 3  applicable after      0
+STEP 4  mutation survived on disk after enforce?  false
+STEP 4  result observed the mutation?             false
+```
+
+A cached entry that fails `checkoutIsExactly` is rebuilt and swapped in, so the authority's own
+verification **repaired the subject's mutation before any assertion could observe it**. Nothing here
+was falsely reported — every prohibition genuinely passed. What could not be established is that the
+subject was read at all, which is the difference between *frozen* and *never consulted*.
+
+**Why the guard above did not catch it.** It is a source scan. It reports that nobody wrote the
+forbidden shape; a shared cache entry is not a shape, and the scan stayed green throughout. The scan
+is retained — it derives its aliases rather than listing them, and it strips comments so a suite may
+explain itself without the explanation becoming the violation — but it is now paired with
+behavioural falsifiers, because only those can distinguish the two readings.
+
+### The correction
+
+`test-support/oracle.mjs` gained `oracleSubject(hostRepo, sha, cacheRoot)`, which goes through the
+same `materialise` under **`<cacheRoot>/subject`**. The authority's cache and identity path are
+unchanged. Materialisation failure returns `ok: false` with a reason and no directory — no fallback
+to the host, which would restore the original defect behind a helper reporting success.
+
+| Falsifier | Shared cache | Separate cache |
+| --- | --- | --- |
+| the mutation is observable in the report at all | pass | pass |
+| editing the host checkout does not change what was evaluated | pass | pass |
+| the identity is established from the checkout, not assumed | pass | pass |
+| mutating the frozen subject **does** change the result | **fail** | pass |
+| an unmaterialisable identity fails, never falls back to the host | pass | pass |
+| an identity mismatch consumes no subject bytes at all | pass | pass |
+
+**Exactly one row moves, and that is the point.** Measured by restoring the shared cache root and
+re-running: 7 of 8 tests in the file pass, including both halves of the source scan. A design in
+which every prohibition passes, every identity verifies, and only the liveness assertion fails is
+precisely a design whose defect is invisible to anything but a liveness assertion.
+
+The five rows that hold in both columns are not filler. They are what stops the liveness row from
+being satisfiable the wrong way: if the evaluator read nothing, or the fixture stopped editing
+something it consumes, or the helper quietly returned the host, "the result changed" and "the result
+did not change" would both be reachable without the subject being frozen at all. The liveness row is the one that found this, and it was re-confirmed by reverting the
+namespacing and watching it fail.
+
+### `:155` — reverted to the host path, on evidence
+
+The version above rewrote the identity-mismatch assertion to an empty scratch directory so the
+prohibition could stay unconditional. Tested rather than assumed:
+
+```text
+host tree entries  24          empty dir entries  0
+state    STANDARDS_IDENTITY_MISMATCH  ==  STANDARDS_IDENTITY_MISMATCH
+report   undefined                    ==  undefined
+detail   "tag v1.6.0 resolves to eda15a2…, and the declared identity says 0000000…"   (identical)
+```
+
+Two targets sharing no content produce an identical answer, so the answer is not a function of
+either one's bytes: the rewrite was cosmetic with respect to ST-14's invariant, not semantically
+stronger. It is reverted to `target: MLS`, the scan exempts exactly that shape — a call declaring
+the unresolvable all-zero SHA on the same line, fail-closed in every other case — and
+`boundary · an identity mismatch consumes no subject bytes at all` is the standing proof of the
+exemption. ST-14 acceptance 3 is narrowed to content-consuming assertions with its original wording
+preserved in the item.
+
+### Not changed
+
+The authority's cache root, identity path and pinning (`v1.6.0`, `ORACLE_TAGS`, adapter identity)
+are untouched. `STANDARDS_IDENTITY_MISMATCH`, `NOT_EVALUATED` and every other state semantic is
+unchanged. **EP-06 is unaffected and stays open** — this changes no count and settles no
+guarantee-level question.
