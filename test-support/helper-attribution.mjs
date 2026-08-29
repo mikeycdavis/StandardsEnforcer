@@ -145,6 +145,29 @@ export function declarations(code) {
     }
     out.push({ name: m[1], start: from, end: i });
   }
+
+  // A MEMBER PATH is also a binding: `o.c = chk` puts a checker somewhere a loop can call it as
+  // `o.c(f)`. The scan above deliberately skips a name preceded by a dot, so that member paths are
+  // not mistaken for declarations — and that skip meant this bound nothing at all.
+  //
+  // The LAST SEGMENT is what carries, because that is the name the call site writes. Binding the
+  // whole path would need the path escaped everywhere a carrier name is turned into a pattern, and
+  // binding `c` rather than `o.c` over-approximates in the fail-closed direction: some other `x.c(`
+  // in the same file would also count as reaching a verdict.
+  for (const m of code.matchAll(/[A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*\s*\.\s*([A-Za-z_$][\w$]*)\s*(?:\?\?|\|\||&&)?=(?![=>])\s*/gu)) {
+    const from = m.index + m[0].length;
+    let depth = 0;
+    let i = from;
+    for (; i < code.length; i += 1) {
+      const c = code[i];
+      if (c === "(" || c === "[" || c === "{") depth += 1;
+      else if (c === ")" || c === "]" || c === "}") {
+        if (depth === 0) break;
+        depth -= 1;
+      } else if (depth === 0 && (c === ";" || c === ",")) break;
+    }
+    out.push({ name: m[1], start: from, end: i });
+  }
   return out;
 }
 

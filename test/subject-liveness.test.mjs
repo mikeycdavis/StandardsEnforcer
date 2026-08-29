@@ -128,25 +128,56 @@ const ADMITTED_ASSERTIONS = [
  * flow work: the subject grammar does not admit `await`, so the loop is never a consumption at all.
  * Both are recorded as their own faults rather than folded into the analysis that does not cover them.
  *
- * ROUND SIXTEEN then ran twenty new shapes against what round fifteen left behind, unmodified during
- * the round, and found **three**. They are recorded here rather than patched, because patching them
- * would make round sixteen stop counting and the next round would have to establish everything again:
+ * ROUND SIXTEEN ran twenty new shapes against what round fifteen left behind and found three. ROUND
+ * SEVENTEEN closed all three, as three separate bounded faults rather than one:
  *
- *   `member-assign.mjs`   `o.c = chk` — a carrier assigned to a MEMBER PATH, which the binder scan
- *                         skips deliberately so member paths are not read as declarations. The flow
- *                         family, and the one of the three the same analysis could close.
- *   `proto-call.mjs`      `Array.prototype.forEach.call(files, chk)` — consumption grammar.
- *   `concat-literal.mjs`  `[].concat(files)` — subject grammar, same family as `await-subject.mjs`.
+ *   `member-assign.mjs`   flow — member assignment now binds, attributing its LAST SEGMENT
+ *   `proto-call.mjs`      consumption grammar — `call`/`apply` move the subject into the arguments
+ *   `concat-literal.mjs`  subject grammar — a subject may begin with an array-literal receiver
  *
- * **Five escapes, down from nine, and none of the five is an aliasing shape.** Every corpus was run
- * against the previous mechanism as well as this one: round fourteen escaped 11 there and 0 here,
- * round sixteen 5 there and 3 here, and nothing caught before escapes now.
+ * TWO REMAIN, both deliberately out of scope for the flow work and each its own mechanism:
+ * `await-subject.mjs` is subject grammar, and `symbol-iterator.mjs` is a false PROOF OF LIVENESS —
+ * `staticallyNonEmpty` counting an object literal's own members, which is sound for an array literal
+ * and unsound for an object whose `Symbol.iterator` yields from elsewhere. Closing that one changes
+ * what counts as evidence, and `Object.entries({ ... })` is a legitimate case where the member count
+ * IS the proof, so it needs its own falsifier rather than a line in this change.
+ *
+ * ROUND EIGHTEEN aimed twenty shapes at the frontier round seventeen had just moved, against a
+ * mechanism it did not modify, and found **twelve**. It escaped 15 against the previous mechanism, so
+ * nothing regressed — but it is the highest count any round has produced, and the reason matters more
+ * than the number.
+ *
+ * **THE RESIDUE HAS CHANGED CHARACTER.** Round twelve's six escapes were one fault. These twelve are
+ * spread evenly across every grammar this scanner has:
+ *
+ *   FLOW (5)         a checker reaching a name through container MUTATION (`s.add`, `cs.push`), a
+ *                    computed key, a destructuring assignment, or a factory returning a container
+ *   SUBJECT (4)      `(files)`, `(0, files)`, `Array.from(new Set(files))`, `await o.load()`
+ *   CONSUMPTION (3)  `Reflect.apply`, `Array.from(files, chk)`, a borrowed `every`
+ *
+ * `paren-subject.mjs` is the one to look at first: `for (const f of (files))` is ordinary JavaScript
+ * that a parser handles for nothing and a regex subject grammar cannot see at all. The limit reached
+ * here is no longer a missing rule — it is that this mechanism reads source with regular expressions.
+ * Extending three grammars in step is not a smaller job than parsing, and it does not converge.
+ *
+ * **Fourteen escapes.** Every round is run against the mechanism it attacks AND the one before it, so
+ * a moving measurement can be told from a widening gap: round fourteen escaped 11 then 0, round
+ * sixteen 5 then 3 then 0, round eighteen 15 then 12. Nothing caught before escapes now.
  */
 const KNOWN_ESCAPES = [
+  "array-from-mapper.mjs",
+  "await-member-subject.mjs",
   "await-subject.mjs",
-  "concat-literal.mjs",
-  "member-assign.mjs",
-  "proto-call.mjs",
+  "borrowed-every.mjs",
+  "comma-subject.mjs",
+  "computed-key-assign.mjs",
+  "destructuring-assign.mjs",
+  "factory-returns-object.mjs",
+  "mutate-push.mjs",
+  "mutate-set-add.mjs",
+  "nested-call-subject.mjs",
+  "paren-subject.mjs",
+  "reflect-apply.mjs",
   "symbol-iterator.mjs",
 ];
 
@@ -322,6 +353,11 @@ test("subject · a proof of liveness is accepted, in each form an honest test us
     // `notEqual(x.length, 0)` is a lower bound written as a refusal. Also written as an attack
     // specimen and reclassified: it proves exactly what `assert.ok(x.length > 0)` proves.
     'const files = discover(); assert.notEqual(files.length, 0); for (const f of files) assert.ok(ok(f));',
+    // An ARRAY LITERAL receiver, admitted as a subject in round seventeen so `[].concat(files)` is a
+    // consumption at all. A literal WITH elements proves its own liveness, and this is the control
+    // that says admitting the receiver did not cost that: it must stay unflagged.
+    'for (const x of [1, 2]) { assert.ok(x); }',
+    'for (const x of [1, 2].concat(more)) { assert.ok(x); }',
   ];
   for (const code of live) {
     assert.deepEqual(vacuousSubjects(code), [], `an honest shape was flagged: ${code}`);

@@ -14,40 +14,61 @@ direction without a test failing and saying so:
 
 ## What is here now
 
-**Five specimens**, and **none of them is an aliasing shape**. Round fifteen closed that whole family.
+**Fourteen specimens**, and for the first time they do **not** share a dominant fault.
 
-| Specimen | Fault | Family |
-| --- | --- | --- |
-| `member-assign.mjs` | `o.c = chk` binds a carrier to a MEMBER PATH, which the binder scan skips so member paths are not read as declarations | flow |
-| `proto-call.mjs` | `Array.prototype.forEach.call(files, chk)` - the subject is an argument, not the receiver of `.forEach(` | consumption grammar |
-| `concat-literal.mjs` | `[].concat(files)` - a subject must begin with an identifier, so an array-literal receiver matches nothing | subject grammar |
-| `await-subject.mjs` | `for (const f of await load())` - the subject grammar does not admit `await` | subject grammar |
-| `symbol-iterator.mjs` | `staticallyNonEmpty` counts an object literal's own members as proof of what `Symbol.iterator` yields | liveness proof |
+### Flow (5) - a checker reaching a name the analysis does not follow
 
-`member-assign.mjs` is the only one in the flow family, and it is the one a further pass of the same
-analysis could close. The other four are three different mechanisms - consumption grammar, subject
-grammar, and what counts as evidence of liveness - and folding them into the flow analysis would be
-attributing them to a cause that measurement does not support.
+| Specimen | The hop |
+| --- | --- |
+| `mutate-set-add.mjs` | `s.add(chk)` - a MUTATION, and this analysis follows bindings; `s` was bound once, empty |
+| `mutate-push.mjs` | `cs.push(chk)` - the same |
+| `computed-key-assign.mjs` | `reg["c"] = chk` - a subscript has no segment to bind |
+| `destructuring-assign.mjs` | `[a, b] = [b, a]` - a destructuring assignment with no declaration keyword |
+| `factory-returns-object.mjs` | `mk()` hands back a CONTAINER of a checker, not a checker |
 
-### On `symbol-iterator.mjs`
+### Subject grammar (4) - the loop is never seen as a consumption
 
-It is **not the fault it was filed as.** Round twelve recorded it as an attribution failure.
-Measurement disagrees: its consumption *is* found, its subject *is* `box`, and the loop asserts
-directly, so no attribution is needed. Sound for an array literal, whose members are its elements;
-unsound for an object consumed by `for-of`. Closing it changes what counts as evidence of liveness,
-and `Object.entries({ ... })` is a legitimate case where the member count *is* the proof.
+| Specimen | The subject |
+| --- | --- |
+| `paren-subject.mjs` | `for (const f of (files))` |
+| `comma-subject.mjs` | `for (const f of (0, files))` |
+| `nested-call-subject.mjs` | `Array.from(new Set(files))` - two calls deep |
+| `await-subject.mjs`, `await-member-subject.mjs` | `await load()`, `await o.load()` |
 
-### The count went 1 -> 6 -> 9 -> 2 -> 5, and every move was measured
+### Consumption grammar (3) - the iteration is real but unrecognised
 
-Each adversarial round is run against the mechanism it is attacking **and** against the previous one,
-so a growing list can be told apart from a widening gap:
+`reflect-apply.mjs` (`Reflect.apply`), `array-from-mapper.mjs` (`Array.from(files, chk)`),
+`borrowed-every.mjs` (`assert.ok(Array.prototype.every.call(files, ok1))`).
+
+### One false proof of liveness
+
+`symbol-iterator.mjs` is **not the fault it was filed as.** Its consumption *is* found and its subject
+*is* `box`; the loop asserts directly. It escapes because `staticallyNonEmpty` counts an object
+literal's own members as proof - sound for an array literal, unsound for an object whose
+`Symbol.iterator` yields from elsewhere. Closing it changes what counts as evidence of liveness, and
+`Object.entries({ ... })` is a legitimate case where the member count *is* the proof.
+
+## What this list is now telling you
+
+`paren-subject.mjs` is the one to read first. `for (const f of (files))` is ordinary JavaScript that a
+parser handles for nothing and a regular expression cannot see. Rounds two, eleven, twelve and
+fourteen each had a dominant fault closed by inverting a default; round eighteen has none, and the
+residue is spread evenly across all three grammars this scanner has.
+
+Extending three grammars in step is not a smaller job than parsing the source, and it does not
+converge. That is a scope question, recorded here rather than answered.
+
+## Every round is measured against two mechanisms
+
+So a moving measurement can be told apart from a widening gap:
 
 | Round | vs previous mechanism | vs the one it attacked |
 | --- | --- | --- |
-| fourteen | 11 / 20 | 8 / 20 |
-| sixteen | 5 / 20 | 3 / 20 |
+| fourteen | 11 / 20 | 0 / 20 after round fifteen |
+| sixteen | 5 / 20 | 3 / 20, then 0 after round seventeen |
+| eighteen | 15 / 20 | 12 / 20 |
 
-Nothing that was caught before escapes now, in either round.
+Nothing caught before escapes now, in any round.
 
 ## What left this directory
 
