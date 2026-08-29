@@ -103,21 +103,41 @@ const ADMITTED_ASSERTIONS = [
  * `fixtures/unsupported/`, because the mechanism rejects the FILE rather than reading the shape.
  * Rejection is a weaker and more honest thing than catching, and the tests below say which is which.
  *
- * The six here were found by round twelve, run against a mechanism it did not modify. **The list grew
- * because the measurement reached further, not because the gap did** — every one of these escaped
- * round two's mechanism as well, and nobody had attacked with them. Counting a gap for the first
- * time is not the same as opening it.
+ * Round twelve found six, run against a mechanism it did not modify. Round thirteen closed five of
+ * them and they now live in `caught/`: four to a data-flow model of attribution, and
+ * `optional-subject.mjs` to admitting `?.` in the subject grammar, which six other rules in the same
+ * mechanism already read.
  *
- * They are one fault, not six: attribution is by NAME, and a function is a VALUE that flows — out of
- * a destructuring, out of a return, into an argument, through a derived collection, behind a computed
- * key. `optional-subject.mjs` is the exception and is a subject shape rather than a helper shape.
+ * ONE REMAINS, AND IT IS NOT THE FAULT IT WAS FILED AS. Round twelve recorded all six as attribution
+ * failures. Measurement says `symbol-iterator.mjs` is not one: its consumption IS found and its
+ * subject IS `box`. It escapes because `staticallyNonEmpty` counts an object literal's own members as
+ * proof the collection is non-empty. That is sound for an array literal, whose members are its
+ * elements, and unsound for an object consumed by `for-of`, where `Symbol.iterator` decides what is
+ * yielded — here, from `files`, which may be empty. A false PROOF OF LIVENESS, not a lost name.
+ *
+ * It is left open rather than patched here because closing it changes what counts as evidence of
+ * liveness, and `Object.entries({ ... })` is a legitimate case where the member count IS the proof.
+ * Separating the two is its own work with its own falsifier, not a line in this change.
+ *
+ * THE OTHER EIGHT ARE ROUND FOURTEEN'S, run against the mechanism round thirteen left behind and not
+ * modified since. Seven are ALIASING, one hop past what round thirteen closed: it follows the checker
+ * value across containment, a factory's return, and iteration, and does not follow a plain
+ * re-binding — `const chk = mid`, a ternary, `??=`, a spread, `.bind()`, `Map.get()`, or a checker
+ * passed as an argument and called through the parameter. `await-subject.mjs` is a subject shape.
+ *
+ * **The list is nine, and that is the measurement reaching further rather than the gap opening.** The
+ * whole of round fourteen was run against the PREVIOUS mechanism too: it escaped 11 there and 8 here,
+ * every one of these eight escaped both, and nothing that was caught before escapes now.
  */
 const KNOWN_ESCAPES = [
-  "destructured-helper.mjs",
-  "factory-wrapper.mjs",
-  "foreach-byref.mjs",
-  "object-values.mjs",
-  "optional-subject.mjs",
+  "alias-bind.mjs",
+  "alias-hop.mjs",
+  "alias-map-get.mjs",
+  "alias-nullish.mjs",
+  "alias-spread.mjs",
+  "alias-ternary.mjs",
+  "arg-passthrough.mjs",
+  "await-subject.mjs",
   "symbol-iterator.mjs",
 ];
 

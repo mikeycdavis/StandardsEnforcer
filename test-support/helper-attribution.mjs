@@ -146,54 +146,122 @@ export function declarations(code) {
 }
 
 /**
- * Names in this file that can reach a verdict, however the function behind them is written.
+ * The names bound by a destructuring pattern, with the extent of the initialiser they came out of.
  *
- * A name qualifies when a verdict-reaching function body lies inside its declaration's extent. The
- * INNERMOST containing declaration wins, so a helper defined inside another helper is attributed to
- * itself rather than to its host, and calling the host is not thereby a verdict.
+ * `const [check] = [(f) => assert.ok(f)]` binds a function to a name without that name ever being
+ * the initialiser of anything: the value arrived as an array element. A binder scan keyed on
+ * `const NAME =` cannot see it, because after `const` comes `[`. The extent is the initialiser, so
+ * containment still decides which pattern names carry — destructuring two checkers and a label out
+ * of one array attributes to all three, which over-approximates in the fail-closed direction.
+ *
+ * `[^;]*?` rather than `[\s\S]*?` deliberately: a lazy span across statement boundaries let one
+ * failed `const {` swallow every later declaration, and three honest files were flagged for it.
+ */
+function patternBindings(code) {
+  const out = [];
+  for (const m of code.matchAll(/(?:const|let|var)\s*([[{][^;]*?[\]}])\s*=(?!=)/gu)) {
+    const from = m.index + m[0].length;
+    let depth = 0;
+    let i = from;
+    for (; i < code.length; i += 1) {
+      const c = code[i];
+      if (c === "(" || c === "[" || c === "{") depth += 1;
+      else if (c === ")" || c === "]" || c === "}") {
+        if (depth === 0) break;
+        depth -= 1;
+      } else if (depth === 0 && c === ";") break;
+    }
+    for (const n of m[1].slice(1, -1).matchAll(/([A-Za-z_$][\w$]*)\s*(?::\s*([A-Za-z_$][\w$]*))?/gu)) {
+      const bound = n[2] ?? n[1];
+      if (bound) out.push({ name: bound, start: from, end: i });
+    }
+  }
+  return out;
+}
+
+/**
+ * Does this function body hand back another function, rather than reaching a verdict itself?
+ *
+ * This is the whole of what makes the flow edge safe. `make()` returns a checker, so whatever
+ * receives its result performs a verdict when called. `statesTable()` returns rows: its assertions
+ * ran at the call, and its result is DATA. Both mention a carrier and both bind the result to a
+ * name, so "mentions a carrier" cannot tell them apart — and when the edge was written that way it
+ * flagged an honest parse loop in `front-door.test.mjs`. What the callee hands back can.
+ */
+function returnsFunction(body) {
+  return /(?:^|\breturn\b)\s*(?:async\s*)?(?:\([^()]*\)|[A-Za-z_$][\w$]*)\s*=>/u.test(body)
+    || /\breturn\s+(?:async\s+)?function\b/u.test(body);
+}
+
+/**
+ * Names in this file from which a verdict can be reached — however the function behind them is
+ * written, and however far the function VALUE has travelled from where it was written.
+ *
+ * WHY THIS IS A DATA-FLOW QUESTION. Round twelve beat name attribution four times over with a single
+ * fault: attribution holds a NAME, and a function is a VALUE that flows. It comes out of a
+ * destructuring, out of a factory's return, out of a derived collection. Each hop loses the name, and
+ * the loop that finally calls it names something the attribution never saw. Adding a binder form per
+ * hop is the enumeration this module already replaced once, one level up; the fix is to follow the
+ * value instead of cataloguing the places it can land.
+ *
+ * THE MODEL. Two edges, applied to fixpoint:
+ *
+ *   CONTAINMENT   a verdict-reaching body inside a name's extent makes that name a carrier
+ *   FLOW          a carrier reaching a new name through a binding makes that name a carrier
+ *
+ * CONTAINMENT credits EVERY containing declaration, not the innermost one. `{ len: (f) => ... }`
+ * puts the checker inside `handlers` as surely as inside `len`, and a loop over `Object.values(
+ * handlers)` never mentions `len`. The innermost rule was there to stop a helper nested in another
+ * helper crediting its host; that case is now over-approximated rather than missed, which is the
+ * direction this guard is required to err in, and the surface measurement is what holds it honest.
  */
 export function verdictBearingNames(code) {
-  const decls = declarations(code);
+  const decls = [...declarations(code), ...patternBindings(code)];
   const names = new Set();
+  /** The body of the function `n` names, for asking what it hands back. */
+  const bodyOf = new Map();
   for (const [start, end] of functionBodies(code)) {
-    if (!reaches(code.slice(start, end))) continue;
-    const containing = decls
-      .filter((d) => d.start <= start && d.end >= end)
-      .sort((a, b) => (b.end - b.start) - (a.end - a.start))
-      .pop();
-    if (containing) names.add(containing.name);
+    const text = code.slice(start, end);
+    for (const d of decls) {
+      if (d.start <= start && d.end >= end && !bodyOf.has(d.name)) bodyOf.set(d.name, text);
+    }
+    if (!reaches(text)) continue;
+    for (const d of decls) if (d.start <= start && d.end >= end) names.add(d.name);
   }
 
-  // One transitive hop, and only through CONSTRUCTION. `class V { check(f) { assert.ok(f); } }`
-  // attributes to `V`, but the loop calls `v.check(f)` on `const v = new V()`, and without this the
-  // instance is a different name from the class and the verdict is lost between them.
-  //
-  // Mentioning a verdict-bearing name is deliberately NOT enough. `const rows = statesTable()` binds
-  // DATA: the assertions inside `statesTable` already ran, at that line, and a later loop over
-  // `rows` is not thereby a verdict. Written as a plain mention, this hop flagged an honest guard in
-  // `front-door.test.mjs` whose parse loop asserts nothing — a false positive on the real surface,
-  // which is the failure that makes a discriminator worse than none. Construction is the narrow case
-  // the hop was for, so construction is all it does.
+  // THE FLOW EDGES. Each moves a carrier across one binding. They run to fixpoint together, because
+  // a factory's result can land in a collection that a loop then iterates, and no single pass
+  // orders those correctly.
   for (let changed = true; changed; ) {
     changed = false;
+
     for (const d of decls) {
       if (names.has(d.name)) continue;
       const init = code.slice(d.start, d.end);
       for (const n of names) {
-        if (new RegExp("\\bnew\\s+" + n + "\\s*\\(", "u").test(init)) {
+        // CONSTRUCTION. `class V { check(f) { assert.ok(f); } }` carries as `V`, but the loop calls
+        // `v.check(f)` on `const v = new V()`. Without this hop the instance is a different name
+        // from the class and the verdict is lost in the gap between them.
+        const constructed = new RegExp("\\bnew\\s+" + n + "\\s*\\(", "u").test(init);
+        // CALL RETURNING A FUNCTION. `const chk = make()` where `make` hands back a checker. Gated
+        // on what the callee returns, never on the mere mention of a carrier — see returnsFunction.
+        const handedBack = new RegExp("\\b" + n + "\\s*\\(", "u").test(init)
+          && returnsFunction(bodyOf.get(n) ?? "");
+        if (constructed || handedBack) {
           names.add(d.name);
           changed = true;
           break;
         }
       }
     }
-    // Iterating a collection of checks binds each check to the loop variable, so the variable
-    // carries the verdict: `const checks = [(f) => assert.ok(f)]` attributes to `checks`, and
-    // `for (const c of checks) c(f)` reaches the verdict through `c`. Without this the collection is
-    // named but never called, and the mention rule — which looks for a call, a member access or a
-    // tag — correctly does not fire on `of checks)`.
-    for (const m of code.matchAll(/for\s*\(\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s+of\s+([A-Za-z_$][\w$]*)/gu)) {
-      if (names.has(m[2]) && !names.has(m[1])) {
+
+    // ITERATION. A loop variable bound from anything carrying a checker carries it too:
+    // `for (const h of Object.values(handlers)) h(f)`. The subject is an EXPRESSION, not a bare
+    // name — restricting it to a bare name is what let a derived collection launder the checker,
+    // since `Object.values(handlers)` mentions `handlers` and is not equal to it.
+    for (const m of code.matchAll(/for\s*(?:await\s*)?\(\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s+of\s+((?:[^()\n]|\([^()\n]*\))*)\)/gu)) {
+      if (names.has(m[1])) continue;
+      if ([...names].some((n) => new RegExp("\\b" + n + "\\b", "u").test(m[2]))) {
         names.add(m[1]);
         changed = true;
       }
