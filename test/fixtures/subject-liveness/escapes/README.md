@@ -14,49 +14,67 @@ direction without a test failing and saying so:
 
 ## What is here now
 
-**Fourteen specimens**, and for the first time they do **not** share a dominant fault.
+**Nothing.** All fourteen specimens were closed by round nineteen and moved to `caught/`. Five
+further rounds have been run against the parser-backed mechanism since, each against a mechanism it
+had not yet modified:
 
-### Flow (5) - a checker reaching a name the analysis does not follow
+| Round | Escapes | What it found |
+| --- | --- | --- |
+| nineteen | 5 / 20 | parameter defaults and static container writers; `[files].flat()` as a false liveness proof; a length-gated recursion |
+| twenty | 2 / 20 | `.at(0)` as a presence shape; an asserting `sort` comparator |
+| twenty-one | 1 / 20 | a bare `switch (files.length)` whose empty case is the pass |
+| twenty-two | 4 / 20 | an asserting callback inside `some`/`find`/`reduceRight`; an iterator handle advanced outside the loop test |
+| twenty-three | 4 / 20 | a string-keyed method call; a detached method; an index destructure through an object pattern; a getter-returned derivation |
+| **twenty-four** | **0 / 20** | **nothing** |
 
-| Specimen | The hop |
+Every specimen of all six rounds is in `caught/`, whether it escaped or not — a round is measured by
+what it found, and a shape that never escaped is the evidence that it did not.
+
+**An empty directory is not a claim that no vacuous shape exists.** It says that no *known* one does,
+which is a much smaller statement and is the only one this corpus can support. The residue of every
+round is in `artifacts/evidence/`; what a fresh round finds is the measurement that matters, and
+`KNOWN_ESCAPES` being empty is a starting position for the next one rather than a result.
+
+The test that reads this directory asserts the empty case **explicitly** rather than by iterating
+nothing. That is not fastidiousness: a list-comparison over an empty corpus passes while examining
+no specimen, which is precisely the defect ST-16 exists to reject, and it would be reaching it in
+ST-16's own residue check.
+
+## What round nineteen closed, and how
+
+All fourteen at once, by **parsing the source instead of matching it** (ADR 0010). They had been
+recorded as three separate faults across three grammars, and the parse tree collapsed the three:
+
+| Group | Specimens | What the tree did |
+| --- | --- | --- |
+| Subject grammar | `paren-subject`, `comma-subject`, `nested-call-subject`, `await-subject`, `await-member-subject` | Nothing was written. Acorn does not produce a `ParenthesizedExpression` without `preserveParens`; a `SequenceExpression`'s value is its last expression; `await` is one `.argument` away; nesting nests |
+| Flow | `mutate-set-add`, `mutate-push`, `computed-key-assign`, `destructuring-assign`, `factory-returns-object` | Five spellings became one question — does this expression carry a checker, and which name does it reach — asked of a node rather than a substring. A computed key and a named one differ only in the *last* segment, and the analysis now binds the **root** |
+| Consumption grammar | `reflect-apply`, `array-from-mapper`, `borrowed-every` | A receiver is a receiver wherever the subject was written: in receiver position, as the first argument of `.call`, or as the second of `Reflect.apply` |
+| False proof of liveness | `symbol-iterator` | Not a grammar fault, and closed on its own terms: an **array** literal's members are its elements, an **object** literal's are not, because `Symbol.iterator` decides what a `for-of` yields. `Object.entries({ a: 1 })` is still a proof, because there the members *are* what is yielded. The two cases differ in the tree and only in the tree |
+
+`symbol-iterator` and `await-subject` had been recorded as deliberately out of scope for the flow
+work, each needing its own mechanism. They were resolved by the bounded semantics of reading a tree,
+not by a rule aimed at either of them.
+
+## What left this directory earlier
+
+**Five specimens closed by round thirteen**, all in `caught/` as regression tests:
+
+| Specimen | Closed by |
 | --- | --- |
-| `mutate-set-add.mjs` | `s.add(chk)` - a MUTATION, and this analysis follows bindings; `s` was bound once, empty |
-| `mutate-push.mjs` | `cs.push(chk)` - the same |
-| `computed-key-assign.mjs` | `reg["c"] = chk` - a subscript has no segment to bind |
-| `destructuring-assign.mjs` | `[a, b] = [b, a]` - a destructuring assignment with no declaration keyword |
-| `factory-returns-object.mjs` | `mk()` hands back a CONTAINER of a checker, not a checker |
+| `destructured-helper.mjs` | pattern names bound to the extent of the initialiser they came out of |
+| `factory-wrapper.mjs` | a flow edge for a call whose callee hands back a function |
+| `foreach-byref.mjs` | a bare-reference argument read as the call `forEach` is about to make |
+| `object-values.mjs` | crediting every containing declaration, and loop variables bound from expressions |
+| `optional-subject.mjs` | admitting `?.` in the subject grammar, as six other rules already did |
 
-### Subject grammar (4) - the loop is never seen as a consumption
+The first four were one fault: attribution held a NAME, and a function is a VALUE that flows.
 
-| Specimen | The subject |
-| --- | --- |
-| `paren-subject.mjs` | `for (const f of (files))` |
-| `comma-subject.mjs` | `for (const f of (0, files))` |
-| `nested-call-subject.mjs` | `Array.from(new Set(files))` - two calls deep |
-| `await-subject.mjs`, `await-member-subject.mjs` | `await load()`, `await o.load()` |
+`foreign-assert.mjs` was the residue after round two - a verdict written with a foreign assertion
+library. It is in `../unsupported/`, because the mechanism **rejects the file** rather than reading
+the shape. That is deliberately a weaker claim than catching it, and the tests keep the two apart.
 
-### Consumption grammar (3) - the iteration is real but unrecognised
-
-`reflect-apply.mjs` (`Reflect.apply`), `array-from-mapper.mjs` (`Array.from(files, chk)`),
-`borrowed-every.mjs` (`assert.ok(Array.prototype.every.call(files, ok1))`).
-
-### One false proof of liveness
-
-`symbol-iterator.mjs` is **not the fault it was filed as.** Its consumption *is* found and its subject
-*is* `box`; the loop asserts directly. It escapes because `staticallyNonEmpty` counts an object
-literal's own members as proof - sound for an array literal, unsound for an object whose
-`Symbol.iterator` yields from elsewhere. Closing it changes what counts as evidence of liveness, and
-`Object.entries({ ... })` is a legitimate case where the member count *is* the proof.
-
-## What this list is now telling you
-
-`paren-subject.mjs` is the one to read first. `for (const f of (files))` is ordinary JavaScript that a
-parser handles for nothing and a regular expression cannot see. Rounds two, eleven, twelve and
-fourteen each had a dominant fault closed by inverting a default; round eighteen has none, and the
-residue is spread evenly across all three grammars this scanner has.
-
-Extending three grammars in step is not a smaller job than parsing the source, and it does not
-converge. That is a scope question, recorded here rather than answered.
+`ternary.mjs` and `join-empty.mjs` were the first round's residue and are in `caught/`.
 
 ## Every round is measured against two mechanisms
 
@@ -67,30 +85,8 @@ So a moving measurement can be told apart from a widening gap:
 | fourteen | 11 / 20 | 0 / 20 after round fifteen |
 | sixteen | 5 / 20 | 3 / 20, then 0 after round seventeen |
 | eighteen | 15 / 20 | 12 / 20 |
+| nineteen–twenty-three | — | 5, 2, 1, 4, 4 / 20 |
+| twenty-four | — | **0 / 20** |
 
-Nothing caught before escapes now, in any round.
-
-## What left this directory
-
-**Five specimens closed by round thirteen**, all now in `caught/` as regression tests:
-
-| Specimen | Closed by |
-| --- | --- |
-| `destructured-helper.mjs` | pattern names bound to the extent of the initialiser they came out of |
-| `factory-wrapper.mjs` | a flow edge for a call whose callee hands back a function |
-| `foreach-byref.mjs` | a bare-reference argument read as the call `forEach` is about to make |
-| `object-values.mjs` | crediting every containing declaration, and loop variables bound from expressions |
-| `optional-subject.mjs` | admitting `?.` in the subject grammar, as six other rules already did |
-
-The first four were one fault: attribution held a NAME, and a function is a VALUE that flows. They
-were closed by following the value rather than by adding a binder form per hop - the same inversion
-this mechanism has now needed three times, at three different levels.
-
-`foreign-assert.mjs` was the residue after round two - a verdict written with a foreign assertion
-library. It is in `../unsupported/`, because the mechanism **rejects the file** rather than reading
-the shape. That is deliberately a weaker claim than catching it, and the tests keep the two apart.
-
-`ternary.mjs` and `join-empty.mjs` were the first round's residue and are in `caught/`.
-
-An empty directory here would not be a claim that no vacuous shape exists - only that no *known* one
-does. The record of what has actually been attacked is in `artifacts/evidence/`.
+Nothing caught before escapes now, in any round. The whole `caught/` corpus — 343 specimens — was
+re-run after every change made during rounds nineteen to twenty-four.

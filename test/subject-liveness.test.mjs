@@ -34,7 +34,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { stripComments } from "../test-support/source-scan.mjs";
-import { vacuousSubjects, rootSubject, blockAt, receiverBefore } from "../test-support/subject-liveness.mjs";
+import { vacuousSubjects, consumptions, rootSubject, receiverBefore, Unparseable } from "../test-support/subject-liveness.mjs";
 import { unsupportedReasons, verdictReachingImports } from "../test-support/verdict-language.mjs";
 import { testFiles } from "../scripts/test-surface.mjs";
 
@@ -72,11 +72,21 @@ const load = (spec, fromPath) => {
 const offencesIn = (file) => {
   const mod = moduleAt(file);
   const { names, unresolved } = verdictReachingImports(mod, { load });
-  return [
+  const out = [
     ...unsupportedReasons(mod.raw, mod.src).map((r) => `UNSUPPORTED ${r}`),
     ...unresolved.map((r) => `UNSUPPORTED ${r}`),
-    ...vacuousSubjects(mod.src, names).map((v) => `VACUOUS ${v}`),
   ];
+  // A file the parser cannot read is a file whose verdicts cannot be vouched for. It is an
+  // OFFENDER, never a skip: returning nothing here would make "analysed and found clean" and
+  // "never analysed" the same answer, which is the conflation ST-16 exists to refuse. The
+  // mechanism throws rather than returning empty precisely so this cannot be forgotten.
+  try {
+    out.push(...vacuousSubjects(mod.src, names).map((v) => `VACUOUS ${v}`));
+  } catch (err) {
+    if (!(err instanceof Unparseable)) throw err;
+    out.push(`UNSUPPORTED ${err.message}`);
+  }
+  return out;
 };
 
 /**
@@ -119,67 +129,58 @@ const ADMITTED_ASSERTIONS = [
  * liveness, and `Object.entries({ ... })` is a legitimate case where the member count IS the proof.
  * Separating the two is its own work with its own falsifier, not a line in this change.
  *
- * ROUND FIFTEEN closed round fourteen's seven aliasing shapes, and they are now in `caught/`. It did
- * it by inverting the flow question rather than by adding an edge per hop: an expression CARRIES a
- * checker unless every mention of a carrier is a call whose result is data. The set of ways a value
- * can travel is open; the set of ways it stops is closed and has one member.
- *
- * `await-subject.mjs` remains, and like `symbol-iterator.mjs` it is deliberately out of scope for the
- * flow work: the subject grammar does not admit `await`, so the loop is never a consumption at all.
- * Both are recorded as their own faults rather than folded into the analysis that does not cover them.
- *
- * ROUND SIXTEEN ran twenty new shapes against what round fifteen left behind and found three. ROUND
- * SEVENTEEN closed all three, as three separate bounded faults rather than one:
- *
- *   `member-assign.mjs`   flow — member assignment now binds, attributing its LAST SEGMENT
- *   `proto-call.mjs`      consumption grammar — `call`/`apply` move the subject into the arguments
- *   `concat-literal.mjs`  subject grammar — a subject may begin with an array-literal receiver
- *
- * TWO REMAIN, both deliberately out of scope for the flow work and each its own mechanism:
- * `await-subject.mjs` is subject grammar, and `symbol-iterator.mjs` is a false PROOF OF LIVENESS —
- * `staticallyNonEmpty` counting an object literal's own members, which is sound for an array literal
- * and unsound for an object whose `Symbol.iterator` yields from elsewhere. Closing that one changes
- * what counts as evidence, and `Object.entries({ ... })` is a legitimate case where the member count
- * IS the proof, so it needs its own falsifier rather than a line in this change.
+ * ROUND FIFTEEN closed round fourteen's seven aliasing shapes by inverting the flow question rather
+ * than adding an edge per hop. ROUND SEVENTEEN closed three more as three separate bounded faults.
  *
  * ROUND EIGHTEEN aimed twenty shapes at the frontier round seventeen had just moved, against a
- * mechanism it did not modify, and found **twelve**. It escaped 15 against the previous mechanism, so
- * nothing regressed — but it is the highest count any round has produced, and the reason matters more
- * than the number.
- *
- * **THE RESIDUE HAS CHANGED CHARACTER.** Round twelve's six escapes were one fault. These twelve are
- * spread evenly across every grammar this scanner has:
+ * mechanism it did not modify, and found **twelve** — the highest count any round produced. The
+ * number was not the finding. **The residue had changed character.** Round twelve's six escapes were
+ * one fault; these twelve were spread evenly across every grammar the scanner had:
  *
  *   FLOW (5)         a checker reaching a name through container MUTATION (`s.add`, `cs.push`), a
  *                    computed key, a destructuring assignment, or a factory returning a container
  *   SUBJECT (4)      `(files)`, `(0, files)`, `Array.from(new Set(files))`, `await o.load()`
  *   CONSUMPTION (3)  `Reflect.apply`, `Array.from(files, chk)`, a borrowed `every`
  *
- * `paren-subject.mjs` is the one to look at first: `for (const f of (files))` is ordinary JavaScript
- * that a parser handles for nothing and a regex subject grammar cannot see at all. The limit reached
- * here is no longer a missing rule — it is that this mechanism reads source with regular expressions.
- * Extending three grammars in step is not a smaller job than parsing, and it does not converge.
+ * `for (const f of (files))` is ordinary JavaScript that a parser handles for nothing and a regular
+ * expression cannot express. Extending three grammars in step is not a smaller job than parsing, and
+ * it does not converge.
  *
- * **Fourteen escapes.** Every round is run against the mechanism it attacks AND the one before it, so
- * a moving measurement can be told from a widening gap: round fourteen escaped 11 then 0, round
- * sixteen 5 then 3 then 0, round eighteen 15 then 12. Nothing caught before escapes now.
+ * ROUND NINETEEN STOPPED EXTENDING THEM. The mechanism now reads a parse tree (ADR 0010, acorn
+ * 8.18.0 pinned exactly). All fourteen recorded escapes are closed and sit in `caught/` as
+ * regression tests. Three of the four groups were closed by the tree rather than by rules written
+ * for them — five subject shapes are simply not distinctions acorn preserves, five flow spellings
+ * became one question asked of a node, and a receiver is a receiver wherever the subject was
+ * written. The fourth, `symbol-iterator.mjs`, was a false PROOF of liveness rather than a grammar
+ * fault, and closed on its own terms: an ARRAY literal's members are its elements and an OBJECT
+ * literal's are not, because `Symbol.iterator` decides what a `for-of` yields. `Object.entries({ a:
+ * 1 })` remains a proof, because there the members are exactly what is yielded. That distinction
+ * exists in the tree and nowhere else, which is why it could not be drawn before.
+ *
+ * `symbol-iterator.mjs` and `await-subject.mjs` had been recorded as deliberately out of scope for
+ * the flow work, each needing its own mechanism. Both were resolved by the bounded semantics of
+ * reading a tree, not by a rule aimed at either.
+ *
+ * WHAT WAS NOT REPLACED. The ASSERTION grammar — `assertion-shape.mjs` and `verdict-liveness.mjs` —
+ * is unchanged. It reads a closed vocabulary of ten forms, checked against this surface in both
+ * directions by the test below, and is built on the inversion that makes an unrecognised form fail
+ * closed. That is the structure the three replaced grammars lacked.
+ *
+ * ROUNDS TWENTY TO TWENTY-FOUR ran a further hundred shapes, each against a mechanism it had not yet
+ * modified: 2, 1, 4, 4, and then **zero**. Round twenty-four is the closing measurement — twenty
+ * fresh shapes, nothing touched between writing them and running them, no escapes. Three faults in
+ * those rounds are worth separating because a parser does not fix them by itself: `[files].flat()`
+ * is `symbol-iterator`'s fault reached through flattening; the `some`/`find` exemption was about the
+ * RESULT and had been applied to the ITERATION; and a string key is unreadable in blanked source,
+ * where failing closed means reading it as one that could be `forEach`.
+ *
+ * **KNOWN_ESCAPES IS EMPTY, AND THAT IS NOT A CLAIM THAT NONE EXISTS.** It says no *known* escape
+ * does. The shape space is not closed and no number of rounds can show that it is; an empty list is
+ * a starting position for the next round rather than a result. The test below asserts the empty case
+ * explicitly rather than by filtering nothing, because a comparison over an empty corpus passes
+ * while examining no specimen — ST-16's own defect, reached inside ST-16's residue check.
  */
-const KNOWN_ESCAPES = [
-  "array-from-mapper.mjs",
-  "await-member-subject.mjs",
-  "await-subject.mjs",
-  "borrowed-every.mjs",
-  "comma-subject.mjs",
-  "computed-key-assign.mjs",
-  "destructuring-assign.mjs",
-  "factory-returns-object.mjs",
-  "mutate-push.mjs",
-  "mutate-set-add.mjs",
-  "nested-call-subject.mjs",
-  "paren-subject.mjs",
-  "reflect-apply.mjs",
-  "symbol-iterator.mjs",
-];
+const KNOWN_ESCAPES = [];
 
 test("subject · every consumed collection in the surface was proven to have elements", () => {
   const files = testFiles(ROOT);
@@ -292,11 +293,39 @@ test("subject · a verdict form outside the recognised language is rejected, not
 });
 
 test("subject · the mechanism fires on every shape it claims to catch", () => {
+  // Checked with the WHOLE mechanism, because two of these specimens are rejected rather than read.
+  // `r2-join-newline.mjs` contains a literal newline inside a string and is not valid JavaScript at
+  // all: no parser accepts it, so it is UNSUPPORTED. It stays here because it is still caught — and
+  // the reason is now the honest one. Reporting it as a liveness catch would be claiming an analysis
+  // that never ran.
+  const specimens = fixtures("caught");
+  assert.ok(specimens.length > 0, "the caught corpus is empty, so this test would examine nothing");
   const missed = [];
-  for (const [name, file] of fixtures("caught")) {
-    if (vacuousSubjects(scan(file)).length === 0) missed.push(name);
+  for (const [name, file] of specimens) {
+    if (offencesIn(file).length === 0) missed.push(name);
   }
   assert.deepEqual(missed, [], "a specimen the mechanism claims to catch escaped it");
+});
+
+test("subject · a file that cannot be parsed is rejected, not silently analysed as clean", () => {
+  // The falsifier for the fail-closed rule above. `vacuousSubjects` must THROW rather than return
+  // an empty list, because an empty list from an analysis that never ran is indistinguishable from
+  // an empty list from one that found nothing — the exact conflation this story exists to refuse.
+  // A literal newline inside a string literal. Written with `String.fromCharCode(10)` rather than
+  // as an escape because an escape would be VALID JavaScript, and this specimen has to be invalid
+  // — it is `fixtures/subject-liveness/caught/r2-join-newline.mjs` reduced to its one bad byte.
+  const LF = String.fromCharCode(10);
+  const broken = `const files = discover(); assert.equal(files.filter(bad).join("${LF}"), "");`;
+  assert.throws(
+    () => vacuousSubjects(broken),
+    Unparseable,
+    "an unparseable file was analysed rather than rejected, so its verdicts would be vouched for by " +
+      "an analysis that never read them",
+  );
+  // ...and the same input, made parseable, is still caught by the liveness rules. Without this the
+  // test above would pass on a mechanism that simply threw on everything.
+  const fixed = 'const files = discover(); assert.equal(files.filter(bad).join(""), "");';
+  assert.ok(vacuousSubjects(fixed).length > 0, "the parseable form of the same shape was not caught");
 });
 
 test("subject · the shapes it does not catch are recorded, not forgotten", () => {
@@ -315,6 +344,16 @@ test("subject · the shapes it does not catch are recorded, not forgotten", () =
       "closing one means moving the specimen into caught/ and removing it from the list. Either way " +
       "the change belongs in ST-16's record.",
   );
+
+  // THE EMPTY CASE, ASSERTED RATHER THAN ITERATED. Round nineteen closed all fourteen, so the loop
+  // below now examines nothing — and a loop that examines nothing passes, which is the whole defect
+  // this story exists to reject. Reaching it HERE, in ST-16's own residue check, would be the
+  // mechanism failing at the one thing it is for. So the branch is taken deliberately and says what
+  // it means: no KNOWN escape remains, which is not the same claim as no escape existing.
+  if (specimens.length === 0) {
+    assert.deepEqual(KNOWN_ESCAPES, [], "the corpus is empty but the record still lists escapes");
+    return;
+  }
 
   // Checked with the WHOLE mechanism — liveness rules and language rejection together — because
   // either one catching a specimen means the gap has closed and the record must move with it.
@@ -380,10 +419,26 @@ test("subject · the mechanism's own liveness is asserted, not assumed", () => {
 });
 
 test("subject · the mechanism's own parts are not vacuous", () => {
+  // `blockAt` is gone from this list because it is gone from the mechanism: slicing a block out of
+  // source text is a thing only a text scanner needs to do. What replaced it is the tree, and the
+  // four cases below are the four jobs the tree now does — unwrapping a subject, stopping where
+  // unwrapping would destroy the evidence, and finding a consumption at all.
   assert.equal(rootSubject("files.map((f) => f.x).filter(Boolean)"), "files");
   assert.equal(rootSubject("Object.entries(TABLE)"), "Object.entries(TABLE)");
-  assert.equal(blockAt("for (const x of y) go(x); after();", 18).trim(), "go(x);");
-  assert.equal(blockAt("if (a) { b(); }", 6).trim(), "b();");
+  // The four subject shapes round eighteen escaped through, each now one unwrapping.
+  assert.equal(rootSubject("(files)"), "files");
+  assert.equal(rootSubject("(0, files)"), "files");
+  assert.equal(rootSubject("await load()"), "load()");
+  assert.equal(rootSubject("Array.from(new Set(files))"), "files");
+
+  // A consumption is found, and it names the collection rather than the last alias of it.
+  const found = consumptions("const xs = discover(); for (const x of (xs)) assert.ok(x);");
+  assert.deepEqual(
+    found.map((c) => `${c.subject} (${c.via})`),
+    ["xs (for-of)"],
+    "the parenthesised subject that defeated the previous mechanism was not read as a consumption",
+  );
+
   const chain = "assert.ok(files.map((f) => g(f)).every(Boolean))";
   assert.equal(receiverBefore(chain, chain.indexOf(".every(")), "files.map((f) => g(f))");
 });
