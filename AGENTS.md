@@ -85,7 +85,7 @@ substitute for reading the standards it points at.
 | --- | --- |
 | Standards repository | `<path or URL>` |
 | Working branch | `<branch>` |
-| Install | **none — this repository has no dependencies, and `ci/checks.sh` asserts it** |
+| Install | **`npm ci`** — one pinned dependency (acorn, for ST-16's parser). `ci/checks.sh` asserts the install is exact-pinned, hash-locked and reproducible (ADR 0010) |
 | Build | none — plain ESM, run directly by Node |
 | Test | `npm test` (add `ENFORCER_REQUIRE_ORACLE=1` and `ENFORCER_ORACLE_REPO=<checkout>` to run the authoritative integration surface; `ENFORCER_REQUIRE_SYMLINKS=1` to assert the link-containment cases ran rather than skipped — set by CI, and expected to fail on a Windows workstation without the privilege) |
 | Full CI | `.\scripts\ci.ps1` / `./scripts/ci.sh` — the complete pipeline, in Docker |

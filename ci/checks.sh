@@ -172,25 +172,24 @@ say "workdir $(pwd)"
 done_stage
 
 # --- dependency posture -----------------------------------------------------------------------
-# This repository has no dependencies and no install step, and that is a decision rather than a
-# stage nobody got round to writing (.github/workflows/ci.yml: "An install is a second thing that
-# can differ between the machine that reviewed a release and the machine that runs it").
+# This stage used to be `no-install-invariant`, and it asserted that this repository had no
+# dependencies at all. That was the stronger guarantee, and it is gone: ST-16 needed a real
+# JavaScript parser, because eighteen adversarial rounds established that extending a regex
+# recognizer to cover ordinary JavaScript does not converge.
 #
-# A decision nothing checks is a decision that decays. So: asserted, not assumed. If this
-# repository ever legitimately takes a dependency, this check is the place that says so out loud.
-stage "no-install-invariant"
-if [ -d node_modules ]; then
-  say "FAIL  node_modules/ is present in the commit under test."
-  FAILED_STAGE="no-install-invariant"; exit 1
-fi
-if node -e 'const p=require(process.cwd()+"/package.json");process.exit((p.dependencies&&Object.keys(p.dependencies).length)||(p.devDependencies&&Object.keys(p.devDependencies).length)?1:0)'; then
-  say "package.json declares no dependencies and no devDependencies"
-  say "node_modules/ absent — nothing to install, nothing that could differ"
-else
-  say "FAIL  package.json now declares dependencies, so the no-install invariant no longer holds."
-  say "      That may be correct. If it is, add the install step here and to the Dockerfile,"
-  say "      and record the decision — do not delete this check."
-  FAILED_STAGE="no-install-invariant"; exit 1
+# The old check's own failure message said what to do about exactly this: "add the install step
+# here and to the Dockerfile, and record the decision — do not delete this check." So it was
+# replaced rather than removed, the install steps exist in both places, and ADR 0010 records the
+# decision and is honest that the replacement is weaker.
+#
+# What is asserted now: every dependency is pinned to an exact version, the lockfile is committed
+# and hash-pinned, the lockfile agrees with package.json, and node_modules/ is installed rather
+# than committed. See ci/dependency-posture.mjs, which says why each of those is load-bearing.
+stage "pinned-install-invariant"
+if ! node ci/dependency-posture.mjs "$ROOT"; then
+  say ""
+  say "FAIL  the install is not reproducible from the commit under test."
+  FAILED_STAGE="pinned-install-invariant"; exit 1
 fi
 done_stage
 

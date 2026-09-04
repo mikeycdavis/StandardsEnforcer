@@ -13,5 +13,8 @@
     "node": ">=18"
   },
   "license": "UNLICENSED",
-  "private": true
+  "private": true,
+  "dependencies": {
+    "acorn": "8.18.0"
+  }
 }

@@ -21,7 +21,7 @@ The one invariant that shapes every module:
 | Layer | Technology |
 |---|---|
 | Language / runtime | JavaScript, ES modules (`.mjs`), Node **≥ 18** (`engines` in `package.json`); CI runs Node 20 |
-| Dependencies | **None.** No `dependencies`, no `devDependencies`, no lockfile, no install step — deliberate: an install is a second thing that can differ between the machine that reviewed a release and the machine that runs it |
+| Dependencies | **One:** `acorn` 8.18.0, pinned exactly, with a committed integrity-locked `package-lock.json` and `npm ci` in both CI environments. This repository had none until [ADR 0010](../artifacts/adr/0010-the-parser-dependency-and-what-it-cost.md); ST-16 needed a real JavaScript parser. The replacement guarantee — a reproducible install — is **weaker** than the one it replaced (no install can differ if there is no install), and the ADR says so rather than claiming equivalence |
 | Test runner | `node --test` (built-in), invoked as `npm test`; 33 test files, ~8,579 lines, 382 cases |
 | Schema validation | `scripts/contracts/jsonschema.mjs` — a hand-written JSON Schema 2020-12 subset evaluator, adopted from StandardsOrchestrator, that **throws on any keyword it cannot enforce** |
 | Platform access | The `gh` CLI, spawned as a subprocess (`scripts/platform/github.mjs`). No HTTP client, no stored credentials |
@@ -108,8 +108,9 @@ the M4 experiment exercised, and that evidence is unaffected by the retirement.
 
 **Host:** GitHub Actions, `ubuntu-latest`.
 **Entry point:** [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)
-**Purpose:** Runs `npm test` on push to `main` and on every pull request. There is no install step,
-for the same reason the runtime has no dependencies.
+**Purpose:** Runs `npm ci` and then `npm test` on push to `main` and on every pull request. The
+install step exists as of [ADR 0010](../artifacts/adr/0010-the-parser-dependency-and-what-it-cost.md);
+it is `npm ci` rather than `npm install` so the lockfile is applied exactly rather than rewritten.
 
 ---
 
@@ -512,8 +513,8 @@ A pull request opened against a governed repository, end to end:
    `acme/standards-ci/.github/workflows/standards-gate.yml@<40-hex-sha>`. The reference is pinned, so
    whoever can push to that repository's default branch cannot silently change what runs.
 3. `standards-gate.yml` checks out four trees — `target/`, `standards/` (at
-   `inputs.standards-sha`), `enforcer/` (at `inputs.enforcer-sha`), and `scope/` — installs Node 20
-   with no install step, and runs `node enforcer/scripts/enforce.mjs` with `--repo-id=github:${{
+   `inputs.standards-sha`), `enforcer/` (at `inputs.enforcer-sha`), and `scope/` — installs Node 20,
+   runs `npm ci` inside `enforcer/`, and runs `node enforcer/scripts/enforce.mjs` with `--repo-id=github:${{
    github.repository_id }}` (the numeric id, **not** the name — a name can be renamed, transferred,
    or freed and claimed by somebody else).
 4. `enforce()` calls `resolveIdentity()` (`scripts/identity.mjs:126`). `git rev-list -n 1 <tag>` must
@@ -619,8 +620,11 @@ A pull request opened against a governed repository, end to end:
   context beside it and never inside it, because a summary is a second definition.
 - **The schema is executed, not described.** `jsonschema.mjs` runs the shipped schema and throws on
   any keyword it cannot enforce, so the schema and the validator cannot drift.
-- **Zero dependencies, no install step.** Stated in the CI workflow itself: "an install is a second
-  thing that can differ between the machine that reviewed a release and the machine that runs it."
+- **One dependency, and a pinned install.** The CI workflow used to state the stronger property:
+  "an install is a second thing that can differ between the machine that reviewed a release and the
+  machine that runs it." ADR 0010 gave that up for ST-16's parser and replaced it with a
+  reproducible install — exact pins, committed lockfile, integrity hashes, `npm ci`. The ADR records
+  that this is weaker rather than describing it as equivalent.
 - **Comments carry the *why*, at length.** Nearly every module opens with a multi-paragraph header
   explaining what went wrong somewhere else that forced this design. Treat those headers as part of
   the specification; several encode findings (the M4 Actions-app result, the MathematicsStandards
