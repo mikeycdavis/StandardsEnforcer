@@ -82,7 +82,7 @@ GitHub workflow run that file, so they cannot drift into disagreeing about what 
 | Check | What it establishes |
 | --- | --- |
 | `environment` | Records the Node, npm, git and user identity that produced the result. Not a gate — the evidence that makes the rest legible. |
-| `no-install-invariant` | `package.json` declares no dependencies and no `node_modules/` is present. This repository has no install step *by decision* ("an install is a second thing that can differ between the machine that reviewed a release and the machine that runs it"), and a decision nothing checks is a decision that decays. |
+| `pinned-install-invariant` | Every declared dependency is pinned to an exact version, `package-lock.json` is committed and carries an integrity hash for every entry, the lockfile agrees with `package.json`, and `node_modules/` is installed rather than committed. Until [ADR 0010](../artifacts/adr/0010-the-parser-dependency-and-what-it-cost.md) this stage was `no-install-invariant` and asserted that there were no dependencies at all; that was stronger, and the ADR records what was given up. A decision nothing checks is a decision that decays, so the replacement is asserted (`ci/dependency-posture.mjs`) rather than assumed. |
 | `oracle-readiness` | The mounted oracle is a git repository and resolves every release the suite pins, each via `rev-list -n 1` so an annotated tag dereferences to its commit. This is the dependency health check — a real resolution, never a sleep. |
 | `test-suite` | `npm test` verbatim, with `ENFORCER_REQUIRE_ORACLE=1` and `ENFORCER_REQUIRE_SYMLINKS=1`. The repository's own authoritative command, not a reconstruction of it. |
 
@@ -101,7 +101,7 @@ statements and only one of them is true here:
 
 | Category | Status |
 | --- | --- |
-| dependency restore / install | **None, by decision.** Asserted by `no-install-invariant`. |
+| dependency restore / install | **`npm ci`**, one exactly-pinned dependency. Asserted by `pinned-install-invariant`: exact pins, committed integrity-locked lockfile, lockfile/manifest agreement. There were none at all until [ADR 0010](../artifacts/adr/0010-the-parser-dependency-and-what-it-cost.md), which records that the replacement guarantee is weaker than the absence it replaced. |
 | formatting, linting, static analysis | None configured. No ESLint, Prettier, editorconfig or type checker exists in the repository. |
 | compilation / build | None. Plain ESM run directly by Node; there is no build step to reproduce. |
 | unit + integration tests | The single `node --test` suite. Integration coverage is the oracle-dependent portion of it. |
@@ -246,7 +246,7 @@ test counts and a completion timestamp — and writes `artifacts/local-ci/latest
   "startedAt": "2026-08-16T15:26:11Z",
   "completedAt": "2026-08-16T15:28:45Z",
   "tests": { "passed": 204, "failed": 0, "skipped": 0 },
-  "checks": ["environment", "no-install-invariant", "oracle-readiness", "test-suite"]
+  "checks": ["environment", "pinned-install-invariant", "oracle-readiness", "test-suite"]
 }
 ```
 
@@ -369,7 +369,9 @@ The convention is that `ci/checks.sh` is the only definition of the check list, 
 
 - `docs/*.svg` are generated from `docs/*.mmd` and nothing verifies they are in step. A
   `generated-artifacts` stage would catch a hand-edited SVG, at the cost of putting
-  `@mermaid-js/mermaid-cli` into the image — which would mean an install step, and the
-  `no-install-invariant` check would have to learn about it. Deliberately not done here.
+  `@mermaid-js/mermaid-cli` into the image. That objection was once decisive because it would have
+  broken the no-install invariant; since [ADR 0010](../artifacts/adr/0010-the-parser-dependency-and-what-it-cost.md)
+  the cost is smaller — it is one more pinned dependency rather than the loss of a guarantee. Still
+  deliberately not done here, but on weight now rather than on principle.
 - No self-hosted runner exists. `.github/workflows/ci.yml` carries the exact job that would use
   one, commented, so adding it later is not a redesign.

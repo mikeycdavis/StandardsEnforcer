@@ -30,9 +30,30 @@ WORKDIR /work
 # mechanical half of the exact-commit invariant — the other half is the SHA re-check in
 # scripts/submit-pr.*.
 #
-# There is deliberately no `npm install`. This repository has no dependencies, and the absence is
-# an invariant rather than an accident (see ci/checks.sh, which asserts it rather than trusting it).
 COPY . /work
+
+# THE INSTALL, AND THE TWO PHASES THIS FILE MUST NOT CONFLATE. Until ADR 0010 there was deliberately
+# no install here: this repository had no dependencies, and the absence was an invariant rather than
+# an accident. ST-16 needed a real JavaScript parser, so there is now exactly one dependency and an
+# install step to match — see ci/dependency-posture.mjs, which asserts the install is pinned and
+# reproducible rather than trusting that it is.
+#
+# `npm ci`, never `npm install`: it installs the committed lockfile exactly, and refuses outright if
+# the lockfile and package.json disagree. `npm install` would silently rewrite the lockfile inside
+# the image, so the image would stop being the commit under test at the moment it stopped agreeing
+# with it.
+#
+# BUILD TIME HAS A NETWORK. RUN TIME DOES NOT. The comment above about the container having no
+# network is about the *running* container (compose.ci.yml sets `network_mode: none`, and
+# scripts/submit-pr.* pass `--network none`), and that is still exactly true. This line runs during
+# `docker build`, which does reach the registry. The lockfile's integrity hashes are what make that
+# fetch reproducible rather than merely repeated: a registry serving different bytes for acorn
+# 8.18.0 fails the install instead of silently changing what was tested.
+#
+# The source arrives from `git archive` of the exact commit, which contains tracked files only, so a
+# developer's local node_modules/ cannot leak in through the COPY above. That is why this needs no
+# .dockerignore, and why the exact-commit invariant survives adding an install.
+RUN npm ci
 
 RUN chmod +x /work/ci/checks.sh
 

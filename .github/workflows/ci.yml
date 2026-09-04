@@ -73,10 +73,21 @@ jobs:
           # runs. The checkout still authenticates; it simply leaves nothing behind.
           persist-credentials: false
 
-      # No install step. An install is a second thing that can differ between the machine that
-      # reviewed a release and the machine that runs it — and ci/checks.sh now asserts that
-      # absence rather than leaving it as something nobody happened to add.
+      # THE INSTALL. This step did not exist until ADR 0010, and its absence used to be the point:
+      # an install is a second thing that can differ between the machine that reviewed a release
+      # and the machine that runs it. ST-16 needed a real JavaScript parser, so that guarantee is
+      # gone and this is the weaker one that replaces it — pinned rather than absent.
       #
+      # `npm ci`, never `npm install`. It installs the committed lockfile exactly and refuses if
+      # the lockfile and package.json disagree, so the two machines install the same bytes or
+      # neither does. `npm install` would resolve against the registry's present tense and rewrite
+      # the lockfile, which is the divergence this step exists to prevent.
+      #
+      # ci/checks.sh asserts the posture that makes this reproducible (exact pins, committed
+      # lockfile, integrity hashes) rather than trusting it — see ci/dependency-posture.mjs.
+      - name: Install pinned dependencies
+        run: npm ci
+
       # Invoked through `bash` so the run does not depend on the executable bit surviving a
       # checkout on every platform a contributor might commit from.
       - name: Run the authoritative check list
