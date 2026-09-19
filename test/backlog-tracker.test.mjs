@@ -29,6 +29,7 @@ import fs from "node:fs";
 
 import {
   ITEMS_DIR,
+  STATUS_SYMBOL,
   TRACKER_PATH,
   buildModel,
   checkTracker,
@@ -268,6 +269,24 @@ test("mutation · a hand-edited figure in the tracker is caught", () => {
   const derived = derive(buildModel(RECORDS));
   const ep06 = derived.tree.find((e) => e.id === "EP-06").text;
 
+  // The glyph corruption below flips a NOT_STARTED mark to COMPLETE, so it must be aimed at an
+  // entry that actually carries one. It used to take derived.tree.at(-1) and assume it did. That
+  // held only while ST-09 — the one item parented above the feature level — sorted last; the
+  // 2026-09-18 reparenting moved a COMPLETE item into that position and the substitution became a
+  // no-op. The test said so rather than passing, which is the property it exists to have, and the
+  // repair is to choose by the glyph instead of by position.
+  const glyphEntry = derived.tree.findLast((e) => e.text.includes(STATUS_SYMBOL.NOT_STARTED));
+  assert.ok(
+    glyphEntry,
+    "no tree entry carries a NOT_STARTED glyph, so the glyph corruption has nothing to aim at",
+  );
+  const glyphMutated = glyphEntry.text.replace(STATUS_SYMBOL.NOT_STARTED, STATUS_SYMBOL.COMPLETE);
+  assert.notEqual(
+    glyphMutated,
+    glyphEntry.text,
+    `the glyph corruption did not change ${glyphEntry.id}; it would be a no-op against the tracker`,
+  );
+
   for (const [label, corrupt] of [
     ["status count", (t) => t.replace(`| ○ Not started | ${derived.byStatus.NOT_STARTED} |`, "| ○ Not started | 99 |")],
     ["total", (t) => t.replace(`| **Total** | **${derived.total}** |`, "| **Total** | **99** |")],
@@ -275,7 +294,7 @@ test("mutation · a hand-edited figure in the tracker is caught", () => {
     ["type count", (t) => t.replace(`| \`ST-\` | ${derived.byType.story} |`, "| `ST-` | 99 |")],
     ["a progress bar", (t) => t.replace(derived.bar, derived.bar.replace("█", "░"))],
     ["a parent tuple", (t) => t.replace(ep06, ep06.replace(/_\(\d+\/(\d+)\)_/u, "_(99/$1)_"))],
-    ["a glyph in the tree", (t) => t.replace(derived.tree.at(-1).text, derived.tree.at(-1).text.replace("○", "●"))],
+    ["a glyph in the tree", (t) => t.replace(glyphEntry.text, glyphMutated)],
     ["a dropped in-flight entry", (t) => t.replace(derived.inFlight[0].text, "")],
   ]) {
     const corrupted = corrupt(TRACKER);
