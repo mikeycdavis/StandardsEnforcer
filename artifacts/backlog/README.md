@@ -23,11 +23,11 @@ derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/
 
 | Status | Items |
 | --- | ---: |
-| ○ Not started | 8 |
-| ◑ In progress | 6 |
+| ○ Not started | 9 |
+| ◑ In progress | 8 |
 | ◒ Blocked | 2 |
-| ● Complete | 21 |
-| **Total** | **37** |
+| ● Complete | 23 |
+| **Total** | **42** |
 
 ## The hierarchy
 
@@ -35,8 +35,8 @@ derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/
 | --- | --- | ---: | --- |
 | Theme | `TH-` | 1 | Which enduring area of value is this? |
 | Initiative | `IN-` | 1 | What outcome are we pursuing there? |
-| Epic | `EP-` | 6 | What large body of work delivers it? |
-| Feature | `FE-` | 16 | What shippable slice of that epic? |
+| Epic | `EP-` | 7 | What large body of work delivers it? |
+| Feature | `FE-` | 20 | What shippable slice of that epic? |
 | Story | `ST-` | 13 | What user-visible change, roughly one PR? |
 | Task | `TA-` | 0 | What technical step inside a story? |
 
@@ -51,8 +51,10 @@ derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/
 - ◑ [EP-01](./items/EP-01.md) — Authority transport — run a pack's own evaluator under a pinned identity
 - ◑ [EP-02](./items/EP-02.md) — The enforcement root — a gate the governed pull request cannot satisfy
 - ◑ [EP-06](./items/EP-06.md) — Self-assurance — this repository's own evidence must establish what it reports
+- ◑ [EP-07](./items/EP-07.md) — The machinery this repository is built and verified by
 - ◑ [FE-04](./items/FE-04.md) — M4 — the enforcement root against live GitHub
 - ◒ [FE-09](./items/FE-09.md) — Make BYPASS_USED reachable
+- ◑ [FE-22](./items/FE-22.md) — A guard must establish that it examined its subject
 - ◑ [IN-01](./items/IN-01.md) — Enforcement a governed repository cannot weaken
 - ◒ [ST-07](./items/ST-07.md) — Validate the required-workflows remedy against a real organisation ruleset
 - ◑ [TH-01](./items/TH-01.md) — Enforced standards compliance across the portfolio
@@ -92,12 +94,16 @@ _Nothing marked ready._
       - ○ **[FE-10](./items/FE-10.md)** Reviewer identity beyond a configured list
       - ○ **[FE-11](./items/FE-11.md)** Cross-pack dependency ordering
       - ● **[FE-12](./items/FE-12.md)** Scope dispositions keyed per pack, not hardcoded to machine-learning
-    - ◑ **[EP-06](./items/EP-06.md)** Self-assurance — this repository's own evidence must establish what it reports _(5/6)_
+    - ◑ **[EP-06](./items/EP-06.md)** Self-assurance — this repository's own evidence must establish what it reports _(4/5)_
       - ● **[FE-14](./items/FE-14.md)** A skipped oracle is not a passing integration
-      - ● **[ST-08](./items/ST-08.md)** Authoritative container CI must assert the symlink capability it depends on
-      - ● **[ST-10](./items/ST-10.md)** The backlog tracker claims to be derived, and no executable derivation exists
-      - ● **[ST-11](./items/ST-11.md)** A structural guard must fail when it cannot find what it guards
-      - ○ **[ST-12](./items/ST-12.md)** Audit every test that derives structure from source text, before deciding whether the tree needs normalising
-      - ● **[ST-13](./items/ST-13.md)** The authoritative suite must be this repository's tests, not everything mounted beneath it
-    - ○ **[ST-09](./items/ST-09.md)** scripts/ci.sh fails under Git Bash on Windows
-
+      - ◑ **[FE-22](./items/FE-22.md)** A guard must establish that it examined its subject _(2/3)_
+        - ● **[ST-08](./items/ST-08.md)** Authoritative container CI must assert the symlink capability it depends on
+        - ● **[ST-11](./items/ST-11.md)** A structural guard must fail when it cannot find what it guards
+        - ○ **[ST-12](./items/ST-12.md)** Audit every test that derives structure from source text, before deciding whether the tree needs normalising
+      - ● **[FE-23](./items/FE-23.md)** The backlog tracker is checkable against the items it claims to derive from _(1/1)_
+        - ● **[ST-10](./items/ST-10.md)** The backlog tracker claims to be derived, and no executable derivation exists
+    - ◑ **[EP-07](./items/EP-07.md)** The machinery this repository is built and verified by _(1/2)_
+      - ○ **[FE-24](./items/FE-24.md)** Both documented entry points start the authoritative pipeline on the platform this repository is developed on _(0/1)_
+        - ○ **[ST-09](./items/ST-09.md)** scripts/ci.sh fails under Git Bash on Windows
+      - ● **[FE-25](./items/FE-25.md)** The authoritative suite is enumerated by this repository, not discovered from the working directory _(1/1)_
+        - ● **[ST-13](./items/ST-13.md)** The authoritative suite must be this repository's tests, not everything mounted beneath it
