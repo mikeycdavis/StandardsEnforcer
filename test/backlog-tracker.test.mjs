@@ -29,6 +29,7 @@ import fs from "node:fs";
 
 import {
   ITEMS_DIR,
+  STATUS_SYMBOL,
   TRACKER_PATH,
   buildModel,
   checkTracker,
@@ -39,6 +40,14 @@ import {
 
 const RECORDS = readItems(ITEMS_DIR);
 const TRACKER = fs.readFileSync(TRACKER_PATH, "utf8");
+
+/** The epic a specimen hangs under, so a case can be aimed by ancestry instead of by a literal id. */
+function epicOf(id) {
+  for (let data = RECORDS.find((r) => r.data.id === id)?.data; data; data = RECORDS.find((r) => r.data.id === data.parent)?.data) {
+    if (data.type === "epic") return data.id;
+  }
+  throw new Error(`${id} has no epic ancestor`);
+}
 
 /** Apply a mutation to a private copy of the item records and check the real tracker against it. */
 function underMutation(mutate) {
@@ -169,13 +178,18 @@ test("mutation · the leaf count and the completion percentage are caught", () =
 });
 
 test("mutation · a parent progress tuple is caught even when every aggregate is unchanged", () => {
-  // The sharp case. One leaf completes under EP-05, one leaf un-completes under EP-06, so the
+  // The sharp case. One leaf completes, one leaf un-completes, under two different epics, so the
   // status counts, the leaf ratio, the progress bar, the theme row and the in-flight set are all
   // bit-identical. Only two tuples move. A checker that compares totals sees nothing here.
   //
   // Re-pointed when ST-08 closed. The specimens are chosen for their state, never for their
   // meaning: this needs one NOT_STARTED leaf and one COMPLETE leaf under *different* epics, and the
   // assertions below are what verify the choice still produces the invariance the case is about.
+  //
+  // Which epics those are is read from the items rather than written out here. ST-10 has now been
+  // reparented twice — EP-06 → FE-23 → FE-23 under EP-07 — and a literal id would have gone on
+  // naming an epic whose tuple no longer moves, which is the assumption the last repair removed
+  // from the glyph corruption.
   const { problems, kinds } = underMutation((_r, { item }) => {
     item("FE-11").status = "COMPLETE";
     item("FE-11").closed = "2026-08-16";
@@ -183,8 +197,11 @@ test("mutation · a parent progress tuple is caught even when every aggregate is
     delete item("ST-10").closed;
   });
   assert.deepEqual(problems, []);
-  assert.ok(kinds.includes("tree:EP-05"), `EP-05's tuple not caught: ${kinds}`);
-  assert.ok(kinds.includes("tree:EP-06"), `EP-06's tuple not caught: ${kinds}`);
+  assert.notEqual(epicOf("FE-11"), epicOf("ST-10"), "the two specimens must sit under different epics");
+  for (const id of ["FE-11", "ST-10"]) {
+    const epic = epicOf(id);
+    assert.ok(kinds.includes(`tree:${epic}`), `${epic}'s tuple (${id}'s epic) not caught: ${kinds}`);
+  }
 
   for (const unchanged of ["leaf-completion", "progress-bar", "theme-progress:TH-01", "in-flight-membership"]) {
     assert.ok(!kinds.includes(unchanged), `${unchanged} should not have moved: ${kinds}`);
@@ -268,6 +285,24 @@ test("mutation · a hand-edited figure in the tracker is caught", () => {
   const derived = derive(buildModel(RECORDS));
   const ep06 = derived.tree.find((e) => e.id === "EP-06").text;
 
+  // The glyph corruption below flips a NOT_STARTED mark to COMPLETE, so it must be aimed at an
+  // entry that actually carries one. It used to take derived.tree.at(-1) and assume it did. That
+  // held only while ST-09 — the one item parented above the feature level — sorted last; the
+  // 2026-09-18 reparenting moved a COMPLETE item into that position and the substitution became a
+  // no-op. The test said so rather than passing, which is the property it exists to have, and the
+  // repair is to choose by the glyph instead of by position.
+  const glyphEntry = derived.tree.findLast((e) => e.text.includes(STATUS_SYMBOL.NOT_STARTED));
+  assert.ok(
+    glyphEntry,
+    "no tree entry carries a NOT_STARTED glyph, so the glyph corruption has nothing to aim at",
+  );
+  const glyphMutated = glyphEntry.text.replace(STATUS_SYMBOL.NOT_STARTED, STATUS_SYMBOL.COMPLETE);
+  assert.notEqual(
+    glyphMutated,
+    glyphEntry.text,
+    `the glyph corruption did not change ${glyphEntry.id}; it would be a no-op against the tracker`,
+  );
+
   for (const [label, corrupt] of [
     ["status count", (t) => t.replace(`| ○ Not started | ${derived.byStatus.NOT_STARTED} |`, "| ○ Not started | 99 |")],
     ["total", (t) => t.replace(`| **Total** | **${derived.total}** |`, "| **Total** | **99** |")],
@@ -275,7 +310,7 @@ test("mutation · a hand-edited figure in the tracker is caught", () => {
     ["type count", (t) => t.replace(`| \`ST-\` | ${derived.byType.story} |`, "| `ST-` | 99 |")],
     ["a progress bar", (t) => t.replace(derived.bar, derived.bar.replace("█", "░"))],
     ["a parent tuple", (t) => t.replace(ep06, ep06.replace(/_\(\d+\/(\d+)\)_/u, "_(99/$1)_"))],
-    ["a glyph in the tree", (t) => t.replace(derived.tree.at(-1).text, derived.tree.at(-1).text.replace("○", "●"))],
+    ["a glyph in the tree", (t) => t.replace(glyphEntry.text, glyphMutated)],
     ["a dropped in-flight entry", (t) => t.replace(derived.inFlight[0].text, "")],
   ]) {
     const corrupted = corrupt(TRACKER);
