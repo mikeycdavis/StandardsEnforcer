@@ -1,0 +1,347 @@
+{
+  "schemaVersion": "1.0.0",
+  "source": "mikeycdavis/StandardsEnforcer",
+  "target": "mikeycdavis/StandardsEnforcer",
+  "migratedAt": "2026-09-23",
+  "items": {
+    "EP-01": {
+      "number": 56,
+      "id": 5557044521,
+      "state": "open",
+      "parent": "IN-01",
+      "linked": true
+    },
+    "EP-02": {
+      "number": 57,
+      "id": 5557044853,
+      "state": "open",
+      "parent": "IN-01",
+      "linked": true
+    },
+    "EP-03": {
+      "number": 58,
+      "id": 5557045161,
+      "state": "closed",
+      "parent": "IN-01",
+      "linked": true
+    },
+    "EP-04": {
+      "number": 59,
+      "id": 5557045789,
+      "state": "closed",
+      "parent": "IN-01",
+      "linked": true
+    },
+    "EP-05": {
+      "number": 60,
+      "id": 5557046151,
+      "state": "open",
+      "parent": "IN-01",
+      "linked": true
+    },
+    "EP-06": {
+      "number": 61,
+      "id": 5557046335,
+      "state": "open",
+      "parent": "IN-01",
+      "linked": true
+    },
+    "EP-07": {
+      "number": 62,
+      "id": 5557046535,
+      "state": "open",
+      "parent": "IN-01",
+      "linked": true
+    },
+    "FE-01": {
+      "number": 63,
+      "id": 5557046732,
+      "state": "closed",
+      "parent": "EP-01",
+      "linked": true
+    },
+    "FE-02": {
+      "number": 64,
+      "id": 5557047142,
+      "state": "closed",
+      "parent": "EP-01",
+      "linked": true
+    },
+    "FE-03": {
+      "number": 65,
+      "id": 5557047508,
+      "state": "closed",
+      "parent": "EP-02",
+      "linked": true
+    },
+    "FE-04": {
+      "number": 66,
+      "id": 5557047881,
+      "state": "open",
+      "parent": "EP-02",
+      "linked": true
+    },
+    "FE-06": {
+      "number": 67,
+      "id": 5557048105,
+      "state": "closed",
+      "parent": "EP-04",
+      "linked": true
+    },
+    "FE-07": {
+      "number": 68,
+      "id": 5557048517,
+      "state": "open",
+      "parent": "EP-05",
+      "linked": true
+    },
+    "FE-08": {
+      "number": 69,
+      "id": 5557048693,
+      "state": "open",
+      "parent": "EP-05",
+      "linked": true
+    },
+    "FE-09": {
+      "number": 70,
+      "id": 5557048866,
+      "state": "open",
+      "parent": "EP-05",
+      "linked": true
+    },
+    "FE-10": {
+      "number": 71,
+      "id": 5557049098,
+      "state": "open",
+      "parent": "EP-05",
+      "linked": true
+    },
+    "FE-11": {
+      "number": 72,
+      "id": 5557049256,
+      "state": "open",
+      "parent": "EP-05",
+      "linked": true
+    },
+    "FE-12": {
+      "number": 73,
+      "id": 5557049453,
+      "state": "closed",
+      "parent": "EP-05",
+      "linked": true
+    },
+    "FE-13": {
+      "number": 74,
+      "id": 5557049823,
+      "state": "closed",
+      "parent": "EP-01",
+      "linked": true
+    },
+    "FE-14": {
+      "number": 75,
+      "id": 5557050230,
+      "state": "closed",
+      "parent": "EP-06",
+      "linked": true
+    },
+    "FE-15": {
+      "number": 76,
+      "id": 5557050604,
+      "state": "closed",
+      "parent": "EP-01",
+      "linked": true
+    },
+    "FE-17": {
+      "number": 77,
+      "id": 5557050995,
+      "state": "closed",
+      "parent": "EP-04",
+      "linked": true
+    },
+    "FE-21": {
+      "number": 78,
+      "id": 5557051357,
+      "state": "open",
+      "parent": "EP-01",
+      "linked": true
+    },
+    "FE-22": {
+      "number": 79,
+      "id": 5557051544,
+      "state": "open",
+      "parent": "EP-06",
+      "linked": true
+    },
+    "FE-23": {
+      "number": 80,
+      "id": 5557051756,
+      "state": "closed",
+      "parent": "EP-07",
+      "linked": true
+    },
+    "FE-24": {
+      "number": 81,
+      "id": 5557052176,
+      "state": "open",
+      "parent": "EP-07",
+      "linked": true
+    },
+    "FE-25": {
+      "number": 82,
+      "id": 5557052392,
+      "state": "closed",
+      "parent": "EP-07",
+      "linked": true
+    },
+    "FE-26": {
+      "number": 83,
+      "id": 5557052786,
+      "state": "closed",
+      "parent": "EP-06",
+      "linked": true
+    },
+    "FE-27": {
+      "number": 84,
+      "id": 5557053291,
+      "state": "open",
+      "parent": "EP-06",
+      "linked": true
+    },
+    "IN-01": {
+      "number": 85,
+      "id": 5557053508,
+      "state": "open",
+      "parent": "TH-01",
+      "linked": true
+    },
+    "ST-01": {
+      "number": 86,
+      "id": 5557053706,
+      "state": "closed",
+      "parent": "FE-02",
+      "linked": true
+    },
+    "ST-02": {
+      "number": 87,
+      "id": 5557054227,
+      "state": "closed",
+      "parent": "FE-02",
+      "linked": true
+    },
+    "ST-03": {
+      "number": 88,
+      "id": 5557054607,
+      "state": "closed",
+      "parent": "FE-02",
+      "linked": true
+    },
+    "ST-04": {
+      "number": 89,
+      "id": 5557055014,
+      "state": "closed",
+      "parent": "FE-02",
+      "linked": true
+    },
+    "ST-05": {
+      "number": 90,
+      "id": 5557055381,
+      "state": "closed",
+      "parent": "FE-02",
+      "linked": true
+    },
+    "ST-06": {
+      "number": 91,
+      "id": 5557055757,
+      "state": "closed",
+      "parent": "FE-04",
+      "linked": true
+    },
+    "ST-07": {
+      "number": 92,
+      "id": 5557056279,
+      "state": "open",
+      "parent": "FE-04",
+      "linked": true
+    },
+    "ST-08": {
+      "number": 93,
+      "id": 5557056473,
+      "state": "closed",
+      "parent": "FE-22",
+      "linked": true
+    },
+    "ST-09": {
+      "number": 94,
+      "id": 5557057001,
+      "state": "open",
+      "parent": "FE-24",
+      "linked": true
+    },
+    "ST-10": {
+      "number": 95,
+      "id": 5557057214,
+      "state": "closed",
+      "parent": "FE-23",
+      "linked": true
+    },
+    "ST-11": {
+      "number": 96,
+      "id": 5557057757,
+      "state": "closed",
+      "parent": "FE-22",
+      "linked": true
+    },
+    "ST-12": {
+      "number": 97,
+      "id": 5557058391,
+      "state": "closed",
+      "parent": "FE-22",
+      "linked": true
+    },
+    "ST-13": {
+      "number": 98,
+      "id": 5557058897,
+      "state": "closed",
+      "parent": "FE-25",
+      "linked": true
+    },
+    "ST-14": {
+      "number": 99,
+      "id": 5557059379,
+      "state": "closed",
+      "parent": "FE-26",
+      "linked": true
+    },
+    "ST-15": {
+      "number": 100,
+      "id": 5557059785,
+      "state": "closed",
+      "parent": "FE-27",
+      "linked": true
+    },
+    "ST-16": {
+      "number": 101,
+      "id": 5557060347,
+      "state": "closed",
+      "parent": "FE-27",
+      "linked": true
+    },
+    "ST-17": {
+      "number": 102,
+      "id": 5557060738,
+      "state": "open",
+      "parent": "FE-27",
+      "linked": true
+    },
+    "TH-01": {
+      "number": 103,
+      "id": 5557060928,
+      "state": "open",
+      "parent": null
+    }
+  },
+  "authority": "github",
+  "switchedAt": "2026-09-23",
+  "verifiedBy": "record-switch: 48 mapped items each found as a marked issue",
+  "recovery": "The issues are the record. This file maps every legacy id to its issue number and id. To recover the file backlog, restore the item files from this repository's git history at the commit that removed them, then set authority back to \"files\"."
+}
