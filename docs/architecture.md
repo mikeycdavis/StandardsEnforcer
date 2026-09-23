@@ -849,5 +849,5 @@ Areas where the code left a question open rather than a gap:
 | Change the **deployment/gate wiring** | Not here — this repository ships no gate workflow. Read [the retirement record](../artifacts/evidence/2026-08-18-standards-gate-retired.md) first: it preserves the retired file verbatim and documents why each property is a root of trust, why that copy never ran, and why a syntax repair would not have made it work |
 | Record a **decision** | `artifacts/adr/` — next number is `0006`. Note the numbering collision explained in ADR 0005 |
 | Record **what was run** | `artifacts/evidence/YYYY-MM-DD-<slug>.md`, with raw tool output under a sibling directory where it matters (see `m4-raw/`) |
-| Add or update **backlog work** | `artifacts/backlog/items/<ID>.md` and `artifacts/backlog/README.md` |
+| Add or update **backlog work** | A GitHub Issue (see `artifacts/backlog/README.md` for the pointer), not a file under `artifacts/backlog/` |
 | Ship a **release** | Update `VERSION` and `package.json` together (a test asserts it), write the `CHANGELOG` entry with a migration table, and decide `SCHEMA_VERSION` separately |
