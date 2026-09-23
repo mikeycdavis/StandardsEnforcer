@@ -87,7 +87,7 @@ None recorded. This is a command-line tool and library; it has no deployed envir
 | Project policy | `project-policy.yml` |
 | Plan | `artifacts/project-plan-breakdown/` — **intentionally empty**; see Known Risks |
 | Decision records | `artifacts/adr/` |
-| Backlog | `artifacts/backlog/` — `items/*.md` frontmatter is the source of truth; the tracker `README.md` is hand-written and its figures are checked against the items by `test/backlog-tracker.test.mjs` |
+| Backlog | GitHub Issues. `artifacts/backlog/` holds only a pointer README and `github-mapping.json` once the migration lands; the item files and the tracker checker (`scripts/backlog.mjs`, `test/backlog-tracker.test.mjs`) are retired |
 | Evidence | `artifacts/evidence/` |
 | Documentation | `docs/` |
 

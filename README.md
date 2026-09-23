@@ -192,9 +192,8 @@ scripts/submit-pr.*     verify, then push exactly the verified commit, then open
 artifacts/adr/          decisions
 artifacts/plan/         the live forward-looking plan; see AGENTS.md §5
 artifacts/evidence/     what was actually run, and what it produced
-artifacts/backlog/      tracked work. README.md there is written by hand and CHECKED against
-                        items/ by scripts/backlog.mjs — it is not generated, and it no longer
-                        claims to be
+artifacts/backlog/      tracked work, kept in GitHub Issues once the migration lands; the item
+                        files, the hand-written tracker and the script that checked it are retired
 ```
 
 ## Local CI

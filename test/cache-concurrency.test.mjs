@@ -1,7 +1,7 @@
 /**
  * The cache under concurrent use by independent processes.
  *
- * The falsifier for [FE-15](../artifacts/backlog/items/FE-15.md), written against
+ * The falsifier for FE-15 (a backlog item, now a GitHub Issue), written against
  * [ADR 0006](../artifacts/adr/0006-the-cache-is-shared-and-coordination-is-not-authority.md) and
  * before any remedy exists.
  *
