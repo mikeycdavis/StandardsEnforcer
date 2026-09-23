@@ -24,10 +24,10 @@ derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/
 | Status | Items |
 | --- | ---: |
 | ○ Not started | 8 |
-| ◑ In progress | 9 |
+| ◑ In progress | 10 |
 | ◒ Blocked | 2 |
-| ● Complete | 27 |
-| **Total** | **46** |
+| ● Complete | 28 |
+| **Total** | **48** |
 
 ## The hierarchy
 
@@ -36,7 +36,7 @@ derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/
 | Theme | `TH-` | 1 | Which enduring area of value is this? |
 | Initiative | `IN-` | 1 | What outcome are we pursuing there? |
 | Epic | `EP-` | 7 | What large body of work delivers it? |
-| Feature | `FE-` | 20 | What shippable slice of that epic? |
+| Feature | `FE-` | 22 | What shippable slice of that epic? |
 | Story | `ST-` | 17 | What user-visible change, roughly one PR? |
 | Task | `TA-` | 0 | What technical step inside a story? |
 
@@ -56,6 +56,7 @@ derived from it and checked against it by [`scripts/backlog.mjs`](../../scripts/
 - ◒ [FE-09](./items/FE-09.md) — Make BYPASS_USED reachable
 - ◑ [FE-21](./items/FE-21.md) — A policy the authority admits is a policy this enforcer must find
 - ◑ [FE-22](./items/FE-22.md) — A guard must establish that it examined its subject
+- ◑ [FE-27](./items/FE-27.md) — Guard liveness is a mechanism, not a convention — a verdict over an empty subject must fail
 - ◑ [IN-01](./items/IN-01.md) — Enforcement a governed repository cannot weaken
 - ◒ [ST-07](./items/ST-07.md) — Validate the required-workflows remedy against a real organisation ruleset
 - ◑ [TH-01](./items/TH-01.md) — Enforced standards compliance across the portfolio
@@ -101,10 +102,12 @@ _Nothing marked ready._
         - ● **[ST-08](./items/ST-08.md)** Authoritative container CI must assert the symlink capability it depends on
         - ● **[ST-11](./items/ST-11.md)** A structural guard must fail when it cannot find what it guards
         - ● **[ST-12](./items/ST-12.md)** Audit every test that derives structure from source text, before deciding whether the tree needs normalising
-      - ● **[ST-14](./items/ST-14.md)** Oracle-backed evidence names an immutable identity for the authority and a mutable working tree for the subject
-      - ● **[ST-15](./items/ST-15.md)** A guard that examined nothing must not be able to report success
-      - ● **[ST-16](./items/ST-16.md)** A verdict over an empty subject must fail whatever shape derived it
-      - ○ **[ST-17](./items/ST-17.md)** A CI stage that examined nothing must not be able to report success
+      - ● **[FE-26](./items/FE-26.md)** Oracle-backed evidence names the bytes it consumed, for the subject as well as the authority _(1/1)_
+        - ● **[ST-14](./items/ST-14.md)** Oracle-backed evidence names an immutable identity for the authority and a mutable working tree for the subject
+      - ◑ **[FE-27](./items/FE-27.md)** Guard liveness is a mechanism, not a convention — a verdict over an empty subject must fail _(2/3)_
+        - ● **[ST-15](./items/ST-15.md)** A guard that examined nothing must not be able to report success
+        - ● **[ST-16](./items/ST-16.md)** A verdict over an empty subject must fail whatever shape derived it
+        - ○ **[ST-17](./items/ST-17.md)** A CI stage that examined nothing must not be able to report success
     - ◑ **[EP-07](./items/EP-07.md)** The machinery this repository is built and verified by _(2/3)_
       - ● **[FE-23](./items/FE-23.md)** The backlog tracker is checkable against the items it claims to derive from _(1/1)_
         - ● **[ST-10](./items/ST-10.md)** The backlog tracker claims to be derived, and no executable derivation exists
