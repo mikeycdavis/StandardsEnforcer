@@ -90,6 +90,7 @@ substitute for reading the standards it points at.
 | Test | `npm test` (add `ENFORCER_REQUIRE_ORACLE=1` and `ENFORCER_ORACLE_REPO=<checkout>` to run the authoritative integration surface; `ENFORCER_REQUIRE_SYMLINKS=1` to assert the link-containment cases ran rather than skipped — set by CI, and expected to fail on a Windows workstation without the privilege) |
 | Full CI | `.\scripts\ci.ps1` / `./scripts/ci.sh` — the complete pipeline, in Docker |
 | Submit a PR | `.\scripts\submit-pr.ps1` / `./scripts/submit-pr.sh` — verified against the exact commit |
+| Backlog | **GitHub Issues**, not files, since 2026-09-23. `gh issue list --repo mikeycdavis/StandardsEnforcer`, or `node ~/.claude/skills/backlog-validate/scripts/github/backlog-gh.mjs list --repo=mikeycdavis/StandardsEnforcer`. The file-backed `backlog`/`backlog-validate`/`backlog-reconcile` tools refuse here and print the GitHub command. **A checkout on a pre-migration branch still reports files mode** — run the adapter's `authority` command if a result looks wrong. See `artifacts/backlog/README.md` |
 | Validate standards | `<command>` |
 
 **Local CI is the authoritative gate before a push.** The check list lives in `ci/checks.sh` and
