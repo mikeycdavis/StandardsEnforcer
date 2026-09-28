@@ -87,7 +87,7 @@ None recorded. This is a command-line tool and library; it has no deployed envir
 | Project policy | `project-policy.yml` |
 | Plan | `artifacts/project-plan-breakdown/` — **intentionally empty**; see Known Risks |
 | Decision records | `artifacts/adr/` |
-| Backlog | GitHub Issues. `artifacts/backlog/` holds only a pointer README and `github-mapping.json` once the migration lands; the item files and the tracker checker (`scripts/backlog.mjs`, `test/backlog-tracker.test.mjs`) are retired |
+| Backlog | GitHub Issues — migrated 2026-09-23, `authority: "github"` recorded in `artifacts/backlog/github-mapping.json`. That directory now holds only that mapping and a pointer README; the item files and the tracker checker (`scripts/backlog.mjs`, `test/backlog-tracker.test.mjs`) are retired. See `artifacts/backlog/README.md` for the read commands and for why a stale checkout still reports files mode |
 | Evidence | `artifacts/evidence/` |
 | Documentation | `docs/` |
 
