@@ -59,6 +59,10 @@ services:
       # symlink support would silently return all four to skipping; under this flag it goes red
       # instead. See test-support/capabilities.mjs and ST-08.
       ENFORCER_REQUIRE_SYMLINKS: "1"
+      # This repository declares a dependency (acorn, ADR 0010), and this environment says so. Under
+      # it the pinned-install stage cannot complete by finding an empty dependency set: that turns
+      # red instead of passing "vacuously". See ci/dependency-posture.mjs and ST-17.
+      ENFORCER_REQUIRE_DEPENDENCIES: "1"
       CI_OUT_DIR: /out
       CI_COMMIT: ${CI_COMMIT:?set by scripts/ci.*}
       CI_BRANCH: ${CI_BRANCH:?set by scripts/ci.*}

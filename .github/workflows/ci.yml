@@ -106,6 +106,9 @@ jobs:
           # local Docker holds no checkout credential and must keep reporting NOT_EXERCISED rather
           # than a pass it did not earn.
           ENFORCER_REQUIRE_CREDENTIAL_HYGIENE: '1'
+          # This repository declares a dependency (acorn, ADR 0010). Under this flag the
+          # pinned-install stage cannot pass by finding an empty dependency set (ST-17).
+          ENFORCER_REQUIRE_DEPENDENCIES: '1'
           CI_OUT_DIR: ${{ runner.temp }}/local-ci
           CI_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
           CI_BRANCH: ${{ github.head_ref || github.ref_name }}

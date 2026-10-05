@@ -82,7 +82,7 @@ GitHub workflow run that file, so they cannot drift into disagreeing about what 
 | Check | What it establishes |
 | --- | --- |
 | `environment` | Records the Node, npm, git and user identity that produced the result. Not a gate — the evidence that makes the rest legible. |
-| `pinned-install-invariant` | Every declared dependency is pinned to an exact version, `package-lock.json` is committed and carries an integrity hash for every entry, the lockfile agrees with `package.json`, and `node_modules/` is installed rather than committed. Until [ADR 0010](../artifacts/adr/0010-the-parser-dependency-and-what-it-cost.md) this stage was `no-install-invariant` and asserted that there were no dependencies at all; that was stronger, and the ADR records what was given up. A decision nothing checks is a decision that decays, so the replacement is asserted (`ci/dependency-posture.mjs`) rather than assumed. |
+| `pinned-install-invariant` | Every declared dependency is pinned to an exact version, `package-lock.json` is committed and carries an integrity hash for every entry, the lockfile agrees with `package.json`, and `node_modules/` is installed rather than committed. Until [ADR 0010](../artifacts/adr/0010-the-parser-dependency-and-what-it-cost.md) this stage was `no-install-invariant` and asserted that there were no dependencies at all; that was stronger, and the ADR records what was given up. A decision nothing checks is a decision that decays, so the replacement is asserted (`ci/dependency-posture.mjs`) rather than assumed. **An empty dependency set is a claim, not a default (ST-17):** it passes only as `NOT_EXERCISED`, and only when `package-lock.json` agrees there is nothing to install; a lockfile that records packages the manifest reader could not find is a failure, and `ENFORCER_REQUIRE_DEPENDENCIES=1` (set by `compose.ci.yml` and the hosted workflow, because this repository does declare a dependency) makes an empty set a failure outright. |
 | `oracle-readiness` | The mounted oracle is a git repository and resolves every release the suite pins, each via `rev-list -n 1` so an annotated tag dereferences to its commit. This is the dependency health check — a real resolution, never a sleep. |
 | `test-suite` | `npm test` verbatim, with `ENFORCER_REQUIRE_ORACLE=1` and `ENFORCER_REQUIRE_SYMLINKS=1`. The repository's own authoritative command, not a reconstruction of it. |
 
@@ -93,6 +93,16 @@ link-containment cases rather than skipping them for want of privilege. The seco
 those cases first ran in this container — and failed. A capability that four provenance controls
 depend on, and which nothing asserts, is a green pipeline waiting for a rootless runtime. See
 `test-support/capabilities.mjs`.
+
+`ENFORCER_REQUIRE_DEPENDENCIES=1` is a third claim of the same shape (ST-17): this environment says
+the repository has dependencies, so `pinned-install-invariant` may not complete by finding none. The
+stage's outcome is carried into the result as `dependencyPosture` (`ESTABLISHED`, `NOT_EXERCISED` or
+`FAILED`), separately from whether the stage ran, exactly as `credentialHygiene` is.
+
+**Measured for the other stages (ST-17 AC5, bounded).** Whether `oracle-readiness`, `credential-hygiene`
+and `test-suite` can report success having examined nothing is recorded in
+`artifacts/evidence/2026-10-05-st17-stage-vacuity-measurement.md`; that record measures, and does not
+change, those stages.
 
 ### Checks this repository does not have
 
@@ -245,6 +255,8 @@ test counts and a completion timestamp — and writes `artifacts/local-ci/latest
   "failedCheck": null,
   "startedAt": "2026-08-16T15:26:11Z",
   "completedAt": "2026-08-16T15:28:45Z",
+  "credentialHygiene": "NOT_EXERCISED",
+  "dependencyPosture": "ESTABLISHED",
   "tests": { "passed": 204, "failed": 0, "skipped": 0 },
   "checks": ["environment", "pinned-install-invariant", "oracle-readiness", "test-suite"]
 }
