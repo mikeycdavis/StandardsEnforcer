@@ -50,6 +50,10 @@ SKIP_COUNT=""
 # result document so a reader can tell a hosted run that proved the property from a local run that
 # could not have.
 HYGIENE_OUTCOME="NOT_RUN"
+# The same distinction for the pinned-install stage (ST-17): "the stage completed" and "the stage
+# examined a dependency" are different claims. NOT_RUN until reached; then ESTABLISHED,
+# NOT_EXERCISED (a repository that truly declares nothing) or FAILED.
+DEPENDENCY_OUTCOME="NOT_RUN"
 
 # ---------------------------------------------------------------------------------------------
 # Reporting
@@ -103,6 +107,7 @@ emit_result() {
   "startedAt": "$STARTED_AT",
   "completedAt": "$completed_at",
   "credentialHygiene": "$(json_escape "$HYGIENE_OUTCOME")",
+  "dependencyPosture": "$(json_escape "$DEPENDENCY_OUTCOME")",
   "tests": {
     "passed": ${PASS_COUNT:-null},
     "failed": ${FAIL_COUNT:-null},
@@ -137,6 +142,7 @@ on_exit() {
   # Named separately from the stage list, because "the stage ran" and "the property was established"
   # are different claims and this repository has already shipped one of those pretending to be the other.
   say "Credential hygiene: $HYGIENE_OUTCOME"
+  say "Dependency posture: $DEPENDENCY_OUTCOME"
   if [ -n "$PASS_COUNT" ]; then
     # Never "all tests passed". The skip count is part of the result, not a footnote: this
     # repository has already shipped one green suite whose subject was absent.
@@ -185,12 +191,25 @@ done_stage
 # What is asserted now: every dependency is pinned to an exact version, the lockfile is committed
 # and hash-pinned, the lockfile agrees with package.json, and node_modules/ is installed rather
 # than committed. See ci/dependency-posture.mjs, which says why each of those is load-bearing.
+#
+# THE SUBJECT IS ESTABLISHED, NOT ASSUMED (ST-17). An empty dependency set used to be reported as
+# "vacuously true" and pass, which is also what happens when the check merely cannot find the
+# declarations. The module now needs the lockfile to agree that nothing is installed, and
+# ENFORCER_REQUIRE_DEPENDENCIES=1 — this environment's own claim that the repository has
+# dependencies, the same shape as ENFORCER_REQUIRE_CREDENTIAL_HYGIENE — makes absence a failure.
 stage "pinned-install-invariant"
-if ! node ci/dependency-posture.mjs "$ROOT"; then
+DEPENDENCY_OUTCOME_FILE="$LOG_DIR/dependency-posture.outcome"
+DEPENDENCY_REQUIRE=""
+[ "${ENFORCER_REQUIRE_DEPENDENCIES:-0}" = "1" ] && DEPENDENCY_REQUIRE="--require"
+say "requirement: ENFORCER_REQUIRE_DEPENDENCIES=${ENFORCER_REQUIRE_DEPENDENCIES:-unset}"
+# shellcheck disable=SC2086
+if ! node ci/dependency-posture.mjs $DEPENDENCY_REQUIRE "--outcome-file=$DEPENDENCY_OUTCOME_FILE" "$ROOT"; then
+  DEPENDENCY_OUTCOME="FAILED"
   say ""
   say "FAIL  the install is not reproducible from the commit under test."
   FAILED_STAGE="pinned-install-invariant"; exit 1
 fi
+DEPENDENCY_OUTCOME="$(head -n 1 "$DEPENDENCY_OUTCOME_FILE" 2>/dev/null || printf 'UNKNOWN')"
 done_stage
 
 # --- oracle readiness -------------------------------------------------------------------------
