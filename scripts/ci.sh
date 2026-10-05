@@ -40,6 +40,18 @@ red()   { printf '\033[31m%s\033[0m\n' "$*"; }
 step()  { cyan "==> $*"; }
 fail()  { red  "!!! $*"; }
 
+# A path in the form the *native* docker.exe can use. Under Git Bash on Windows the shell's own
+# POSIX-style paths (`/tmp/...`, `/f/Repos/...`) reach docker through compose environment
+# variables, and whether MSYS rewrites those on the way out depends on the invoking environment
+# (it does not when MSYS_NO_PATHCONV or MSYS2_ENV_CONV_EXCL is set). Unrewritten, `/tmp/...` is not
+# an absolute Windows path, so compose resolves it against the project directory and the build
+# fails with "unable to prepare context ... not found". `cygpath -m` yields a mixed `C:/...` path
+# that is valid whether or not MSYS rewrites it. Where there is no cygpath (Linux, macOS) the path
+# passes through unchanged. This only spells the same path; it selects no different pipeline.
+native_path() {
+  if command -v cygpath >/dev/null 2>&1; then cygpath -m -- "$1"; else printf '%s\n' "$1"; fi
+}
+
 # ---------------------------------------------------------------------------------------------
 # Preconditions
 # ---------------------------------------------------------------------------------------------
@@ -157,8 +169,8 @@ mkdir -p "$OUT_DIR"
 # absence is the honest record, and ci/verify.mjs refuses on absence.
 rm -f "$OUT_DIR/latest.json"
 
-export CI_PROJECT="$PROJECT" CI_CONTEXT="$STAGE_DIR" CI_IMAGE="$IMAGE" \
-       CI_ORACLE_PATH="$ORACLE" CI_OUT_PATH="$OUT_DIR" CI_COMMIT="$COMMIT" \
+export CI_PROJECT="$PROJECT" CI_CONTEXT="$(native_path "$STAGE_DIR")" CI_IMAGE="$IMAGE" \
+       CI_ORACLE_PATH="$(native_path "$ORACLE")" CI_OUT_PATH="$(native_path "$OUT_DIR")" CI_COMMIT="$COMMIT" \
        CI_BRANCH="$BRANCH" CI_REPOSITORY="$REPO_NAME" CI_SOURCE="$SOURCE"
 
 # --- build ---------------------------------------------------------------------------------------
