@@ -136,11 +136,29 @@ test("a repository that truly declares nothing still passes, as NOT_EXERCISED", 
   });
 });
 
-test("a repository with no dependencies and no lockfile is NOT_EXERCISED, not established", async () => {
-  await runOn({ pkg: { name: "fixture" } }, ({ status, outcome }) => {
-    assert.equal(status, 0);
-    assert.equal(outcome, OUTCOME.NOT_EXERCISED);
+test("an empty manifest with NO lockfile is FAILED: nothing independent corroborates the empty set (#107 Codex P2)", async () => {
+  // The shape of the review finding: the dependency keys became unreadable AND the lockfile was
+  // deleted or renamed. Without --require this used to exit 0 as NOT_EXERCISED on no evidence at all.
+  await runOn({ pkg: { name: "fixture" } }, ({ status, outcome, out }) => {
+    assert.equal(status, 1, `an empty set with no lockfile must not pass:
+${out}`);
+    assert.equal(outcome, OUTCOME.FAILED);
+    assert.match(out, /no lockfile is committed/u, "the failure must say what was missing");
   });
+});
+
+test("Arm B + lockfile deleted · renamed dependency keys beside a missing lockfile is FAILED without --require", async () => {
+  await runOn({ pkg: { name: "fixture", deps: { acorn: "^8.18.0" } } }, ({ status, outcome }) => {
+    assert.equal(status, 1);
+    assert.equal(outcome, OUTCOME.FAILED);
+  });
+});
+
+test("establishEmptySubject · a missing lockfile (null) is FAILED whether or not --require is set", () => {
+  for (const require of [false, true]) {
+    const v = establishEmptySubject({ lock: null, require });
+    assert.equal(v.outcome, OUTCOME.FAILED, `lock=null require=${require}`);
+  }
 });
 
 test("a pinned, locked dependency is ESTABLISHED", async () => {
