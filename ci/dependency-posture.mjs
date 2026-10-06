@@ -33,14 +33,16 @@
  * reader of `package.json`:
  *
  *   1. the committed lockfile must agree that there is nothing to install — its root entry declares
- *      no dependencies and it records no installed package. A lockfile that records any is evidence
+ *      no dependencies and it records no installed package. A MISSING or unreadable lockfile is not
+ *      agreement: it is no evidence, so it FAILS even without --require (#107 review). A lockfile that records any is evidence
  *      that the manifest reader looked in the wrong place, and the check FAILS naming what it saw;
  *   2. `--require` (ENFORCER_REQUIRE_DEPENDENCIES=1), the environment's own claim that this
  *      repository has dependencies, makes absence a failure outright — the same shape as
  *      ENFORCER_REQUIRE_CREDENTIAL_HYGIENE. Nothing in it is a count of anything.
  *
- * What survives is the honest vacuous case, reported as NOT_EXERCISED, the repository's existing
- * word for "the property was not examined here", rather than as a pass.
+ * What survives is the honest vacuous case (a valid lockfile that itself records nothing), reported as
+ * NOT_EXERCISED, the repository's existing word for "the property was not examined here", rather
+ * than as a pass.
  *
  *     node ci/dependency-posture.mjs [--require] [--outcome-file=<path>] [<root>]
  *
@@ -79,7 +81,9 @@ export function establishEmptySubject({ lock, require }) {
     return { outcome: OUTCOME.FAILED, why: "package.json declares no dependencies but package-lock.json could not be read to corroborate that", seen: [] };
   }
   if (lock === null) {
-    return { outcome: OUTCOME.NOT_EXERCISED, why: "package.json declares no dependencies and no lockfile is committed", seen: [] };
+    // No lockfile is no corroboration: the same event that hides the manifest's declarations (a rename,
+    // a move) can accompany a deleted or renamed lockfile, and then nothing independent has looked.
+    return { outcome: OUTCOME.FAILED, why: "package.json declares no dependencies and no lockfile is committed to corroborate that — an empty dependency set needs a valid package-lock.json confirming it", seen: [] };
   }
   const seen = [];
   const root = lock.packages?.[""] ?? {};
