@@ -243,6 +243,11 @@ test("docs · architecture no longer says the process status is never interprete
   const svg = readFileSync(path.join(docs, "architecture-sequence.svg"), "utf8");
   assert.ok(!/recorded, never interpreted/u.test(arch), "architecture.md still states the pre-FE-16 contract");
   assert.match(arch, /Process completion \(FE-16/u);
+  assert.match(arch, /^13\. \*\*Process-completion gate/mu, "the numbered execution flow has no process-completion step");
+  assert.ok(!/entirety of the enforcer's\s+opinion about the verdict/u.test(arch),
+    "step 12 still claims passing-set membership is the whole decision");
+  const plan = readFileSync(path.join(docs, "..", "artifacts", "plan", "2026-08-12-m3-reconciled-plan.md"), "utf8");
+  assert.match(plan, /Dated note, 2026-10-14 — D3 admitted/u);
   const adr = readFileSync(path.join(docs, "..", "artifacts", "adr", "0001-orchestrate-do-not-reimplement.md"), "utf8");
   assert.match(adr, /## Amendment, 2026-10-14/u, "ADR 0001 does not record the process-completion refusal");
   assert.match(seq, /declared passing status, but the process exited nonzero or reported no exit code/u);
