@@ -1,5 +1,3 @@
-  const adr = readFileSync(path.join(docs, "..", "artifacts", "adr", "0001-orchestrate-do-not-reimplement.md"), "utf8");
-  assert.match(adr, /## Amendment, 2026-10-14/u, "ADR 0001 does not record the process-completion refusal");
 /**
  * When the pack's declared status and its own process outcome disagree.
  *
@@ -236,6 +234,8 @@ test("docs · architecture no longer says the process status is never interprete
   const svg = readFileSync(path.join(docs, "architecture-sequence.svg"), "utf8");
   assert.ok(!/recorded, never interpreted/u.test(arch), "architecture.md still states the pre-FE-16 contract");
   assert.match(arch, /Process completion \(FE-16/u);
+  const adr = readFileSync(path.join(docs, "..", "artifacts", "adr", "0001-orchestrate-do-not-reimplement.md"), "utf8");
+  assert.match(adr, /## Amendment, 2026-10-14/u, "ADR 0001 does not record the process-completion refusal");
   assert.match(seq, /declared passing status, but the process exited nonzero or reported no exit code/u);
   assert.ok(svg.includes("contradicting or missing"), "the rendered sequence SVG does not show the refusal branch");
 });
