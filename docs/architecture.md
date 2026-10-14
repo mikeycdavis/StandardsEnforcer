@@ -160,7 +160,8 @@ learns no meaning for any native code. It is read for exactly one impossible com
 declared status is in the pack's passing set and the process reported no exit code (`null`) or a nonzero
 one, the result is `ENFORCEMENT_ERROR`, never a pass. Both are unknowns, and an unknown is not a pass;
 the two details differ, so a reader can tell missing evidence from contradictory evidence. The
-undeclared-status check still runs first.
+undeclared-status check still runs first. The decision is recorded as a dated amendment to
+[ADR 0001](../artifacts/adr/0001-orchestrate-do-not-reimplement.md).
 
 ---
 

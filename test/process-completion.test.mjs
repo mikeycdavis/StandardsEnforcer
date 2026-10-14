@@ -1,3 +1,5 @@
+  const adr = readFileSync(path.join(docs, "..", "artifacts", "adr", "0001-orchestrate-do-not-reimplement.md"), "utf8");
+  assert.match(adr, /## Amendment, 2026-10-14/u, "ADR 0001 does not record the process-completion refusal");
 /**
  * When the pack's declared status and its own process outcome disagree.
  *
@@ -44,6 +46,7 @@ import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { mkdtemp, writeFile, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { enforce } from "../scripts/enforce.mjs";
 import { STATE, EXIT, exitFor } from "../scripts/states.mjs";
@@ -227,7 +230,7 @@ test("5 · a declared passing status from a process that reported no exit code d
 
 test("docs · architecture no longer says the process status is never interpreted, and the sequence shows the refusal", async () => {
   const { readFileSync } = await import("node:fs");
-  const docs = path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "..", "docs");
+  const docs = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "docs");
   const arch = readFileSync(path.join(docs, "architecture.md"), "utf8");
   const seq = readFileSync(path.join(docs, "architecture-sequence.mmd"), "utf8");
   const svg = readFileSync(path.join(docs, "architecture-sequence.svg"), "utf8");
