@@ -71,10 +71,14 @@ const CONTRACT = {
  * different defect wearing the same result.
  */
 function evaluator(status, ending) {
-  const emit = `process.stdout.write(JSON.stringify({ status: ${JSON.stringify(status)} }) + "\\n");\n`;
+  // Written SYNCHRONOUSLY to fd 1 and only then ended. `process.stdout.write` followed by an immediate
+  // exit or SIGKILL is not guaranteed to flush to a pipe, so a truncated report would make an arm fail
+  // intermittently, or make arm 5 pass through the unreadable-output refusal for the wrong reason.
+  const emit = 'import { writeSync } from "node:fs";\n' +
+    `writeSync(1, JSON.stringify({ status: ${JSON.stringify(status)} }) + "\\n");\n`;
   if (ending.killed) {
     // Not `process.exit`: the point of this arm is a process that never reported an exit code at all.
-    return emit + `process.kill(process.pid, "SIGKILL");\nsetTimeout(() => {}, 10_000);\n`;
+    return emit + 'process.kill(process.pid, "SIGKILL");\nsetTimeout(() => {}, 10_000);\n';
   }
   return emit + `process.exit(${ending.exit});\n`;
 }
@@ -138,6 +142,7 @@ function killedProcessHasNoExitCode() {
 
 test("1 · a declared passing status with a successful exit is an ordinary pass", async () => {
   const r = await judged("REAL_PASS", { exit: 0 });
+  assert.equal(r.report?.status, "REAL_PASS", "the full JSON report was not received, so the outcome below proves nothing");
 
   assert.equal(r.state, STATE.EVALUATED);
   assert.equal(r.authority.status, "REAL_PASS");
@@ -150,6 +155,7 @@ test("2 · a declared non-passing status with a nonzero exit is ordinary, not an
   // common real outcome in the portfolio. Turning it into ENFORCEMENT_ERROR would read every pack's
   // native failure code as a fault in enforcement, which is the reading D3 was rejected for once.
   const r = await judged("REAL_FAIL", { exit: 1 });
+  assert.equal(r.report?.status, "REAL_FAIL", "the full JSON report was not received, so the outcome below proves nothing");
 
   assert.equal(r.state, STATE.EVALUATED,
     "a pack that declared failure and exited nonzero was treated as an enforcement fault");
@@ -167,6 +173,7 @@ test("3 · a declared passing status with a nonzero exit does not produce a pass
   // allowed to know that 1 means findings or that 3 means blocked, and a fixture using 1 would let a
   // remedy that special-cased 1 pass this arm.
   const r = await judged("REAL_PASS", { exit: 7 });
+  assert.equal(r.report?.status, "REAL_PASS", "the full JSON report was not received, so the outcome below proves nothing");
 
   assert.equal(r.passing, false,
     "a pack declared itself passing and did not exit successfully, and the enforcer passed it anyway");
@@ -186,6 +193,7 @@ test("4 · an undeclared status with a nonzero exit is still reported as an unde
   // from a status the contract does not declare — so "the status contradicts the exit code" is not a
   // statement this run is in a position to make.
   const r = await judged("SOMETHING_ELSE", { exit: 7 });
+  assert.equal(r.report?.status, "SOMETHING_ELSE", "the full JSON report was not received, so the outcome below proves nothing");
 
   assert.equal(r.state, STATE.ENFORCEMENT_ERROR);
   assert.equal(r.passing, false);
@@ -201,6 +209,7 @@ test("4 · an undeclared status with a nonzero exit is still reported as an unde
 test("5 · a declared passing status from a process that reported no exit code does not pass", async () => {
   const nullIsProducible = killedProcessHasNoExitCode();
   const r = await judged("REAL_PASS", { killed: true });
+  assert.equal(r.report?.status, "REAL_PASS", "the full JSON report was not received, so the outcome below proves nothing");
 
   // Asserted on EVERY platform. Whatever the operating system reported, an evaluator that was killed
   // after declaring success must not produce a pass. This is the property; the rest is its reason.
