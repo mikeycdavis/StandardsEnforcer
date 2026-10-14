@@ -596,7 +596,8 @@ A pull request opened against a governed repository, end to end:
     it is not, that is an unknown, and INV-E1 says an unknown is not a pass →
     `ENFORCEMENT_ERROR`, exit `4`.
 12. `passing = contract.result.passing.includes(status)`. **That is the entirety of the enforcer's
-    opinion about what the verdict means.** No score, no summary count, no denominator is consulted;
+    opinion about what the verdict means; step 13 is the only thing that can withhold a pass, and it
+    reads the process, not the verdict.** No score, no summary count, no denominator is consulted;
     `test/authority-boundary.test.mjs` is what keeps that true.
 13. **Process-completion gate (FE-16 / ST-18, amendment to ADR 0001).** Only when `passing` is true,
     and only after step 11: an exit code of `null` is `ENFORCEMENT_ERROR` (completion not established),

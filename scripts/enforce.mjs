@@ -881,7 +881,7 @@ export async function enforce({
   }
 
   // The whole of the enforcer's opinion about the verdict: is this status in the set the pack itself
-  // declared passing. No other field of the report is consulted — not a score, not a summary count,
+  // declared passing. (The process-completion gate below can only WITHHOLD a pass; it never grants one.) No other field of the report is consulted — not a score, not a summary count,
   // not a denominator — and test/authority-boundary.test.mjs is what keeps that true.
   const passing = run.contract.result.passing.includes(status);
 

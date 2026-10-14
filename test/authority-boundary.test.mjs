@@ -129,7 +129,8 @@ const EVIDENCE_FIELDS = [
  *
  * The consequence is that `nativeResult.assurance` or `nativeResult.score` would slip past this test.
  * What catches those instead is the positive assertion in the verdict path: passing is decided by
- * membership of the pack-declared passing set and by nothing else. The list above holds the tokens
+ * membership of the pack-declared passing set and by nothing else (the process-completion gate only
+ * withholds a pass whose process contradicts it; it never grants one and reads no report field). The list above holds the tokens
  * that are unambiguous, which includes every field the MachineLearning near-miss would have tempted
  * someone to read.
  */
