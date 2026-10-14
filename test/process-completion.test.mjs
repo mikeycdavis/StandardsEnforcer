@@ -220,3 +220,19 @@ test("5 · a declared passing status from a process that reported no exit code d
     "a process that never reported an exit code and one that reported a contradictory exit code " +
       "produced the same explanation, so the two findings are not distinguishable by a reader");
 });
+
+// ===========================================================================
+// The documented contract. Codex found the code and the docs disagreeing on PR #110.
+// ===========================================================================
+
+test("docs · architecture no longer says the process status is never interpreted, and the sequence shows the refusal", async () => {
+  const { readFileSync } = await import("node:fs");
+  const docs = path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "..", "docs");
+  const arch = readFileSync(path.join(docs, "architecture.md"), "utf8");
+  const seq = readFileSync(path.join(docs, "architecture-sequence.mmd"), "utf8");
+  const svg = readFileSync(path.join(docs, "architecture-sequence.svg"), "utf8");
+  assert.ok(!/recorded, never interpreted/u.test(arch), "architecture.md still states the pre-FE-16 contract");
+  assert.match(arch, /Process completion \(FE-16/u);
+  assert.match(seq, /declared passing status, but the process exited nonzero or reported no exit code/u);
+  assert.ok(svg.includes("contradicting or missing"), "the rendered sequence SVG does not show the refusal branch");
+});

@@ -147,12 +147,20 @@ the accepted CLI arguments:
                  "materialisedAt": "...", "fromCache": false },
   "gate":   { "checked": true, "rooted": true, "rootedAt": ["organization"], "appIds": [...], "note": "..." },
   "scope":  { "checked": true, "disposition": "in-scope", "detection": {...}, "decision": {...}, "standsOn": "..." },
-  "standardsExitCode": 3,            // the pack's own process status, recorded, never interpreted
+  "standardsExitCode": 3,            // the pack's own process status; read only to refuse a declared pass (FE-16, see below)
   "authority": { "standard": "machine-learning", "status": "NOT_EVALUATED" },
   "report":  { /* the pack's own JSON, verbatim */ },
   "authoritative": true              // true only when gate.rooted === true
 }
 ```
+
+**Process completion (FE-16 / ST-18).** `standardsExitCode` is not interpreted as a verdict: a
+non-passing declared status with any exit code is reported as `EVALUATED` unchanged, and the enforcer
+learns no meaning for any native code. It is read for exactly one impossible combination. When the
+declared status is in the pack's passing set and the process reported no exit code (`null`) or a nonzero
+one, the result is `ENFORCEMENT_ERROR`, never a pass. Both are unknowns, and an unknown is not a pass;
+the two details differ, so a reader can tell missing evidence from contradictory evidence. The
+undeclared-status check still runs first.
 
 ---
 
@@ -765,6 +773,9 @@ sequenceDiagram
                         else no JSON, unrunnable, or an undeclared status
                             PACK-->>CLI: unusable output
                             CLI-->>WF: ENFORCEMENT_ERROR, exit 4
+                        else a declared passing status, but the process exited nonzero or reported no exit code
+                            PACK-->>CLI: {status, ...} with a contradicting or missing process result
+                            CLI-->>WF: ENFORCEMENT_ERROR, exit 4 (FE-16: contradictory or missing evidence is an unknown)
                         else a declared status
                             PACK-->>CLI: {status, ...} verbatim
                             CLI-->>WF: EVALUATED + passing from the pack's own set, exit 0 or 1

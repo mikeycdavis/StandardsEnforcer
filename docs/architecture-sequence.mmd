@@ -65,6 +65,9 @@ sequenceDiagram
                         else no JSON, unrunnable, or an undeclared status
                             PACK-->>CLI: unusable output
                             CLI-->>WF: ENFORCEMENT_ERROR, exit 4
+                        else a declared passing status, but the process exited nonzero or reported no exit code
+                            PACK-->>CLI: {status, ...} with a contradicting or missing process result
+                            CLI-->>WF: ENFORCEMENT_ERROR, exit 4 (FE-16: contradictory or missing evidence is an unknown)
                         else a declared status
                             PACK-->>CLI: {status, ...} verbatim
                             CLI-->>WF: EVALUATED + passing from the pack's own set, exit 0 or 1
