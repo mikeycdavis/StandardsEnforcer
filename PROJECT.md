@@ -76,7 +76,9 @@ None recorded. This is a command-line tool and library; it has no deployed envir
   never upgraded into a positive conclusion — see
   [ADR 0002](artifacts/adr/0002-states-and-the-no-unknown-pass-invariant.md).
 - **A pack declares its own passing set.** A release that declares none has none, and this enforcer
-  must not supply one from a neighbouring release, from `main`, or from a built-in default.
+  must not supply one from a neighbouring release, from `main`, or from a built-in default. A
+  declared pass is still refused (`ENFORCEMENT_ERROR`) when its process reported no exit code or a
+  nonzero one (FE-16).
 - **No pack is invoked through a PATH-resolved binary name.** Six standards packs expose the
   identical `standards` bin, so every invocation uses an explicit path into a specific checkout.
 

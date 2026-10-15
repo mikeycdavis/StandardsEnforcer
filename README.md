@@ -71,7 +71,12 @@ form, so the semantics had to go, not just the strings.
 | `ENFORCEMENT_ERROR` | Enforcement could not be carried out | `4` |
 
 Whether a merge may proceed rides **beside** `EVALUATED` as `passing`, decided by the pack's own
-declared set — never by this repository recognising a word. The process projection is three codes:
+declared set — never by this repository recognising a word. One gate sits after that decision and
+cannot be argued past: when a status in the declared passing set arrives with a process that reported no
+exit code (`null`) or a nonzero one, the result is `passing: false` with state `ENFORCEMENT_ERROR`
+(exit `4`), because a declared pass the evaluator's own process contradicts is an unknown (FE-16, ST-18;
+[ADR 0001](artifacts/adr/0001-orchestrate-do-not-reimplement.md)). A non-passing status is never
+reinterpreted from its exit code. The process projection is three codes:
 
 ```text
 0   the authority spoke and established passing

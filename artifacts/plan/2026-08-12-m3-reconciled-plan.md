@@ -260,6 +260,15 @@ silently absent marker. Use `writeFileSync`.
 > The falsifier is **not softened or deleted on the source line**, where it remains useful evidence.
 > Nothing below may be cited as showing D3 implemented, scheduled, or owned on this line.
 
+> **Dated note, 2026-10-14 — D3 admitted and completed on `main`.** The HOLD text above is kept as the
+> 2026-08-12 record and is not rewritten. Its stated reopening condition (*a backlog item owns the
+> property and authorises starting from the red falsifier*) was met when the property was filed as
+> ST-18 ([#109](https://github.com/mikeycdavis/StandardsEnforcer/issues/109), from FE-16) and
+> implemented in [PR #110](https://github.com/mikeycdavis/StandardsEnforcer/pull/110), which turns the
+> falsifier's cases 3 and 5 green on this line (see ADR 0001, amendment 2026-10-14). The "nothing below may
+> be cited" sentence described the line as of 2026-08-12 and no longer holds once #110 merges; until
+> then #110 is a draft.
+
 **Extended to five cases — 2026-08-12.** The three below were the reconciliation's adjudication of
 C-D. Two more were added before the falsifier was written, and the falsifier freezes all five.
 

@@ -881,9 +881,34 @@ export async function enforce({
   }
 
   // The whole of the enforcer's opinion about the verdict: is this status in the set the pack itself
-  // declared passing. No other field of the report is consulted — not a score, not a summary count,
+  // declared passing. (The process-completion gate below can only WITHHOLD a pass; it never grants one.) No other field of the report is consulted — not a score, not a summary count,
   // not a denominator — and test/authority-boundary.test.mjs is what keeps that true.
   const passing = run.contract.result.passing.includes(status);
+
+  // FE-16 / ST-18 — A DECLARED PASS IS NOT ENOUGH WHEN THE PROCESS DID NOT COMPLETE.
+  //
+  // The vocabulary check above stays first: `passing` is not computable from a status the contract
+  // never declared. Only then is a declared pass compared with what the process did. This is the one
+  // impossible combination the enforcer notices, and it is not an exit-code interpreter: a NON-passing
+  // status with any exit code is the pack's own business and falls through unchanged.
+  //
+  // The two findings are different and stay distinguishable. `null` is evidence that is MISSING (the
+  // process was ended by a signal, so no exit code exists); a nonzero code is evidence that CONTRADICTS
+  // itself. Both are unknowns, and an unknown is not a pass (INV-E1).
+  if (passing) {
+    const evidence = { standards, gate: gateReport, scope: scopeReport, policy: policyReport,
+      standardsExitCode: run.exitCode, report: run.report };
+    if (run.exitCode === null || run.exitCode === undefined) {
+      return result(STATE.ENFORCEMENT_ERROR,
+        `the standards release declared the passing status ${JSON.stringify(status)} but its process ` +
+        "reported no exit code, so completion is not established", evidence);
+    }
+    if (run.exitCode !== 0) {
+      return result(STATE.ENFORCEMENT_ERROR,
+        `the standards release declared the passing status ${JSON.stringify(status)} but its process ` +
+        `exited ${run.exitCode}; a passing status contradicted by the process result is not a verdict`, evidence);
+    }
+  }
 
   return result(STATE.EVALUATED, describe(status, passing), {
     standards,

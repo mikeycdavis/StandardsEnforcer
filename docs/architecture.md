@@ -147,12 +147,21 @@ the accepted CLI arguments:
                  "materialisedAt": "...", "fromCache": false },
   "gate":   { "checked": true, "rooted": true, "rootedAt": ["organization"], "appIds": [...], "note": "..." },
   "scope":  { "checked": true, "disposition": "in-scope", "detection": {...}, "decision": {...}, "standsOn": "..." },
-  "standardsExitCode": 3,            // the pack's own process status, recorded, never interpreted
+  "standardsExitCode": 3,            // the pack's own process status; read only to refuse a declared pass (FE-16, see below)
   "authority": { "standard": "machine-learning", "status": "NOT_EVALUATED" },
   "report":  { /* the pack's own JSON, verbatim */ },
   "authoritative": true              // true only when gate.rooted === true
 }
 ```
+
+**Process completion (FE-16 / ST-18).** `standardsExitCode` is not interpreted as a verdict: a
+non-passing declared status with any exit code is reported as `EVALUATED` unchanged, and the enforcer
+learns no meaning for any native code. It is read for exactly one impossible combination. When the
+declared status is in the pack's passing set and the process reported no exit code (`null`) or a nonzero
+one, the result is `ENFORCEMENT_ERROR`, never a pass. Both are unknowns, and an unknown is not a pass;
+the two details differ, so a reader can tell missing evidence from contradictory evidence. The
+undeclared-status check still runs first. The decision is recorded as a dated amendment to
+[ADR 0001](../artifacts/adr/0001-orchestrate-do-not-reimplement.md).
 
 ---
 
@@ -587,9 +596,14 @@ A pull request opened against a governed repository, end to end:
     it is not, that is an unknown, and INV-E1 says an unknown is not a pass →
     `ENFORCEMENT_ERROR`, exit `4`.
 12. `passing = contract.result.passing.includes(status)`. **That is the entirety of the enforcer's
-    opinion about the verdict.** No score, no summary count, no denominator is consulted;
+    opinion about what the verdict means; step 13 is the only thing that can withhold a pass, and it
+    reads the process, not the verdict.** No score, no summary count, no denominator is consulted;
     `test/authority-boundary.test.mjs` is what keeps that true.
-13. `result(STATE.EVALUATED, …, passing)` builds the envelope with the pack's report carried
+13. **Process-completion gate (FE-16 / ST-18, amendment to ADR 0001).** Only when `passing` is true,
+    and only after step 11: an exit code of `null` is `ENFORCEMENT_ERROR` (completion not established),
+    and a nonzero one is `ENFORCEMENT_ERROR` (the declared pass is contradicted by the process
+    result), exit `4`. A non-passing status passes this step untouched with any exit code.
+14. `result(STATE.EVALUATED, …, passing)` builds the envelope with the pack's report carried
     verbatim under `report` and its own answer under `authority.status`. `exitFor()` projects it to
     `0` or `1`. If the gate was never checked, `authoritative` is `false` and the render says so.
 
@@ -765,6 +779,9 @@ sequenceDiagram
                         else no JSON, unrunnable, or an undeclared status
                             PACK-->>CLI: unusable output
                             CLI-->>WF: ENFORCEMENT_ERROR, exit 4
+                        else a declared passing status, but the process exited nonzero or reported no exit code
+                            PACK-->>CLI: {status, ...} with a contradicting or missing process result
+                            CLI-->>WF: ENFORCEMENT_ERROR, exit 4 (FE-16: contradictory or missing evidence is an unknown)
                         else a declared status
                             PACK-->>CLI: {status, ...} verbatim
                             CLI-->>WF: EVALUATED + passing from the pack's own set, exit 0 or 1

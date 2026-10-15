@@ -43,6 +43,17 @@ keep true.
 
 ---
 
+## Unreleased
+
+### Fixed
+
+- **A declared pass the evaluator's own process contradicts is no longer a pass (FE-16, ST-18 #109).**
+  When the pack's status is in its declared `passing` set but the process reported no exit code, or a
+  nonzero one, the result is `ENFORCEMENT_ERROR` (exit `4`) with `passing: false`; the two findings
+  carry different details. Non-passing statuses are unchanged, and the enforcer still interprets no
+  native exit code. Recorded as a dated amendment to ADR 0001. The earlier statement that `passing` is
+  decided only by set membership is superseded by this gate; the 0.4.0 entry below is history.
+
 ## 0.6.0 — 2026-08-20
 
 **The governing policy is a parameter. A repository may be governed by more than one pack.**
@@ -224,7 +235,8 @@ MachineLearningStandards' vocabulary, which six other packs do not share.
 
 An authority having spoken is now one state, `EVALUATED`, which says nothing about what was said.
 Whether a merge may proceed rides beside it in `passing`, decided **only** by membership of the set
-the pack itself declared in `standards-adapter.json`.
+the pack itself declared in `standards-adapter.json`. *(Amended after 0.6.0: a declared pass whose
+process reported no exit code or a nonzero one is `ENFORCEMENT_ERROR` — see Unreleased, FE-16.)*
 
 ```json
 { "state": "EVALUATED", "passing": false, "authority": { "standard": "machine-learning", "status": "NOT_EVALUATED" } }

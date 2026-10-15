@@ -1,6 +1,6 @@
 # 0001 — Orchestrate the standards; never reimplement them
 
-- **Status:** Accepted
+- **Status:** Accepted; amended 2026-10-14 (process completion, see the amendment below)
 - **Date:** 2026-08-09
 - **Deciders:** Project owner
 
@@ -75,3 +75,30 @@ platform adapters and reporting — none of which requires knowing what a standa
 It also cannot answer questions the standards system cannot answer. If a rule rests on human
 judgement, the enforcer's verdict rests on it too, and no amount of orchestration converts that into
 a mechanical result. That limit is inherited on purpose.
+
+## Amendment, 2026-10-14 — a declared pass is refused when the evaluator's process did not complete
+
+**Status:** recorded from the FE-16 acceptance criteria (ST-18, #109); owner confirmation requested on
+the pull request. This is an amendment, not a successor, following the precedent of the dated amendment
+in [ADR 0005](0005-adapter-provenance.md).
+
+**What the decision above said, and where it meets this.** "Passes the verdict through unaltered"
+and "carries the standards system's own exit codes" were written for a verdict that arrives from a
+process that finished. A pack can also declare a passing status and then fail to complete: exit
+nonzero, or end with no exit code. Passing that through unaltered reports a pass the evaluator's own
+process contradicts.
+
+**Amendment.** When the pack's declared status is in its own `passing` set and the process reported no
+exit code, or a nonzero one, the enforcer reports `ENFORCEMENT_ERROR` and not a pass. Missing evidence
+(`null`) and contradictory evidence (nonzero) are separate findings. This follows ADR 0002: an unknown is
+not a pass. The undeclared-status check still runs first.
+
+**What stays true.** The enforcer still does not interpret a non-passing status or any native exit code,
+still does not reimplement or re-score the evaluator, and still carries the report verbatim under
+`report`. A non-passing declared status with any exit code is `EVALUATED`, unchanged. The only change is
+that it will not report a pass when the process that produced it did not complete. The evaluator's
+exit codes for verdicts that completed are still carried through; this amendment never replaces a
+non-passing result with a different one.
+
+**Decision source.** FE-16's frozen acceptance cases 1 to 5 (ST-18 #109 body). Owner confirmation of
+this amendment is requested on PR #110 and is not assumed here.
