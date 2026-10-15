@@ -78,8 +78,8 @@ a mechanical result. That limit is inherited on purpose.
 
 ## Amendment, 2026-10-14 — a declared pass is refused when the evaluator's process did not complete
 
-**Status:** recorded from the FE-16 acceptance criteria (ST-18, #109); owner confirmation requested on
-the pull request. This is an amendment, not a successor, following the precedent of the dated amendment
+**Status:** recorded from the FE-16 acceptance criteria (ST-18, #109); owner confirmed as written on
+2026-10-15 (PR #110 comment). This is an amendment, not a successor, following the precedent of the dated amendment
 in [ADR 0005](0005-adapter-provenance.md).
 
 **What the decision above said, and where it meets this.** "Passes the verdict through unaltered"
