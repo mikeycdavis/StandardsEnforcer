@@ -100,5 +100,6 @@ that it will not report a pass when the process that produced it did not complet
 exit codes for verdicts that completed are still carried through; this amendment never replaces a
 non-passing result with a different one.
 
-**Decision source.** FE-16's frozen acceptance cases 1 to 5 (ST-18 #109 body). Owner confirmation of
-this amendment is requested on PR #110 and is not assumed here.
+**Decision source.** FE-16's frozen acceptance cases 1 to 5 (ST-18 #109 body). Owner confirmation:
+the owner confirmed this amendment as written on 2026-10-15, recorded as a comment on PR #110
+(https://github.com/mikeycdavis/StandardsEnforcer/pull/110#issuecomment-6198001873).
