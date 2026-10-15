@@ -266,8 +266,8 @@ silently absent marker. Use `writeFileSync`.
 > ST-18 ([#109](https://github.com/mikeycdavis/StandardsEnforcer/issues/109), from FE-16) and
 > implemented in [PR #110](https://github.com/mikeycdavis/StandardsEnforcer/pull/110), which turns the
 > falsifier's cases 3 and 5 green on this line (see ADR 0001, amendment 2026-10-14). The "nothing below may
-> be cited" sentence described the line as of 2026-08-12 and no longer holds once #110 merges; until
-> then #110 is a draft.
+> be cited" sentence described the line as of 2026-08-12 and no longer holds: #110 was squash-merged on
+> 2026-10-15 at f90f9c4f4d6220663e7d9002879efd62e2b3d6a5 (it was a draft when this note was written).
 
 **Extended to five cases — 2026-08-12.** The three below were the reconciliation's adjudication of
 C-D. Two more were added before the falsifier was written, and the falsifier freezes all five.
