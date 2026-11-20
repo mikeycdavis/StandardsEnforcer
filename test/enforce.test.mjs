@@ -27,7 +27,7 @@ import { fileURLToPath } from "node:url";
 import { enforce, runOfficialEvaluator } from "../scripts/enforce.mjs";
 import { STATE, PASSING, REQUIRES_RECORDED_DECISION, REACHABLE, exitFor, EXIT } from "../scripts/states.mjs";
 import { verifyTagResolvesTo, resolveIdentity } from "../scripts/identity.mjs";
-import { oracleAt, oracleSubject } from "../test-support/oracle.mjs";
+import { oracleAt, oracleSubject, subjectGate } from "../test-support/oracle.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // v1.6.0: the first release declaring adapter schemaVersion 1.1.0, so binding {policy} through the
@@ -76,9 +76,19 @@ const identity = () => ({ standardsRepo: MLS, tag: TAG, sha: SHA, cacheRoot: CAC
 const SUBJECT = MLS_AVAILABLE
   ? oracleSubject(MLS, SHA, path.join(CACHE, "st14-subject"))
   : { ok: false, dir: null, why: ORACLE.skip };
-const NEEDS_SUBJECT = {
-  skip: SUBJECT.ok ? false : `the oracle subject could not be materialised: ${SUBJECT.why}`,
-};
+// ST-20. A subject that cannot be built is a skip only where nobody claimed the run was
+// authoritative. Under ENFORCER_REQUIRE_ORACLE=1 it is a failure, asserted by the test below
+// rather than thrown here, so the failing test names the reason.
+const SUBJECT_GATE = subjectGate(SUBJECT);
+const NEEDS_SUBJECT = { skip: SUBJECT_GATE.skip };
+
+test("oracle · a run that claims to be authoritative has a subject to evaluate", () => {
+  assert.equal(
+    SUBJECT_GATE.failure,
+    null,
+    `ENFORCER_REQUIRE_ORACLE=1 was set, so the subject-consuming tests must run, and they cannot: ${SUBJECT_GATE.failure}`,
+  );
+});
 
 // ===========================================================================
 // INV-E1 — no unknown becomes a pass
