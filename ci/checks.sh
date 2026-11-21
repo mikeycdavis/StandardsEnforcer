@@ -233,8 +233,21 @@ if [ ! -d "$ORACLE/.git" ]; then
 fi
 # The tags the suite pins, read from the suite rather than restated here — a second list would be
 # a second thing to forget to update.
-ORACLE_TAGS="$(node -e 'import(process.cwd()+"/test-support/oracle.mjs").then(m=>console.log(m.ORACLE_TAGS.join(" ")))')"
+# pathToFileURL: a bare `C:\…` path is not an importable specifier on Windows (Git Bash); on Linux the
+# two spellings resolve identically.
+ORACLE_TAGS="$(node -e 'import(require("node:url").pathToFileURL(process.cwd()+"/test-support/oracle.mjs").href).then(m=>console.log(m.ORACLE_TAGS.join(" ")))')"
 say "oracle  $ORACLE"
+# ST-22: a loop over an empty list examines nothing, and `done_stage` would then print `ok` for a
+# property that was never established. An empty set is a failure in every mode: the tag list is the
+# suite's own pin list, so it being empty means the suite pins no release to be ready for — which
+# is a defect to fix, not a state in which "ready" is a meaningful claim (and under
+# ENFORCER_REQUIRE_ORACLE=1 it is exactly the skipped-oracle shape FE-14 forbids).
+if [ -z "${ORACLE_TAGS//[[:space:]]/}" ]; then
+  say "FAIL  the suite pins no oracle release (ORACLE_TAGS is empty), so nothing was checked"
+  say "      test-support/oracle.mjs must export at least one tag; an empty list would let this stage"
+  say "      report ok having examined nothing."
+  FAILED_STAGE="oracle-readiness"; exit 1
+fi
 for tag in $ORACLE_TAGS; do
   # rev-list -n 1, never rev-parse: an annotated tag must dereference to its commit. This is the
   # same distinction scripts/identity.mjs diagnoses by name.
