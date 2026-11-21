@@ -200,3 +200,31 @@ export function oracleSubject(hostRepo, sha, cacheRoot) {
   }
   return { ok: true, dir: materialised.dir, sha, frozen: true, why: null };
 }
+
+/**
+ * What a test that consumes the oracle subject does when that subject could not be materialised
+ * (ST-20).
+ *
+ * `oracleSubject` reports failure and refuses to fall back. What a suite does with that report was
+ * left to a module-level constant that turned every failure into a node:test skip. Under
+ * `ENFORCER_REQUIRE_ORACLE=1` that is FE-14 again, reached through the subject instead of the
+ * authority: the oracle resolves, `oracleAt` is satisfied, the subject cannot be built, and the
+ * subject-consuming tests skip while the run claims to have exercised them.
+ *
+ *     subject ok                   { skip: false,  failure: null }
+ *     failed, run not required     { skip: reason, failure: null }    the skip stays, with its reason
+ *     failed, run required         { skip: false,  failure: reason }  the run must fail, with its reason
+ *
+ * `skip` is the value to hand to node:test. `failure` is what a test that always runs must assert
+ * is null; it is deliberately not thrown here, because a throw at import time would take every
+ * test in the file down with an error that names no test.
+ *
+ * @param {{ok: boolean, why?: string|null}} subject the result of `oracleSubject`
+ * @param {{required?: boolean}} [options] defaults to this run's `ENFORCER_REQUIRE_ORACLE`
+ * @returns {{skip: string|false, failure: string|null}}
+ */
+export function subjectGate(subject, { required = ORACLE_REQUIRED } = {}) {
+  if (subject.ok) return { skip: false, failure: null };
+  const reason = `the oracle subject could not be materialised: ${subject.why}`;
+  return required ? { skip: false, failure: reason } : { skip: reason, failure: null };
+}
