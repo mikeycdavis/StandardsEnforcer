@@ -113,7 +113,7 @@ const lineContaining = (code, index) => {
   return code.slice(from, to === -1 ? code.length : to);
 };
 
-/** `target:` bound to one of those expressions, or a path joined onto one. */
+/** `target:` or a `--target` argument bound to one of those expressions, or a path joined onto one. */
 function hostTreeAsSubject(code) {
   const hits = [];
   for (const alias of oracleAliases(code)) {
@@ -123,7 +123,34 @@ function hostTreeAsSubject(code) {
     // `path.join(MLS, …)` — a path built from the host tree, which is the same defect with a
     // filename on the end. `policyPath: path.join(MLS, "project-policy.yml")` is the live instance.
     const asJoin = new RegExp(`path\\.join\\(\\s*${a}\\s*,`, "gu");
-    for (const re of [asTarget, asJoin]) {
+    // ST-19: the same defect spelled as a CLI argument. `--target=${MLS}` and `--target ${MLS}` in a
+    // template literal, `"--target=" + MLS` by concatenation, and `["--target", MLS]` as argv.
+    // `--standards=${MLS}` names the AUTHORITY, which resolveIdentity verifies and nothing evaluates
+    // as a target, so it is deliberately not matched.
+    //
+    // NOTE: scripts/enforce.mjs accepts only `--target=<path>`; `--target <v>` and `["--target", v]`
+    // are rejected as unrecognised today, so those two shapes are matched pre-emptively (harmless,
+    // fail-closed) rather than because they evaluate the host tree now.
+    //
+    // RESIDUAL, RECORDED RATHER THAN CLAIMED CLOSED. These are
+    // fixed-shape regexes, so they are fail-closed only for the spellings listed. Still invisible:
+    // a BARE POSITIONAL target (scripts/enforce.mjs takes the first non-flag argument as the target,
+    // so `[script, MLS]` evaluates the host tree with no `--target` at all); the alias wrapped in a
+    // call or ternary in an argv element (`path.resolve(MLS)`, `c ? MLS : d`); a parenthesised
+    // concatenation; and any alias that is not the first or only operand, e.g. several `${}` segments
+    // (`--target=${p}${MLS}`, `--target=${dir}/${MLS}`) or chained concatenation
+    // (`"--target=" + dir + MLS`). None occurs in the current suite (scanned across
+    // test/*.test.mjs). A positional-argument matcher needs argv-position analysis and is a
+    // separate story (issue #118, ST-23).
+    // Covered: the alias may sit anywhere inside the interpolation
+    // (`${MLS.trim()}`, `${String(MLS)}`), the value may be quoted (`--target="${MLS}"`), an argv
+    // element may be template-wrapped, and `.concat(MLS)` is a concatenation. Fail-closed: a wider
+    // match asks a human, a narrower one is silent.
+    const asCliInterpolated = new RegExp(`--target(?:=|\\s+)["'\`]?\\$\\{[^}]*?\\b${a}\\b[^}]*\\}`, "gu");
+    const asCliConcatenated = new RegExp(
+      `["']--target=["']\\s*(?:\\+|\\.concat\\()\\s*\`?(?:\\$\\{\\s*)?${a}\\b`, "gu");
+    const asCliArgv = new RegExp(`["']--target["']\\s*,\\s*\`?(?:\\$\\{\\s*)?${a}\\b`, "gu");
+    for (const re of [asTarget, asJoin, asCliInterpolated, asCliConcatenated, asCliArgv]) {
       for (const m of code.matchAll(re)) {
         if (lineContaining(code, m.index).includes(UNRESOLVABLE_SENTINEL)) continue;
         hits.push({ alias, text: m[0] });
@@ -191,6 +218,19 @@ test("subject · the guard can see a violation, so its silence means something",
     'await enforce({ ...identity(), target: further });',
     // and the environment variable read straight through
     'await enforce({ ...identity(), target: process.env.ENFORCER_ORACLE_REPO });',
+    // ST-19: the CLI-argument spellings of the same defect
+    'spawnSync(node, [script, `--target=${MLS}`]);',
+    'spawnSync(node, [script, `--target ${MLS}`]);',
+    'spawnSync(node, [script, "--target=" + MLS]);',
+    'spawnSync(node, [script, "--target", MLS]);',
+    'spawnSync(node, [script, `--target=${further}`]);',
+    // further spellings: quoted value, member/call inside the interpolation, `.concat`
+    'spawnSync(node, [script, `--target="${MLS}"`]);',
+    'spawnSync(node, [script, `--target=${MLS.trim()}`]);',
+    'spawnSync(node, [script, `--target=${String(MLS)}`]);',
+    'spawnSync(node, [script, "--target=".concat(MLS)]);',
+    'spawnSync(node, [script, "--target", `${MLS}`]);',
+    'spawnSync(node, [script, "--target=" + `${MLS}`]);',
   ].join("\n");
 
   const found = hostTreeAsSubject(specimen).map((h) => h.text);
@@ -204,6 +244,17 @@ test("subject · the guard can see a violation, so its silence means something",
     "target: hostTree",
     "target: further",
     "target: process.env.ENFORCER_ORACLE_REPO",
+    "--target=${MLS}",
+    "--target ${MLS}",
+    '"--target=" + MLS',
+    '"--target", MLS',
+    "--target=${further}",
+    '--target="${MLS}',
+    "--target=${MLS.trim()}",
+    "--target=${String(MLS)}",
+    '"--target=".concat(MLS',
+    '"--target", `${MLS',
+    '"--target=" + `${MLS',
   ];
   for (const shape of required) {
     assert.ok(found.includes(shape),
@@ -241,6 +292,34 @@ test("subject · the guard can see a violation, so its silence means something",
     withAliases('await enforce({ ...identity(),\n  sha: "0".repeat(40),\n  target: MLS });'),
     ["target: MLS"],
     "split across lines the guard must fire rather than guess — fail-closed, not fail-quiet",
+  );
+
+  // ST-19: the exemption is string-based and per line, not CLI-aware. This exercises the raw function
+  // (the real scan strips comments first, so a CLI line is never exempt there, the safe direction),
+  // and an interpolated target on a line WITHOUT the sentinel must fire.
+  assert.deepEqual(
+    withAliases('spawnSync(node, [script, `--target=${MLS}`, `--sha=${"0".repeat(40)}`]); // sha: "0".repeat(40)'),
+    [],
+    "the per-line sentinel exemption is string-based, not CLI-aware (raw function, not scan behaviour)",
+  );
+  assert.deepEqual(
+    withAliases('spawnSync(node, [script, `--target=${MLS}`, `--sha=${SHA}`]);'),
+    ["--target=${MLS}"],
+    "an interpolated target with no sentinel evaluates the host tree and must fire",
+  );
+
+  // ST-19, negative specimens. `--standards=${MLS}` names the authority and `--target=${dir}` is a
+  // temp directory (gate.test.mjs:436, classified: NOT a subject-path violation for those reasons),
+  // so neither may fire, or the guard forbids code that is correct.
+  assert.deepEqual(
+    withAliases('spawnSync(node, [script, `--target=${dir}`, `--standards=${MLS}`, `--tag=${TAG}`]);'),
+    [],
+    "gate.test.mjs:436 shape: --target is a temp dir and --standards is the authority",
+  );
+  assert.deepEqual(
+    withAliases('spawnSync(node, [script, "--target", id.dir, "--standards", MLS]);'),
+    [],
+    "argv form with a materialised target and the host path as authority",
   );
 
   // And that it does not fire on the remedy, or this guard forbids its own fix.
