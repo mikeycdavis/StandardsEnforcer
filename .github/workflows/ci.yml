@@ -58,6 +58,21 @@ jobs:
       # this step does nothing and the guard fails. That is the truthful outcome, not a
       # configuration bug to route around: CI remaining red is better than CI claiming a green
       # authoritative suite it did not run.
+      # ST-21. The credential is checked, and named, BEFORE the checkout below, so that a missing or
+      # insufficient credential is reported as exactly that (ORACLE-CREDENTIAL-UNAVAILABLE) rather
+      # than surfacing later as "no git repository at .oracle" or an unresolved release. This step
+      # is deliberately not `continue-on-error`: a refused credential is a stop, with its own name.
+      # DECISION (ST-21 criterion 2): the `|| github.token` fallback below is KEPT, as an explicit
+      # and reported choice. It is correct for a public oracle; the step prints which credential it
+      # used on every run, and a private oracle with only the fallback fails here, by name.
+      - name: Check the oracle credential
+        if: vars.ENFORCER_ORACLE_REMOTE != ''
+        env:
+          ENFORCER_ORACLE_REMOTE: ${{ vars.ENFORCER_ORACLE_REMOTE }}
+          ENFORCER_ORACLE_TOKEN: ${{ secrets.ENFORCER_ORACLE_TOKEN }}
+          ENFORCER_FALLBACK_TOKEN: ${{ github.token }}
+        run: bash ci/oracle-credential.sh
+
       - name: Obtain the authoritative oracle
         id: oracle
         continue-on-error: true
