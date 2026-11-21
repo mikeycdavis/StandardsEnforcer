@@ -124,9 +124,18 @@ function hostTreeAsSubject(code) {
     // filename on the end. `policyPath: path.join(MLS, "project-policy.yml")` is the live instance.
     const asJoin = new RegExp(`path\\.join\\(\\s*${a}\\s*,`, "gu");
     // ST-19: the same defect spelled as a CLI argument. `--target=${MLS}` and `--target ${MLS}` in a
-    // template literal, `"--target=" + MLS` by concatenation, and `["--target", MLS]` as argv. Only
-    // `--target` is a subject flag: `--standards=${MLS}` names the AUTHORITY, which resolveIdentity
-    // verifies and nothing evaluates as a target, so it is deliberately not matched.
+    // template literal, `"--target=" + MLS` by concatenation, and `["--target", MLS]` as argv.
+    // `--standards=${MLS}` names the AUTHORITY, which resolveIdentity verifies and nothing evaluates
+    // as a target, so it is deliberately not matched.
+    //
+    // RESIDUAL, RECORDED RATHER THAN CLAIMED CLOSED (independent review of this change). These are
+    // fixed-shape regexes, so they are fail-closed only for the spellings listed. Still invisible:
+    // a BARE POSITIONAL target (scripts/enforce.mjs takes the first non-flag argument as the target,
+    // so `[script, MLS]` evaluates the host tree with no `--target` at all); the alias wrapped in a
+    // call or ternary in an argv element (`path.resolve(MLS)`, `c ? MLS : d`); a parenthesised
+    // concatenation; and several `${}` segments in one interpolation (`--target=${p}${MLS}`). None
+    // occurs in the current suite (scanned across test/*.test.mjs). A positional-argument matcher
+    // needs argv-position analysis and is a separate story.
     // Hardened after independent review: the alias may sit anywhere inside the interpolation
     // (`${MLS.trim()}`, `${String(MLS)}`), the value may be quoted (`--target="${MLS}"`), an argv
     // element may be template-wrapped, and `.concat(MLS)` is a concatenation. Fail-closed: a wider
