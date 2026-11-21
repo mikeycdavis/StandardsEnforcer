@@ -127,9 +127,14 @@ function hostTreeAsSubject(code) {
     // template literal, `"--target=" + MLS` by concatenation, and `["--target", MLS]` as argv. Only
     // `--target` is a subject flag: `--standards=${MLS}` names the AUTHORITY, which resolveIdentity
     // verifies and nothing evaluates as a target, so it is deliberately not matched.
-    const asCliInterpolated = new RegExp(`--target(?:=|\\s+)\\$\\{\\s*${a}\\s*\\}`, "gu");
-    const asCliConcatenated = new RegExp(`["']--target=["']\\s*\\+\\s*${a}\\b`, "gu");
-    const asCliArgv = new RegExp(`["']--target["']\\s*,\\s*${a}\\b`, "gu");
+    // Hardened after independent review: the alias may sit anywhere inside the interpolation
+    // (`${MLS.trim()}`, `${String(MLS)}`), the value may be quoted (`--target="${MLS}"`), an argv
+    // element may be template-wrapped, and `.concat(MLS)` is a concatenation. Fail-closed: a wider
+    // match asks a human, a narrower one is silent.
+    const asCliInterpolated = new RegExp(`--target(?:=|\\s+)["'\`]?\\$\\{[^}]*?\\b${a}\\b[^}]*\\}`, "gu");
+    const asCliConcatenated = new RegExp(
+      `["']--target=["']\\s*(?:\\+|\\.concat\\()\\s*\`?(?:\\$\\{\\s*)?${a}\\b`, "gu");
+    const asCliArgv = new RegExp(`["']--target["']\\s*,\\s*\`?(?:\\$\\{\\s*)?${a}\\b`, "gu");
     for (const re of [asTarget, asJoin, asCliInterpolated, asCliConcatenated, asCliArgv]) {
       for (const m of code.matchAll(re)) {
         if (lineContaining(code, m.index).includes(UNRESOLVABLE_SENTINEL)) continue;
@@ -204,6 +209,13 @@ test("subject · the guard can see a violation, so its silence means something",
     'spawnSync(node, [script, "--target=" + MLS]);',
     'spawnSync(node, [script, "--target", MLS]);',
     'spawnSync(node, [script, `--target=${further}`]);',
+    // spellings found by the independent review of this change
+    'spawnSync(node, [script, `--target="${MLS}"`]);',
+    'spawnSync(node, [script, `--target=${MLS.trim()}`]);',
+    'spawnSync(node, [script, `--target=${String(MLS)}`]);',
+    'spawnSync(node, [script, "--target=".concat(MLS)]);',
+    'spawnSync(node, [script, "--target", `${MLS}`]);',
+    'spawnSync(node, [script, "--target=" + `${MLS}`]);',
   ].join("\n");
 
   const found = hostTreeAsSubject(specimen).map((h) => h.text);
@@ -222,6 +234,12 @@ test("subject · the guard can see a violation, so its silence means something",
     '"--target=" + MLS',
     '"--target", MLS',
     "--target=${further}",
+    '--target="${MLS',
+    "--target=${MLS.trim()}",
+    "--target=${String(MLS)}",
+    '"--target=".concat(MLS',
+    '"--target", `${MLS',
+    '"--target=" + `${MLS',
   ];
   for (const shape of required) {
     assert.ok(found.includes(shape),
