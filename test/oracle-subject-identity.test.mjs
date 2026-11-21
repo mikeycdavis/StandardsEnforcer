@@ -128,15 +128,21 @@ function hostTreeAsSubject(code) {
     // `--standards=${MLS}` names the AUTHORITY, which resolveIdentity verifies and nothing evaluates
     // as a target, so it is deliberately not matched.
     //
-    // RESIDUAL, RECORDED RATHER THAN CLAIMED CLOSED (independent review of this change). These are
+    // NOTE: scripts/enforce.mjs accepts only `--target=<path>`; `--target <v>` and `["--target", v]`
+    // are rejected as unrecognised today, so those two shapes are matched pre-emptively (harmless,
+    // fail-closed) rather than because they evaluate the host tree now.
+    //
+    // RESIDUAL, RECORDED RATHER THAN CLAIMED CLOSED. These are
     // fixed-shape regexes, so they are fail-closed only for the spellings listed. Still invisible:
     // a BARE POSITIONAL target (scripts/enforce.mjs takes the first non-flag argument as the target,
     // so `[script, MLS]` evaluates the host tree with no `--target` at all); the alias wrapped in a
     // call or ternary in an argv element (`path.resolve(MLS)`, `c ? MLS : d`); a parenthesised
-    // concatenation; and several `${}` segments in one interpolation (`--target=${p}${MLS}`). None
-    // occurs in the current suite (scanned across test/*.test.mjs). A positional-argument matcher
-    // needs argv-position analysis and is a separate story.
-    // Hardened after independent review: the alias may sit anywhere inside the interpolation
+    // concatenation; and any alias that is not the first or only operand, e.g. several `${}` segments
+    // (`--target=${p}${MLS}`, `--target=${dir}/${MLS}`) or chained concatenation
+    // (`"--target=" + dir + MLS`). None occurs in the current suite (scanned across
+    // test/*.test.mjs). A positional-argument matcher needs argv-position analysis and is a
+    // separate story (issue #118, ST-23).
+    // Covered: the alias may sit anywhere inside the interpolation
     // (`${MLS.trim()}`, `${String(MLS)}`), the value may be quoted (`--target="${MLS}"`), an argv
     // element may be template-wrapped, and `.concat(MLS)` is a concatenation. Fail-closed: a wider
     // match asks a human, a narrower one is silent.
@@ -218,7 +224,7 @@ test("subject · the guard can see a violation, so its silence means something",
     'spawnSync(node, [script, "--target=" + MLS]);',
     'spawnSync(node, [script, "--target", MLS]);',
     'spawnSync(node, [script, `--target=${further}`]);',
-    // spellings found by the independent review of this change
+    // further spellings: quoted value, member/call inside the interpolation, `.concat`
     'spawnSync(node, [script, `--target="${MLS}"`]);',
     'spawnSync(node, [script, `--target=${MLS.trim()}`]);',
     'spawnSync(node, [script, `--target=${String(MLS)}`]);',
@@ -288,12 +294,13 @@ test("subject · the guard can see a violation, so its silence means something",
     "split across lines the guard must fire rather than guess — fail-closed, not fail-quiet",
   );
 
-  // ST-19: the exemption is per line, so it must hold for the CLI spellings too, and an interpolated
-  // target on a line WITHOUT the sentinel must fire.
+  // ST-19: the exemption is string-based and per line, not CLI-aware. This exercises the raw function
+  // (the real scan strips comments first, so a CLI line is never exempt there, the safe direction),
+  // and an interpolated target on a line WITHOUT the sentinel must fire.
   assert.deepEqual(
     withAliases('spawnSync(node, [script, `--target=${MLS}`, `--sha=${"0".repeat(40)}`]); // sha: "0".repeat(40)'),
     [],
-    "an interpolated target on a sentinel line is exempt, like the object form",
+    "the per-line sentinel exemption is string-based, not CLI-aware (raw function, not scan behaviour)",
   );
   assert.deepEqual(
     withAliases('spawnSync(node, [script, `--target=${MLS}`, `--sha=${SHA}`]);'),
