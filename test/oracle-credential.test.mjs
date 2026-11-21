@@ -30,6 +30,7 @@ async function run({ stderr = "", rc = 0, token = "", fallback = "", remote = "o
     await writeFile(stub, [
       "#!/usr/bin/env bash",
       `printf '%s\\n' "$*" >> "${argvFile.replaceAll("\\", "/")}"`,
+      `printf '%s\\n%s\\n' "$GIT_CONFIG_KEY_0" "$GIT_CONFIG_VALUE_0" > "${argvFile.replaceAll("\\", "/")}.env"`,
       `printf '%s' ${JSON.stringify(stderr)} >&2`,
       `exit ${rc}`,
       "",
@@ -47,7 +48,9 @@ async function run({ stderr = "", rc = 0, token = "", fallback = "", remote = "o
     const r = spawnSync("bash", [SCRIPT.replaceAll("\\", "/")], { encoding: "utf8", env });
     let argv = "";
     try { argv = await readFile(argvFile, "utf8"); } catch { /* the stub was never called */ }
-    return { status: r.status, out: `${r.stdout}${r.stderr}`, argv };
+    let cfg = "";
+    try { cfg = await readFile(`${argvFile}.env`, "utf8"); } catch { /* the stub was never called */ }
+    return { status: r.status, out: `${r.stdout}${r.stderr}`, argv, cfg };
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -109,6 +112,15 @@ test("credential · under GitHub Actions the failure is an ::error:: annotation"
   assert.equal(r.status, 1, r.out);
   assert.match(r.out, /::error::ORACLE-CREDENTIAL-UNAVAILABLE/u);
   assert.match(r.out, /::add-mask::/u, "the derived header must be masked in the log");
+});
+
+test("credential · git receives a github.com-scoped basic header derived from the token, and that same value is masked", async () => {
+  const r = await run({ rc: 0, token: SECRET, githubActions: true });
+  const b64 = Buffer.from(`x-access-token:${SECRET}`).toString("base64");
+  const [key, value] = r.cfg.split("\n");
+  assert.equal(key, "http.https://github.com/.extraheader");
+  assert.equal(value, `AUTHORIZATION: basic ${b64}`);
+  assert.ok(r.out.split("\n").includes(`::add-mask::${b64}`), "the exact header value must be masked");
 });
 
 test("workflow · the credential step runs before the oracle checkout and is not continue-on-error", async () => {

@@ -49,15 +49,6 @@ jobs:
         with:
           node-version: '20'
 
-      # `continue-on-error` on purpose. If the oracle cannot be obtained, the failure that should
-      # stop the build is the required-oracle guard saying so in the suite's own voice, not a
-      # checkout step failing with a message about credentials. The guard names the condition,
-      # names the release that did not resolve, and says what would satisfy it.
-      #
-      # `vars.ENFORCER_ORACLE_REMOTE` names the authoritative standards repository. If it is unset,
-      # this step does nothing and the guard fails. That is the truthful outcome, not a
-      # configuration bug to route around: CI remaining red is better than CI claiming a green
-      # authoritative suite it did not run.
       # ST-21. The credential is checked, and named, BEFORE the checkout below, so that a missing or
       # insufficient credential is reported as exactly that (ORACLE-CREDENTIAL-UNAVAILABLE) rather
       # than surfacing later as "no git repository at .oracle" or an unresolved release. This step
@@ -73,6 +64,16 @@ jobs:
           ENFORCER_FALLBACK_TOKEN: ${{ github.token }}
         run: bash ci/oracle-credential.sh
 
+      # `continue-on-error` on purpose. A refused credential is handled by the step above, by name.
+      # For every OTHER way the oracle cannot be obtained, the failure that should stop the build is
+      # the required-oracle guard saying so in the suite's own voice, not a checkout step failing
+      # with a generic message. The guard names the condition, names the release that did not
+      # resolve, and says what would satisfy it.
+      #
+      # `vars.ENFORCER_ORACLE_REMOTE` names the authoritative standards repository. If it is unset,
+      # this step does nothing and the guard fails. That is the truthful outcome, not a
+      # configuration bug to route around: CI remaining red is better than CI claiming a green
+      # authoritative suite it did not run.
       - name: Obtain the authoritative oracle
         id: oracle
         continue-on-error: true

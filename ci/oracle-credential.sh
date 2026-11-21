@@ -43,12 +43,18 @@ else
 fi
 printf 'oracle credential source: %s\n' "$SOURCE"
 
-args=(ls-remote --exit-code "$URL" HEAD)
+# No --exit-code and no ref pattern: `--exit-code` returns 2 when the pattern matches nothing, which
+# would report a VALID credential against an empty or unborn-HEAD repository as unreachable. This
+# probe answers one question only (can this credential read the remote?); whether the pinned
+# releases exist is the oracle-readiness stage's job.
+args=(ls-remote "$URL")
 env_pairs=(GIT_TERMINAL_PROMPT=0)
 if [ -n "$TOKEN" ]; then
   header="$(printf 'x-access-token:%s' "$TOKEN" | base64 | tr -d '\n')"
   [ -n "${GITHUB_ACTIONS:-}" ] && printf '::add-mask::%s\n' "$header"
-  env_pairs+=(GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.extraheader "GIT_CONFIG_VALUE_0=AUTHORIZATION: basic $header")
+  # Scoped to github.com, as actions/checkout scopes it, so a redirect elsewhere never receives it.
+  # Never run this script under `set -x` / `bash -x`: the trace would print the token and header.
+  env_pairs+=(GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader "GIT_CONFIG_VALUE_0=AUTHORIZATION: basic $header")
 fi
 
 set +e
@@ -62,7 +68,7 @@ if [ "$rc" -eq 0 ]; then
 fi
 
 if printf '%s' "$out" | grep -qiE 'authentication failed|bad credentials|invalid username or token|could not read (username|password)|error: 40[13]|returned error: 40[13]|requested url returned error: 40[13]|repository not found'; then
-  emit error "ORACLE-CREDENTIAL-UNAVAILABLE: the oracle remote refused or could not be read with ${SOURCE}. This is a credential problem, not an absent oracle and not an unresolved release. Set a valid ENFORCER_ORACLE_TOKEN repository secret with read access to ${REMOTE:-the oracle remote}."
+  emit error "ORACLE-CREDENTIAL-UNAVAILABLE: the oracle remote refused or could not be read with ${SOURCE}. This is a credential problem, not an absent oracle and not an unresolved release (GitHub reports a repository the credential cannot read as not found, so also check that ${REMOTE:-the oracle remote} is spelled correctly). Set a valid ENFORCER_ORACLE_TOKEN repository secret with read access to ${REMOTE:-the oracle remote}."
   printf '%s\n' "$out" | sed 's/^/  git: /'
   exit 1
 fi
