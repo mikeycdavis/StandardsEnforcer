@@ -113,9 +113,108 @@ const lineContaining = (code, index) => {
   return code.slice(from, to === -1 ? code.length : to);
 };
 
+/**
+ * ST-23. The elements of every array literal in `code`, split at top-level commas.
+ *
+ * A small scanner rather than a regex because the question being asked is positional ("which
+ * element of this argv is the bare target?"), and a regex cannot count commas outside strings,
+ * template literals and nested brackets. It understands '…', "…", `…${…}…`, and ( [ { nesting, and
+ * nothing else: it is not a JavaScript parser, and anything it cannot make sense of simply yields no
+ * array, which is the unsafe direction, so the specimens in the liveness test prove each shape.
+ */
+function arrayLiterals(code) {
+  const out = [];
+  const skipString = (i) => { // i at an opening quote; returns the index just past the string
+    const q = code[i];
+    for (i += 1; i < code.length; i += 1) {
+      if (code[i] === "\\") { i += 1; continue; }
+      if (q === "`" && code[i] === "$" && code[i + 1] === "{") {
+        let depth = 1;
+        for (i += 2; i < code.length && depth > 0; i += 1) {
+          if (code[i] === "{") depth += 1;
+          else if (code[i] === "}") depth -= 1;
+          else if (code[i] === '"' || code[i] === "'" || code[i] === "`") i = skipString(i) - 1;
+        }
+        i -= 1;
+        continue;
+      }
+      if (code[i] === q) return i + 1;
+    }
+    return code.length;
+  };
+  for (let start = code.indexOf("["); start !== -1; start = code.indexOf("[", start + 1)) {
+    const elements = [];
+    let depth = 0;
+    let from = start + 1;
+    let closed = false;
+    for (let i = start + 1; i < code.length; i += 1) {
+      const c = code[i];
+      if (c === '"' || c === "'" || c === "`") { i = skipString(i) - 1; continue; }
+      if (c === "(" || c === "[" || c === "{") depth += 1;
+      else if (c === ")" || c === "}") depth -= 1;
+      else if (c === "]" && depth > 0) depth -= 1;
+      else if (c === "]") {
+        elements.push({ text: code.slice(from, i), index: from });
+        closed = true;
+        break;
+      } else if (c === "," && depth === 0) {
+        elements.push({ text: code.slice(from, i), index: from });
+        from = i + 1;
+      }
+      if (depth < 0) break;
+    }
+    if (closed) out.push(elements.filter((e) => e.text.trim() !== ""));
+  }
+  return out;
+}
+
+/**
+ * ST-23. An oracle-derived alias used as the BARE POSITIONAL target of an `enforce.mjs` invocation.
+ *
+ * `scripts/enforce.mjs` takes the first non-flag argument as the target, so `[script, MLS]` evaluates
+ * the host tree with no `--target` at all. The alias may be wrapped (`path.resolve(MLS)`,
+ * `c ? MLS : d`, `(a + MLS)`), because the whole element is searched, not matched against a shape.
+ *
+ * An invocation is an array literal with an element that names the script: the literal text
+ * `enforce.mjs`, or a name bound to an expression that mentions it. Elements before the script are
+ * node's own options. After it, an element is NOT positional if it is a spread, begins with `--`
+ * (a flag, whose `=value` form is the CLI matchers' business), or directly follows a bare
+ * `"--flag"` element (that is the flag's value: `"--standards", MLS` names the authority).
+ */
+function positionalTargets(code, aliases) {
+  const scriptNames = new Set();
+  for (const m of code.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([^;\n]*enforce\.mjs[^;\n]*)/gu)) {
+    scriptNames.add(m[1]);
+  }
+  const namesScript = (el) => /enforce\.mjs/u.test(el) || scriptNames.has(el.trim());
+  const bareFlag = /^["'`]--[\w-]+["'`]$/u;
+  const hits = [];
+  for (const elements of arrayLiterals(code)) {
+    const s = elements.findIndex((e) => namesScript(e.text));
+    if (s === -1) continue;
+    for (let i = s + 1; i < elements.length; i += 1) {
+      const el = elements[i].text.trim();
+      if (el.startsWith("...") || /^["'`]--/u.test(el)) continue;
+      if (i > 0 && bareFlag.test(elements[i - 1].text.trim())) continue;
+      for (const alias of aliases) {
+        if (new RegExp(`(?<![\\w$.])${escapeForRegExp(alias)}(?![\\w$])`, "u").test(el)) {
+          hits.push({ alias, text: el, index: elements[i].index });
+          break;
+        }
+      }
+    }
+  }
+  return hits;
+}
+
 /** `target:` or a `--target` argument bound to one of those expressions, or a path joined onto one. */
 function hostTreeAsSubject(code) {
   const hits = [];
+  const aliasSet = oracleAliases(code);
+  for (const hit of positionalTargets(code, aliasSet)) {
+    if (lineContaining(code, hit.index).includes(UNRESOLVABLE_SENTINEL)) continue;
+    hits.push({ alias: hit.alias, text: hit.text });
+  }
   for (const alias of oracleAliases(code)) {
     const a = escapeForRegExp(alias);
     // `target: MLS` — the subject IS the host tree.
@@ -134,14 +233,14 @@ function hostTreeAsSubject(code) {
     //
     // RESIDUAL, RECORDED RATHER THAN CLAIMED CLOSED. These are
     // fixed-shape regexes, so they are fail-closed only for the spellings listed. Still invisible:
-    // a BARE POSITIONAL target (scripts/enforce.mjs takes the first non-flag argument as the target,
-    // so `[script, MLS]` evaluates the host tree with no `--target` at all); the alias wrapped in a
-    // call or ternary in an argv element (`path.resolve(MLS)`, `c ? MLS : d`); a parenthesised
-    // concatenation; and any alias that is not the first or only operand, e.g. several `${}` segments
-    // (`--target=${p}${MLS}`, `--target=${dir}/${MLS}`) or chained concatenation
-    // (`"--target=" + dir + MLS`). None occurs in the current suite (scanned across
-    // test/*.test.mjs). A positional-argument matcher needs argv-position analysis and is a
-    // separate story (issue #118, ST-23).
+    // the alias wrapped in a call or ternary AFTER a `--target` spelling (`"--target=" + path.resolve(MLS)`),
+    // a parenthesised concatenation, and any alias that is not the first or only operand, e.g. several
+    // `${}` segments (`--target=${p}${MLS}`, `--target=${dir}/${MLS}`) or chained concatenation
+    // (`"--target=" + dir + MLS`). None occurs in the current suite (scanned across test/*.test.mjs).
+    // CLOSED by ST-23 (issue #118) in `positionalTargets`: the BARE POSITIONAL target
+    // (scripts/enforce.mjs takes the first non-flag argument as the target, so `[script, MLS]`
+    // evaluates the host tree with no `--target` at all), including `path.resolve(MLS)`, a ternary
+    // or a parenthesised expression as that argv element.
     // Covered: the alias may sit anywhere inside the interpolation
     // (`${MLS.trim()}`, `${String(MLS)}`), the value may be quoted (`--target="${MLS}"`), an argv
     // element may be template-wrapped, and `.concat(MLS)` is a concatenation. Fail-closed: a wider
@@ -231,6 +330,14 @@ test("subject · the guard can see a violation, so its silence means something",
     'spawnSync(node, [script, "--target=".concat(MLS)]);',
     'spawnSync(node, [script, "--target", `${MLS}`]);',
     'spawnSync(node, [script, "--target=" + `${MLS}`]);',
+    // ST-23: the bare positional target, bare and wrapped (needs the script to be named)
+    'const script = path.join(ROOT, "scripts/enforce.mjs");',
+    'spawnSync(process.execPath, [script, MLS, "--standards=x"]);',
+    'spawnSync(process.execPath, [script, path.resolve(MLS), "--tag=t"]);',
+    'spawnSync(process.execPath, [script, cond ? MLS : other]);',
+    'spawnSync(process.execPath, [script, (prefix + MLS)]);',
+    'spawnSync(process.execPath, [path.join(ROOT, "scripts/enforce.mjs"), further, "--tag=t"]);',
+    'spawnSync(process.execPath, ["--no-warnings", script, `${MLS}`]);',
   ].join("\n");
 
   const found = hostTreeAsSubject(specimen).map((h) => h.text);
@@ -255,6 +362,12 @@ test("subject · the guard can see a violation, so its silence means something",
     '"--target=".concat(MLS',
     '"--target", `${MLS',
     '"--target=" + `${MLS',
+    "MLS",
+    "path.resolve(MLS)",
+    "cond ? MLS : other",
+    "(prefix + MLS)",
+    "further",
+    "`${MLS}`",
   ];
   for (const shape of required) {
     assert.ok(found.includes(shape),
@@ -320,6 +433,41 @@ test("subject · the guard can see a violation, so its silence means something",
     withAliases('spawnSync(node, [script, "--target", id.dir, "--standards", MLS]);'),
     [],
     "argv form with a materialised target and the host path as authority",
+  );
+
+  // ST-23, each positional shape on its own, so a hit is attributable to the matcher under test and
+  // not to a neighbouring line. Each specimen carries the lines that make MLS the host path.
+  const positional = (line) => withAliases(['const script = path.join(ROOT, "scripts/enforce.mjs");', line].join("\n"));
+  for (const [line, expected] of [
+    ["spawnSync(node, [script, MLS]);", "MLS"],
+    ["spawnSync(node, [script, path.resolve(MLS)]);", "path.resolve(MLS)"],
+    ["spawnSync(node, [script, c ? MLS : d]);", "c ? MLS : d"],
+    ["spawnSync(node, [path.join(ROOT, 'scripts/enforce.mjs'), MLS]);", "MLS"],
+    ["spawnSync(node, [script, '--tag=t', MLS]);", "MLS"],
+  ]) {
+    assert.deepEqual(positional(line), [expected], `positional shape not flagged: ${line}`);
+  }
+  // Not positional targets, or not the enforce script: none may fire, or the guard forbids correct code.
+  for (const line of [
+    "spawnSync(node, [script, id.dir, '--standards', MLS]);",       // MLS is the value of a flag
+    "spawnSync(node, [script, `--target=${dir}`, `--standards=${MLS}`]);", // flags only
+    "spawnSync(node, [script, ...rest]);",                          // a spread is unknowable, not flagged
+    "spawnSync('git', ['-C', MLS, 'log']);",                       // not an enforce invocation
+    "spawnSync(node, [MLS, script]);",                              // before the script: node's own argument
+    "const x = [MLS];",
+  ]) {
+    assert.deepEqual(positional(line), [], `must not fire: ${line}`);
+  }
+  // The sentinel exemption applies to a positional call only where it genuinely applies (same line).
+  assert.deepEqual(
+    positional('enforce2([script, MLS], { sha: "0".repeat(40) });'),
+    [],
+    "the identity-mismatch sentinel on the same line exempts the call",
+  );
+  assert.deepEqual(
+    positional('spawnSync(node, [script, MLS, `--sha=${SHA}`]);'),
+    ["MLS"],
+    "a positional host target with a resolving sha is never exempt",
   );
 
   // And that it does not fire on the remedy, or this guard forbids its own fix.
