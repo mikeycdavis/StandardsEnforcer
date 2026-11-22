@@ -22,6 +22,15 @@ import { readSource } from "../test-support/source-scan.mjs";
 const SCRIPT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "ci", "oracle-credential.sh");
 const SECRET = "ghp_SECRETVALUE0123456789";
 
+// The probe is a bash script. On a native Windows checkout `bash` can be the WSL launcher, which cannot
+// run it, and that is a property of the machine rather than of the script. Where no usable bash exists
+// the shell-driven tests are skipped with that reason; under CI (Linux, bash present) a missing bash is
+// a failure, so the surface cannot be skipped where it is required.
+const BASH_PROBE = spawnSync("bash", ["-c", "test -f \"$1\" && exit 0 || exit 3", "bash", SCRIPT.replaceAll("\\", "/")], { encoding: "utf8" });
+const BASH_USABLE = BASH_PROBE.status === 0;
+const SHELL_SKIP = BASH_USABLE ? false : (process.env.GITHUB_ACTIONS || process.env.CI ? false : "no usable bash on this machine; the shell probe is exercised in Linux CI");
+const shellTest = (name, fn) => test(name, { skip: SHELL_SKIP }, fn);
+
 async function run({ stderr = "", rc = 0, token = "", fallback = "", remote = "owner/oracle", githubActions = false, event = "", ref = "", requireDedicated = false }) {
   const dir = await mkdtemp(path.join(tmpdir(), "se-cred-"));
   try {
@@ -62,7 +71,7 @@ async function run({ stderr = "", rc = 0, token = "", fallback = "", remote = "o
   }
 }
 
-test("credential · the script can answer OK, and says which credential it used", async () => {
+shellTest("credential · the script can answer OK, and says which credential it used", async () => {
   const r = await run({ rc: 0, token: SECRET });
   assert.equal(r.status, 0, r.out);
   assert.match(r.out, /ORACLE-CREDENTIAL-OK/u);
@@ -70,7 +79,7 @@ test("credential · the script can answer OK, and says which credential it used"
   assert.match(r.argv, /ls-remote/u, "the stub must have been called, so the probe really ran");
 });
 
-test("credential · the github.token fallback is reported by name, never silent (criterion 2)", async () => {
+shellTest("credential · the github.token fallback is reported by name, never silent (criterion 2)", async () => {
   const r = await run({ rc: 0, token: "", fallback: "ghs_fallback" });
   assert.equal(r.status, 0, r.out);
   assert.match(r.out, /FALLBACK \(ENFORCER_ORACLE_TOKEN is not set\)/u);
@@ -82,7 +91,7 @@ for (const [name, stderr] of [
   ["bad credentials", "remote: Bad credentials\nfatal: unable to access: The requested URL returned error: 401"],
   ["a private repository hidden from the credential", "remote: Repository not found.\nfatal: repository 'https://github.com/owner/oracle.git/' not found"],
 ]) {
-  test(`credential · ${name} is ORACLE-CREDENTIAL-UNAVAILABLE, distinct from an absent oracle or a failed release`, async () => {
+  shellTest(`credential · ${name} is ORACLE-CREDENTIAL-UNAVAILABLE, distinct from an absent oracle or a failed release`, async () => {
     const r = await run({ rc: 128, stderr, token: SECRET });
     assert.equal(r.status, 1, r.out);
     assert.match(r.out, /ORACLE-CREDENTIAL-UNAVAILABLE/u);
@@ -92,35 +101,35 @@ for (const [name, stderr] of [
   });
 }
 
-test("credential · a network failure is a different named failure, not a credential one", async () => {
+shellTest("credential · a network failure is a different named failure, not a credential one", async () => {
   const r = await run({ rc: 128, stderr: "fatal: unable to access 'https://github.com/owner/oracle.git/': Could not resolve host: github.com", token: SECRET });
   assert.equal(r.status, 2, r.out);
   assert.match(r.out, /ORACLE-REMOTE-UNREACHABLE/u);
   assert.doesNotMatch(r.out, /ORACLE-CREDENTIAL-UNAVAILABLE/u);
 });
 
-test("credential · no credential at all is reported as such and fails when the remote refuses it", async () => {
+shellTest("credential · no credential at all is reported as such and fails when the remote refuses it", async () => {
   const r = await run({ rc: 128, stderr: "fatal: could not read Username for 'https://github.com': terminal prompts disabled" });
   assert.equal(r.status, 1, r.out);
   assert.match(r.out, /no credential at all/u);
   assert.match(r.out, /ORACLE-CREDENTIAL-UNAVAILABLE/u);
 });
 
-test("credential · the token never appears in the git command line or the output", async () => {
+shellTest("credential · the token never appears in the git command line or the output", async () => {
   const r = await run({ rc: 128, stderr: "fatal: Authentication failed", token: SECRET });
   assert.ok(r.argv.length > 0, "the stub must have been called");
   assert.ok(!r.argv.includes(SECRET), "the token must not be in git's argv");
   assert.ok(!r.out.includes(SECRET), "the token must not be printed");
 });
 
-test("credential · under GitHub Actions the failure is an ::error:: annotation", async () => {
+shellTest("credential · under GitHub Actions the failure is an ::error:: annotation", async () => {
   const r = await run({ rc: 128, stderr: "fatal: Authentication failed", token: SECRET, githubActions: true });
   assert.equal(r.status, 1, r.out);
   assert.match(r.out, /::error::ORACLE-CREDENTIAL-UNAVAILABLE/u);
   assert.match(r.out, /::add-mask::/u, "the derived header must be masked in the log");
 });
 
-test("credential · git receives a github.com-scoped basic header derived from the token, and that same value is masked", async () => {
+shellTest("credential · git receives a github.com-scoped basic header derived from the token, and that same value is masked", async () => {
   const r = await run({ rc: 0, token: SECRET, githubActions: true });
   const b64 = Buffer.from(`x-access-token:${SECRET}`).toString("base64");
   const [key, value] = r.cfg.split("\n");
@@ -129,7 +138,7 @@ test("credential · git receives a github.com-scoped basic header derived from t
   assert.ok(r.out.split("\n").includes(`::add-mask::${b64}`), "the exact header value must be masked");
 });
 
-test("credential · the dedicated mode is reported AUTHORITATIVE and the fallback and none modes NON-AUTHORITATIVE", async () => {
+shellTest("credential · the dedicated mode is reported AUTHORITATIVE and the fallback and none modes NON-AUTHORITATIVE", async () => {
   const dedicated = await run({ rc: 0, token: SECRET, githubActions: true, event: "push", ref: "refs/heads/main" });
   assert.match(dedicated.out, /oracle credential mode: dedicated/u);
   assert.match(dedicated.out, /oracle result authority: AUTHORITATIVE$/mu);
@@ -146,33 +155,33 @@ test("credential · the dedicated mode is reported AUTHORITATIVE and the fallbac
   assert.match(none.out, /oracle result authority: NON-AUTHORITATIVE/u);
 });
 
-test("credential · the dedicated credential outside a push to main is withheld the AUTHORITATIVE label", async () => {
+shellTest("credential · the dedicated credential outside a push to main is withheld the AUTHORITATIVE label", async () => {
   const r = await run({ rc: 0, token: SECRET, githubActions: true, event: "pull_request", ref: "refs/pull/1/merge" });
   assert.equal(r.status, 0, r.out);
   assert.match(r.out, /oracle credential mode: dedicated/u);
   assert.match(r.out, /oracle result authority: NON-AUTHORITATIVE/u);
 });
 
-test("credential · a run that demands the dedicated credential and lacks it fails as ORACLE-DEDICATED-CREDENTIAL-MISSING (exit 3)", async () => {
+shellTest("credential · a run that demands the dedicated credential and lacks it fails as ORACLE-DEDICATED-CREDENTIAL-MISSING (exit 3)", async () => {
   const r = await run({ rc: 0, token: "", fallback: "ghs_fallback", githubActions: true, event: "push", ref: "refs/heads/main", requireDedicated: true });
   assert.equal(r.status, 3, r.out);
   assert.match(r.out, /ORACLE-DEDICATED-CREDENTIAL-MISSING/u);
   assert.doesNotMatch(r.out, /ORACLE-CREDENTIAL-UNAVAILABLE|ORACLE-REMOTE-UNREACHABLE/u);
 });
 
-test("credential · demanding the dedicated credential with no remote configured still fails by name", async () => {
+shellTest("credential · demanding the dedicated credential with no remote configured still fails by name", async () => {
   const r = await run({ rc: 0, token: "", remote: "", githubActions: true, event: "push", ref: "refs/heads/main", requireDedicated: true });
   assert.equal(r.status, 3, r.out);
   assert.match(r.out, /ORACLE-DEDICATED-CREDENTIAL-MISSING/u);
 });
 
-test("credential · demanding the dedicated credential passes when it is present on main", async () => {
+shellTest("credential · demanding the dedicated credential passes when it is present on main", async () => {
   const r = await run({ rc: 0, token: SECRET, githubActions: true, event: "push", ref: "refs/heads/main", requireDedicated: true });
   assert.equal(r.status, 0, r.out);
   assert.match(r.out, /ORACLE-CREDENTIAL-OK/u);
 });
 
-test("credential · a refused fallback is the credential failure, labelled non-authoritative, never an absent oracle", async () => {
+shellTest("credential · a refused fallback is the credential failure, labelled non-authoritative, never an absent oracle", async () => {
   const r = await run({ rc: 128, stderr: "remote: Repository not found.", token: "", fallback: "ghs_fallback" });
   assert.equal(r.status, 1, r.out);
   assert.match(r.out, /ORACLE-CREDENTIAL-UNAVAILABLE/u);
