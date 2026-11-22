@@ -11,6 +11,7 @@
 #                                          from it; GitHub reports a private repository the caller
 #                                          cannot read as "not found", so that is reported as the
 #                                          credential condition it is indistinguishable from)
+#   exit 3  ORACLE-DEDICATED-CREDENTIAL-MISSING  ENFORCER_REQUIRE_DEDICATED is set (trusted workflow only) and the run has no dedicated credential
 #   exit 2  ORACLE-REMOTE-UNREACHABLE      the probe failed for a reason that is not a credential
 #
 # The fallback to the workflow's own `github.token` when no `ENFORCER_ORACLE_TOKEN` is set is KEPT,
@@ -42,6 +43,11 @@ fi
 if [ -n "${ENFORCER_ORACLE_TOKEN:-}" ]; then
   TOKEN="$ENFORCER_ORACLE_TOKEN"; SOURCE="ENFORCER_ORACLE_TOKEN (dedicated secret)"
   MODE="dedicated"; AUTHORITY="AUTHORITATIVE"
+  # Defence in depth: the dedicated credential only earns the label in a push to main. Anywhere else
+  # under Actions the label is withheld even though the credential is present.
+  if [ -n "${GITHUB_ACTIONS:-}" ] && { [ "${GITHUB_EVENT_NAME:-}" != "push" ] || [ "${GITHUB_REF:-}" != "refs/heads/main" ]; }; then
+    AUTHORITY="NON-AUTHORITATIVE (the dedicated credential is present outside a push to main)"
+  fi
 elif [ -n "${ENFORCER_FALLBACK_TOKEN:-}" ]; then
   TOKEN="$ENFORCER_FALLBACK_TOKEN"; SOURCE="the workflow github.token FALLBACK (ENFORCER_ORACLE_TOKEN is not set)"
   MODE="fallback"; AUTHORITY="NON-AUTHORITATIVE"
@@ -52,7 +58,13 @@ fi
 printf 'oracle credential source: %s\n' "$SOURCE"
 printf 'oracle credential mode: %s\n' "$MODE"
 printf 'oracle result authority: %s\n' "$AUTHORITY"
-if [ "$MODE" != "dedicated" ]; then
+# The trusted post-merge workflow sets ENFORCER_REQUIRE_DEDICATED=1. A run that is supposed to be
+# authoritative but has no dedicated credential must fail by name, not go green on the fallback.
+if [ -n "${ENFORCER_REQUIRE_DEDICATED:-}" ] && [ "$MODE" != "dedicated" ]; then
+  emit error "ORACLE-DEDICATED-CREDENTIAL-MISSING: this run must be authoritative but credential mode is '$MODE'. Set ENFORCER_ORACLE_TOKEN as a secret of the oracle-authoritative environment (deployment branches restricted to main). This is not an absent oracle and not an unresolved release."
+  exit 3
+fi
+if [ "$AUTHORITY" != "AUTHORITATIVE" ]; then
   emit notice "ORACLE-RESULT-NON-AUTHORITATIVE: this run used credential mode '$MODE'. The dedicated oracle credential is available only to the post-merge workflow on protected main, so a result obtained here is NON-AUTHORITATIVE where the credential cannot read the oracle."
 fi
 

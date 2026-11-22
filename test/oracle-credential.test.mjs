@@ -22,7 +22,7 @@ import { readSource } from "../test-support/source-scan.mjs";
 const SCRIPT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "ci", "oracle-credential.sh");
 const SECRET = "ghp_SECRETVALUE0123456789";
 
-async function run({ stderr = "", rc = 0, token = "", fallback = "", remote = "owner/oracle", githubActions = false }) {
+async function run({ stderr = "", rc = 0, token = "", fallback = "", remote = "owner/oracle", githubActions = false, event = "", ref = "", requireDedicated = false }) {
   const dir = await mkdtemp(path.join(tmpdir(), "se-cred-"));
   try {
     const argvFile = path.join(dir, "argv.txt");
@@ -44,7 +44,13 @@ async function run({ stderr = "", rc = 0, token = "", fallback = "", remote = "o
       ENFORCER_FALLBACK_TOKEN: fallback,
     };
     delete env.GITHUB_ACTIONS;
+    delete env.GITHUB_EVENT_NAME;
+    delete env.GITHUB_REF;
+    delete env.ENFORCER_REQUIRE_DEDICATED;
     if (githubActions) env.GITHUB_ACTIONS = "true";
+    if (event) env.GITHUB_EVENT_NAME = event;
+    if (ref) env.GITHUB_REF = ref;
+    if (requireDedicated) env.ENFORCER_REQUIRE_DEDICATED = "1";
     const r = spawnSync("bash", [SCRIPT.replaceAll("\\", "/")], { encoding: "utf8", env });
     let argv = "";
     try { argv = await readFile(argvFile, "utf8"); } catch { /* the stub was never called */ }
@@ -124,7 +130,7 @@ test("credential · git receives a github.com-scoped basic header derived from t
 });
 
 test("credential · the dedicated mode is reported AUTHORITATIVE and the fallback and none modes NON-AUTHORITATIVE", async () => {
-  const dedicated = await run({ rc: 0, token: SECRET, githubActions: true });
+  const dedicated = await run({ rc: 0, token: SECRET, githubActions: true, event: "push", ref: "refs/heads/main" });
   assert.match(dedicated.out, /oracle credential mode: dedicated/u);
   assert.match(dedicated.out, /oracle result authority: AUTHORITATIVE$/mu);
   assert.doesNotMatch(dedicated.out, /NON-AUTHORITATIVE/u);
@@ -138,6 +144,26 @@ test("credential · the dedicated mode is reported AUTHORITATIVE and the fallbac
   const none = await run({ rc: 128, stderr: "fatal: Authentication failed", githubActions: true });
   assert.match(none.out, /oracle credential mode: none/u);
   assert.match(none.out, /oracle result authority: NON-AUTHORITATIVE/u);
+});
+
+test("credential · the dedicated credential outside a push to main is withheld the AUTHORITATIVE label", async () => {
+  const r = await run({ rc: 0, token: SECRET, githubActions: true, event: "pull_request", ref: "refs/pull/1/merge" });
+  assert.equal(r.status, 0, r.out);
+  assert.match(r.out, /oracle credential mode: dedicated/u);
+  assert.match(r.out, /oracle result authority: NON-AUTHORITATIVE/u);
+});
+
+test("credential · a run that demands the dedicated credential and lacks it fails as ORACLE-DEDICATED-CREDENTIAL-MISSING (exit 3)", async () => {
+  const r = await run({ rc: 0, token: "", fallback: "ghs_fallback", githubActions: true, event: "push", ref: "refs/heads/main", requireDedicated: true });
+  assert.equal(r.status, 3, r.out);
+  assert.match(r.out, /ORACLE-DEDICATED-CREDENTIAL-MISSING/u);
+  assert.doesNotMatch(r.out, /ORACLE-CREDENTIAL-UNAVAILABLE|ORACLE-REMOTE-UNREACHABLE/u);
+});
+
+test("credential · demanding the dedicated credential passes when it is present on main", async () => {
+  const r = await run({ rc: 0, token: SECRET, githubActions: true, event: "push", ref: "refs/heads/main", requireDedicated: true });
+  assert.equal(r.status, 0, r.out);
+  assert.match(r.out, /ORACLE-CREDENTIAL-OK/u);
 });
 
 test("credential · a refused fallback is the credential failure, labelled non-authoritative, never an absent oracle", async () => {

@@ -18,7 +18,9 @@ name: Oracle-authoritative check
 #   environment  `oracle-authoritative`. Store the secret as an ENVIRONMENT secret there and restrict
 #                the environment's deployment branches to `main`, so that even a pull-request
 #                workflow that names the secret receives nothing. That setting lives in the repository
-#                settings, not in this file, and is the owner's to apply; see docs/local-ci.md.
+#                settings, not in this file, and is the owner's to apply BEFORE the first run (a job
+#                that names a missing environment creates it unprotected); see docs/local-ci.md.
+#                No repository-level or organisation-level secret of the same name may exist.
 #
 # `test/oracle-secret-isolation.test.mjs` enforces the static half of this: no workflow reachable from
 # a pull request may reference the secret, and this one must keep the shape above.
@@ -48,15 +50,16 @@ jobs:
 
       # Names the credential mode and fails with its own name (ORACLE-CREDENTIAL-UNAVAILABLE,
       # ORACLE-REMOTE-UNREACHABLE) before any later step can blur it into an absent oracle or an
-      # unresolved release. If the dedicated secret is missing the script says
-      # "mode: fallback / NON-AUTHORITATIVE" rather than pretending; this workflow is the one place
-      # where that is a configuration defect to fix, so a fallback here is visible, never silent.
+      # unresolved release. ENFORCER_REQUIRE_DEDICATED makes a missing dedicated secret fail with
+      # ORACLE-DEDICATED-CREDENTIAL-MISSING: this workflow is the one place a fallback is a
+      # configuration defect, so it must not go green and be labelled authoritative.
       - name: Check the oracle credential
         if: vars.ENFORCER_ORACLE_REMOTE != ''
         env:
           ENFORCER_ORACLE_REMOTE: ${{ vars.ENFORCER_ORACLE_REMOTE }}
           ENFORCER_ORACLE_TOKEN: ${{ secrets.ENFORCER_ORACLE_TOKEN }}
           ENFORCER_FALLBACK_TOKEN: ${{ github.token }}
+          ENFORCER_REQUIRE_DEDICATED: '1'
         run: bash ci/oracle-credential.sh
 
       - name: Obtain the authoritative oracle
