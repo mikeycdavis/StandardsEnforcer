@@ -91,6 +91,7 @@ substitute for reading the standards it points at.
 | Full CI | `.\scripts\ci.ps1` / `./scripts/ci.sh` — the complete pipeline, in Docker |
 | Submit a PR | `.\scripts\submit-pr.ps1` / `./scripts/submit-pr.sh` — verified against the exact commit |
 | Backlog | **GitHub Issues**, not files, since 2026-09-23. `gh issue list --repo mikeycdavis/StandardsEnforcer`, or `node ~/.claude/skills/backlog-validate/scripts/github/backlog-gh.mjs list --repo=mikeycdavis/StandardsEnforcer`. The file-backed `backlog`/`backlog-validate`/`backlog-reconcile` tools refuse here and print the GitHub command. **A checkout on a pre-migration branch still reports files mode** — run the adapter's `authority` command if a result looks wrong. See `artifacts/backlog/README.md` |
+| Merge method | **Squash** for ordinary single-purpose PRs. A **merge commit** only for a consolidation or milestone PR where preserving the constituent commits' ancestry is an explicit, stated requirement of that PR. Rebase-merge is not used. Owner ruling 2026-11-21; the two most recent merges before it (#110, #111) were already squashes. Whoever merges confirms the head SHA is unchanged (`--match-head-commit`) and that the resulting main tree equals the reviewed tree. |
 | Validate standards | `<command>` |
 
 **Local CI is the authoritative gate before a push.** The check list lives in `ci/checks.sh` and
