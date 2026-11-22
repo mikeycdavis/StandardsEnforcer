@@ -53,14 +53,18 @@ jobs:
       # insufficient credential is reported as exactly that (ORACLE-CREDENTIAL-UNAVAILABLE) rather
       # than surfacing later as "no git repository at .oracle" or an unresolved release. This step
       # is deliberately not `continue-on-error`: a refused credential is a stop, with its own name.
-      # DECISION (ST-21 criterion 2): the `|| github.token` fallback below is KEPT, as an explicit
-      # and reported choice. It is correct for a public oracle; the step prints which credential it
-      # used on every run, and a private oracle with only the fallback fails here, by name.
+      #
+      # THIS WORKFLOW NEVER RECEIVES THE DEDICATED ORACLE SECRET. It runs on pull requests, so the
+      # workflow file, `ci/oracle-credential.sh` and everything `npm test` executes are written by
+      # the pull request under test; handing them a secret hands it to the author. Only the
+      # `github.token` mode is available here, it is named on every run, and where it cannot read
+      # the oracle the result is reported NON-AUTHORITATIVE and the job stops. The authoritative
+      # run, with the dedicated secret, is `oracle-authoritative.yml`, which executes only after
+      # merge on `main`. `test/oracle-secret-isolation.test.mjs` fails if this file ever names it.
       - name: Check the oracle credential
         if: vars.ENFORCER_ORACLE_REMOTE != ''
         env:
           ENFORCER_ORACLE_REMOTE: ${{ vars.ENFORCER_ORACLE_REMOTE }}
-          ENFORCER_ORACLE_TOKEN: ${{ secrets.ENFORCER_ORACLE_TOKEN }}
           ENFORCER_FALLBACK_TOKEN: ${{ github.token }}
         run: bash ci/oracle-credential.sh
 
@@ -83,7 +87,7 @@ jobs:
           repository: ${{ vars.ENFORCER_ORACLE_REMOTE }}
           path: .oracle
           fetch-depth: 0          # the suite resolves release tags, so the history must come too
-          token: ${{ secrets.ENFORCER_ORACLE_TOKEN || github.token }}
+          token: ${{ github.token }}   # the only credential mode a pull-request workflow has
           # The load-bearing line. Without it the token above is written into `.oracle/.git/config`
           # as an `AUTHORIZATION: basic <base64>` extraheader and is still there when `npm test`
           # runs. The checkout still authenticates; it simply leaves nothing behind.

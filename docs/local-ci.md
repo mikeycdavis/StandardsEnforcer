@@ -124,6 +124,26 @@ statements and only one of them is true here:
 Nothing that the previous GitHub workflow ran has been dropped. It ran `npm test` with the oracle
 environment; that is `test-suite`, plus three checks that did not exist before.
 
+### Which credential the hosted oracle checkout uses
+
+| Context | Workflow | Credential | Result |
+| --- | --- | --- | --- |
+| Pull request (and push to a branch) | `ci.yml` | `github.token` only, named on every run | **NON-AUTHORITATIVE** wherever that token cannot read the oracle; the credential probe then stops the job with `ORACLE-CREDENTIAL-UNAVAILABLE` |
+| Push to `main`, after merge | `oracle-authoritative.yml` | `ENFORCER_ORACLE_TOKEN` if set, else the same reported fallback | **AUTHORITATIVE** only in dedicated mode; the mode is printed |
+
+The dedicated secret is never available to a pull-request path: a pull request controls its own
+workflow files and every executable it runs, so it would hand the secret to its author.
+`test/oracle-secret-isolation.test.mjs` fails if any workflow reachable from a pull request names it.
+Credential failures keep distinct names: `ORACLE-CREDENTIAL-UNAVAILABLE` (refused or hidden),
+`ORACLE-REMOTE-UNREACHABLE` (not a credential refusal), then the suite's own oracle-readiness stage for
+an absent oracle or an unresolved release.
+
+**Owner setting, not verifiable from the repository.** Store `ENFORCER_ORACLE_TOKEN` as a secret of the
+`oracle-authoritative` *environment* and restrict that environment's deployment branches to `main`.
+A pull request can write a workflow that names a repository-level secret; only the environment
+restriction stops it receiving one. Until that is set, no dedicated secret exists and every run is in
+fallback mode, reported as such.
+
 ### What cannot be reproduced locally
 
 | Not reproducible | Why |

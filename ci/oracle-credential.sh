@@ -18,6 +18,11 @@
 # a public oracle, and the line below names it every run so it can never be mistaken for the
 # dedicated token. A private oracle with only the fallback fails here, as the credential condition.
 #
+# WHO MAY HOLD THE DEDICATED SECRET. Only a trusted post-merge workflow on protected main sets
+# ENFORCER_ORACLE_TOKEN for this script (see .github/workflows/oracle-authoritative.yml, enforced by
+# test/oracle-secret-isolation.test.mjs). A pull-request run supplies only ENFORCER_FALLBACK_TOKEN,
+# and every run names the credential mode and whether the result is AUTHORITATIVE.
+#
 # The credential is passed to git through the environment as an http.extraheader, never in argv or
 # the URL, and the derived header is masked in the Actions log.
 set -Eeuo pipefail
@@ -36,12 +41,20 @@ fi
 
 if [ -n "${ENFORCER_ORACLE_TOKEN:-}" ]; then
   TOKEN="$ENFORCER_ORACLE_TOKEN"; SOURCE="ENFORCER_ORACLE_TOKEN (dedicated secret)"
+  MODE="dedicated"; AUTHORITY="AUTHORITATIVE"
 elif [ -n "${ENFORCER_FALLBACK_TOKEN:-}" ]; then
   TOKEN="$ENFORCER_FALLBACK_TOKEN"; SOURCE="the workflow github.token FALLBACK (ENFORCER_ORACLE_TOKEN is not set)"
+  MODE="fallback"; AUTHORITY="NON-AUTHORITATIVE"
 else
   TOKEN=""; SOURCE="no credential at all (neither ENFORCER_ORACLE_TOKEN nor a fallback)"
+  MODE="none"; AUTHORITY="NON-AUTHORITATIVE"
 fi
 printf 'oracle credential source: %s\n' "$SOURCE"
+printf 'oracle credential mode: %s\n' "$MODE"
+printf 'oracle result authority: %s\n' "$AUTHORITY"
+if [ "$MODE" != "dedicated" ]; then
+  emit notice "ORACLE-RESULT-NON-AUTHORITATIVE: this run used credential mode '$MODE'. The dedicated oracle credential is available only to the post-merge workflow on protected main, so a result obtained here is NON-AUTHORITATIVE where the credential cannot read the oracle."
+fi
 
 # No --exit-code and no ref pattern: `--exit-code` returns 2 when the pattern matches nothing, which
 # would report a VALID credential against an empty or unborn-HEAD repository as unreachable. This
@@ -63,12 +76,12 @@ rc=$?
 set -e
 
 if [ "$rc" -eq 0 ]; then
-  printf 'ORACLE-CREDENTIAL-OK  %s answered using %s\n' "$URL" "$SOURCE"
+  printf 'ORACLE-CREDENTIAL-OK  %s answered using %s (%s)\n' "$URL" "$SOURCE" "$AUTHORITY"
   exit 0
 fi
 
 if printf '%s' "$out" | grep -qiE 'authentication failed|bad credentials|invalid username or token|could not read (username|password)|error: 40[13]|returned error: 40[13]|requested url returned error: 40[13]|repository not found'; then
-  emit error "ORACLE-CREDENTIAL-UNAVAILABLE: the oracle remote refused or could not be read with ${SOURCE}. This is a credential problem, not an absent oracle and not an unresolved release (GitHub reports a repository the credential cannot read as not found, so also check that ${REMOTE:-the oracle remote} is spelled correctly). Set a valid ENFORCER_ORACLE_TOKEN repository secret with read access to ${REMOTE:-the oracle remote}."
+  emit error "ORACLE-CREDENTIAL-UNAVAILABLE: the oracle remote refused or could not be read with ${SOURCE}. This is a credential problem, not an absent oracle and not an unresolved release (GitHub reports a repository the credential cannot read as not found, so also check that ${REMOTE:-the oracle remote} is spelled correctly). Result is ${AUTHORITY}. The dedicated ENFORCER_ORACLE_TOKEN (read access to ${REMOTE:-the oracle remote}) is available only to the post-merge workflow on protected main; a pull-request run cannot supply it."
   printf '%s\n' "$out" | sed 's/^/  git: /'
   exit 1
 fi

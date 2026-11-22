@@ -123,14 +123,38 @@ test("credential · git receives a github.com-scoped basic header derived from t
   assert.ok(r.out.split("\n").includes(`::add-mask::${b64}`), "the exact header value must be masked");
 });
 
-test("workflow · the credential step runs before the oracle checkout and is not continue-on-error", async () => {
+test("credential · the dedicated mode is reported AUTHORITATIVE and the fallback and none modes NON-AUTHORITATIVE", async () => {
+  const dedicated = await run({ rc: 0, token: SECRET, githubActions: true });
+  assert.match(dedicated.out, /oracle credential mode: dedicated/u);
+  assert.match(dedicated.out, /oracle result authority: AUTHORITATIVE$/mu);
+  assert.doesNotMatch(dedicated.out, /NON-AUTHORITATIVE/u);
+
+  const fallback = await run({ rc: 0, token: "", fallback: "ghs_fallback", githubActions: true });
+  assert.match(fallback.out, /oracle credential mode: fallback/u);
+  assert.match(fallback.out, /oracle result authority: NON-AUTHORITATIVE/u);
+  assert.match(fallback.out, /::notice::ORACLE-RESULT-NON-AUTHORITATIVE/u);
+  assert.match(fallback.out, /ORACLE-CREDENTIAL-OK .*(NON-AUTHORITATIVE)/u);
+
+  const none = await run({ rc: 128, stderr: "fatal: Authentication failed", githubActions: true });
+  assert.match(none.out, /oracle credential mode: none/u);
+  assert.match(none.out, /oracle result authority: NON-AUTHORITATIVE/u);
+});
+
+test("credential · a refused fallback is the credential failure, labelled non-authoritative, never an absent oracle", async () => {
+  const r = await run({ rc: 128, stderr: "remote: Repository not found.", token: "", fallback: "ghs_fallback" });
+  assert.equal(r.status, 1, r.out);
+  assert.match(r.out, /ORACLE-CREDENTIAL-UNAVAILABLE/u);
+  assert.match(r.out, /Result is NON-AUTHORITATIVE/u);
+  assert.doesNotMatch(r.out, /ORACLE-REMOTE-UNREACHABLE/u);
+});
+
+test("credential · the pull-request workflow runs the probe before the oracle checkout, with the fallback token only", async () => {
   const yml = await readSource(new URL("../.github/workflows/ci.yml", import.meta.url));
   const step = yml.indexOf("- name: Check the oracle credential");
   const checkout = yml.indexOf("- name: Obtain the authoritative oracle");
   assert.ok(step > 0 && checkout > step, "the credential step must exist and precede the oracle checkout");
   const body = yml.slice(step, checkout);
   assert.match(body, /bash ci\/oracle-credential\.sh/u);
-  assert.match(body, /ENFORCER_ORACLE_TOKEN:\s*\$\{\{\s*secrets\.ENFORCER_ORACLE_TOKEN\s*\}\}/u);
   assert.match(body, /ENFORCER_FALLBACK_TOKEN:\s*\$\{\{\s*github\.token\s*\}\}/u);
-  assert.doesNotMatch(body.replace(/^\s*#.*$/gmu, ""), /continue-on-error/u, "a refused credential must stop the job");
+  assert.doesNotMatch(body.replace(/^\s*#.*$/gmu, ""), /ENFORCER_ORACLE_TOKEN|continue-on-error/u, "the PR path holds no dedicated secret and a refused credential must stop the job");
 });
