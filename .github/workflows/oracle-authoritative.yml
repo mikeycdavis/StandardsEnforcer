@@ -53,8 +53,8 @@ jobs:
       # unresolved release. ENFORCER_REQUIRE_DEDICATED makes a missing dedicated secret fail with
       # ORACLE-DEDICATED-CREDENTIAL-MISSING: this workflow is the one place a fallback is a
       # configuration defect, so it must not go green and be labelled authoritative.
+      # No `if:` on purpose: with the remote variable unset the script itself fails by name.
       - name: Check the oracle credential
-        if: vars.ENFORCER_ORACLE_REMOTE != ''
         env:
           ENFORCER_ORACLE_REMOTE: ${{ vars.ENFORCER_ORACLE_REMOTE }}
           ENFORCER_ORACLE_TOKEN: ${{ secrets.ENFORCER_ORACLE_TOKEN }}

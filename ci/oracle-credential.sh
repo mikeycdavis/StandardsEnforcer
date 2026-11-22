@@ -24,9 +24,10 @@
 # test/oracle-secret-isolation.test.mjs). A pull-request run supplies only ENFORCER_FALLBACK_TOKEN,
 # and every run names the credential mode and whether the result is AUTHORITATIVE.
 #
-# The credential is passed to git as an http.extraheader through GIT_CONFIG_* variables, never in the
-# URL or in git's own argv (the variables are set by env(1), so they are visible to the runner user
-# only; the token reaches this script solely in the trusted workflow), and the derived header is masked in the Actions log.
+# The credential is passed to git as an http.extraheader through GIT_CONFIG_* variables and never put
+# in the URL. env(1) carries the header value in its own argv for an instant before it execs git, so
+# it is visible to the runner user only; the token reaches this script solely in the trusted
+# workflow. The derived header is masked in the Actions log.
 set -Eeuo pipefail
 
 REMOTE="${ENFORCER_ORACLE_REMOTE:-}"

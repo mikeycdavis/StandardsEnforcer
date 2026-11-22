@@ -126,7 +126,11 @@ function violationsIn(name, rawText) {
   const out = [];
   const { events, pushBranches, pushKeys } = triggersOf(text);
   const namesSecret = new RegExp(`\\b${SECRET}\\b`, "iu").test(raw);
-  const broad = /\bsecrets\s*:\s*inherit\b|toJSON\s*\(\s*secrets\s*\)|\bsecrets\s*\[|\$\{\{(?:(?!\}\})[\s\S])*?\bsecrets\b(?!\s*\.)|\$\{\{(?:(?!\}\})[\s\S])*?\\[xuU][0-9a-f]/iu.test(raw);
+  const broad = /\bsecrets\s*:\s*inherit\b|toJSON\s*\(\s*secrets\s*\)|\bsecrets\s*\[|\$\{\{(?:(?!\}\})[\s\S])*?\bsecrets\b(?!\s*\.)/iu.test(raw);
+  // YAML double-quoted scalars decode \x.. \u.... and a backslash-newline continuation BEFORE Actions
+  // evaluates an expression, so a backslash can spell the secret name or the `${{` itself. No workflow
+  // here needs one; refusing every backslash closes the whole class rather than chasing spellings.
+  if (raw.includes("\\")) out.push(`${name}: contains a backslash, which YAML escapes could use to hide the secret name`);
   const pushOnly = events.length === 1 && events[0] === "push";
 
   if (events.length === 0) out.push(`${name}: no readable \`on:\` block, so its triggers could not be established`);
@@ -184,6 +188,7 @@ test("isolation · the trusted post-merge path reports credential mode and failu
   assert.ok(probe > 0 && checkout > probe, "the probe must exist and precede the oracle checkout");
   const probeStep = text.slice(text.lastIndexOf("- name:", probe), probe);
   assert.doesNotMatch(probeStep, /continue-on-error/u, "a refused credential must stop the job");
+  assert.doesNotMatch(probeStep, /^\s*if\s*:/mu, "the probe must run even with the remote variable unset, so exit 3 is reachable");
   assert.match(probeStep, /ENFORCER_REQUIRE_DEDICATED:\s*'1'/u, "the trusted run must fail, by name, when the dedicated credential is missing");
   assert.match(probeStep, new RegExp(`${SECRET}:\\s*\\$\\{\\{\\s*secrets\\.${SECRET}\\s*\\}\\}`, "u"));
   // The secret may be named by the probe step and the oracle checkout, and by nothing after them:
@@ -264,7 +269,10 @@ test("isolation · the guard can see a violation, so its silence means something
     ["secrets: inherit in a push-only workflow also lacks the environment", violationsIn(TRUSTED, inheritShape), /declares no environment/u],
     ["toJSON(secrets)", violationsIn("ci.yml", pr("      - run: echo '${{ toJSON(secrets) }}'\n")), /wholesale/u],
     ["a bare secrets context in an expression", violationsIn("ci.yml", pr("      - run: echo ${{ format('{0}', secrets) }}\n")), /wholesale/u],
-    ["a YAML escape inside an expression", violationsIn("ci.yml", pr('      - run: echo "${{ secrets.ENFORCER_ORACLE_\\x54OKEN }}"\n')), /wholesale/u],
+    ["a YAML escape inside an expression", violationsIn("ci.yml", pr('      - run: echo "${{ secrets.ENFORCER_ORACLE_\\x54OKEN }}"\n')), /backslash/u],
+    ["an escaped opening brace", violationsIn("ci.yml", pr('      - run: echo "$\\x7b{ secrets.ENFORCER_ORACLE_\\x54OKEN }}"\n')), /backslash/u],
+    ["a double-quoted line continuation", violationsIn("ci.yml", pr('      - run: echo "${{ secrets.ENFORCER_ORACLE_\\\n          TOKEN }}"\n')), /backslash/u],
+    ["an escaped spelling of secrets in a pull-request workflow", violationsIn("ci.yml", pr('      - run: echo "${{ sec\\x72ets.X }}"\n')), /backslash/u],
     ["dynamic secrets[...] access", violationsIn("ci.yml", pr("      - run: echo ${{ secrets['ENFORCER' + '_X'] }}\n")), /wholesale/u],
     ["a block-style branch list with another branch", violationsIn(TRUSTED, trusted().replace("    branches: [main]\n", "    branches:\n      - main\n      - release\n")), /exactly \[main\]/u],
   ];

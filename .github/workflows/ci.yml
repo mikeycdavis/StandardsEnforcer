@@ -31,9 +31,8 @@ on:
 # and then runs `npm test`, which is code the pull request under test wrote. `actions/checkout`
 # defaults to persisting its credential in the checked-out repository's git configuration, so the
 # default arrangement is: fetch a secret, leave it on disk, then execute untrusted code beside it.
-# Fork pull requests never receive secrets, but this repository's own workflow is same-repository
-# branch pull requests, which do — so the exposure is on the live path rather than the theoretical
-# one. Every checkout below sets `persist-credentials: false`, and `ci/checks.sh` establishes the
+# This workflow holds no secret (see oracle-authoritative.yml), but the default would still leave
+# the job's own github.token on disk beside the code under test. Every checkout below sets `persist-credentials: false`, and `ci/checks.sh` establishes the
 # result on the real checkout before the suite runs rather than trusting these two lines.
 permissions:
   contents: read
