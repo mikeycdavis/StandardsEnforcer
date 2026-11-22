@@ -126,10 +126,13 @@ function violationsIn(name, rawText) {
   const out = [];
   const { events, pushBranches, pushKeys } = triggersOf(text);
   const namesSecret = new RegExp(`\\b${SECRET}\\b`, "iu").test(raw);
-  const broad = /\bsecrets\s*:\s*inherit\b|toJSON\s*\(\s*secrets\s*\)|\bsecrets\s*\[|\$\{\{(?:(?!\}\})[\s\S])*?\bsecrets\b(?!\s*\.)/iu.test(raw);
+  const broad = /\bsecrets\s*:\s*inherit\b|toJSON\s*\(\s*secrets\s*\)|\bsecrets\s*\[|\$\{\{(?:(?!\}\})[\s\S])*?\bsecrets\b(?!\s*\.\s*[A-Za-z_])/iu.test(raw);
+  // YAML and Actions honour quoted mapping keys, which the trigger reader cannot see: "schedule":
+  const quotedKey = /^\s*(?:-\s+)?["'][\w-]+["']\s*:/mu.test(text);
   // YAML double-quoted scalars decode \x.. \u.... and a backslash-newline continuation BEFORE Actions
   // evaluates an expression, so a backslash can spell the secret name or the `${{` itself. No workflow
   // here needs one; refusing every backslash closes the whole class rather than chasing spellings.
+  if (quotedKey) out.push(`${name}: a quoted mapping key hides triggers from the guard; write keys unquoted`);
   if (raw.includes("\\")) out.push(`${name}: contains a backslash, which YAML escapes could use to hide the secret name`);
   const pushOnly = events.length === 1 && events[0] === "push";
 
@@ -270,6 +273,10 @@ test("isolation · the guard can see a violation, so its silence means something
     ["toJSON(secrets)", violationsIn("ci.yml", pr("      - run: echo '${{ toJSON(secrets) }}'\n")), /wholesale/u],
     ["a bare secrets context in an expression", violationsIn("ci.yml", pr("      - run: echo ${{ format('{0}', secrets) }}\n")), /wholesale/u],
     ["a YAML escape inside an expression", violationsIn("ci.yml", pr('      - run: echo "${{ secrets.ENFORCER_ORACLE_\\x54OKEN }}"\n')), /backslash/u],
+    ["a quoted workflow_dispatch trigger key", violationsIn(TRUSTED, trusted({ extraOn: ['  "workflow_dispatch":'] })), /quoted mapping key/u],
+    ["a quoted schedule trigger key", violationsIn(TRUSTED, trusted({ extraOn: ["  'schedule':"] })), /quoted mapping key/u],
+    ["toJSON(secrets.*)", violationsIn("ci.yml", pr("      - run: echo ${{ toJSON(secrets.*) }}\n")), /wholesale/u],
+    ["join(secrets.*)", violationsIn("ci.yml", pr("      - run: echo ${{ join(secrets.*, ',') }}\n")), /wholesale/u],
     ["an escaped opening brace", violationsIn("ci.yml", pr('      - run: echo "$\\x7b{ secrets.ENFORCER_ORACLE_\\x54OKEN }}"\n')), /backslash/u],
     ["a double-quoted line continuation", violationsIn("ci.yml", pr('      - run: echo "${{ secrets.ENFORCER_ORACLE_\\\n          TOKEN }}"\n')), /backslash/u],
     ["an escaped spelling of secrets in a pull-request workflow", violationsIn("ci.yml", pr('      - run: echo "${{ sec\\x72ets.X }}"\n')), /backslash/u],
