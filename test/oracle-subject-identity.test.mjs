@@ -177,9 +177,17 @@ function arrayLiterals(code) {
  *
  * An invocation is an array literal with an element that names the script: the literal text
  * `enforce.mjs`, or a name bound to an expression that mentions it. Elements before the script are
- * node's own options. After it, an element is NOT positional if it is a spread, begins with `--`
- * (a flag, whose `=value` form is the CLI matchers' business), or directly follows a bare
- * `"--flag"` element (that is the flag's value: `"--standards", MLS` names the authority).
+ * node's own options. After it, an element is NOT positional if it is a spread or begins with `--`
+ * (a flag, whose `=value` form is the CLI matchers' business). There is deliberately NO exemption
+ * for "the element after a bare `--flag`": parseArgs takes only `--json` and
+ * `--require-organisation-root` bare, and every value-taking flag as `--flag=value`, so a bare
+ * `"--standards", MLS` is rejected as unrecognised and `"--json", MLS` makes MLS the target.
+ *
+ * RESIDUAL, recorded rather than claimed closed: a script held in a name bound by chaining
+ * (`const s2 = script`) or by a call; argv built with `.push` or spread; a comment containing an
+ * apostrophe, or a regex literal containing a quote, inside the array (the string scan then finds no
+ * array). Each is silent, none occurs in the current suite, and the substring match on
+ * `enforce.mjs` errs the other way (a prose element naming it counts as an invocation).
  */
 function positionalTargets(code, aliases) {
   const scriptNames = new Set();
@@ -187,7 +195,6 @@ function positionalTargets(code, aliases) {
     scriptNames.add(m[1]);
   }
   const namesScript = (el) => /enforce\.mjs/u.test(el) || scriptNames.has(el.trim());
-  const bareFlag = /^["'`]--[\w-]+["'`]$/u;
   const hits = [];
   for (const elements of arrayLiterals(code)) {
     const s = elements.findIndex((e) => namesScript(e.text));
@@ -195,7 +202,6 @@ function positionalTargets(code, aliases) {
     for (let i = s + 1; i < elements.length; i += 1) {
       const el = elements[i].text.trim();
       if (el.startsWith("...") || /^["'`]--/u.test(el)) continue;
-      if (i > 0 && bareFlag.test(elements[i - 1].text.trim())) continue;
       for (const alias of aliases) {
         if (new RegExp(`(?<![\\w$.])${escapeForRegExp(alias)}(?![\\w$])`, "u").test(el)) {
           hits.push({ alias, text: el, index: elements[i].index });
@@ -240,7 +246,8 @@ function hostTreeAsSubject(code) {
     // CLOSED by ST-23 (issue #118) in `positionalTargets`: the BARE POSITIONAL target
     // (scripts/enforce.mjs takes the first non-flag argument as the target, so `[script, MLS]`
     // evaluates the host tree with no `--target` at all), including `path.resolve(MLS)`, a ternary
-    // or a parenthesised expression as that argv element.
+    // or a parenthesised expression as that argv element. Closed for the spellings covered; the
+    // shapes it still cannot see are listed on `positionalTargets`.
     // Covered: the alias may sit anywhere inside the interpolation
     // (`${MLS.trim()}`, `${String(MLS)}`), the value may be quoted (`--target="${MLS}"`), an argv
     // element may be template-wrapped, and `.concat(MLS)` is a concatenation. Fail-closed: a wider
@@ -444,12 +451,13 @@ test("subject · the guard can see a violation, so its silence means something",
     ["spawnSync(node, [script, c ? MLS : d]);", "c ? MLS : d"],
     ["spawnSync(node, [path.join(ROOT, 'scripts/enforce.mjs'), MLS]);", "MLS"],
     ["spawnSync(node, [script, '--tag=t', MLS]);", "MLS"],
+    ["spawnSync(node, [script, '--json', MLS]);", "MLS"], // --json is bare, so MLS is the target
+    ["spawnSync(node, [script, '--standards', MLS]);", "MLS"], // rejected by enforce today; fail-closed
   ]) {
     assert.deepEqual(positional(line), [expected], `positional shape not flagged: ${line}`);
   }
   // Not positional targets, or not the enforce script: none may fire, or the guard forbids correct code.
   for (const line of [
-    "spawnSync(node, [script, id.dir, '--standards', MLS]);",       // MLS is the value of a flag
     "spawnSync(node, [script, `--target=${dir}`, `--standards=${MLS}`]);", // flags only
     "spawnSync(node, [script, ...rest]);",                          // a spread is unknowable, not flagged
     "spawnSync('git', ['-C', MLS, 'log']);",                       // not an enforce invocation
