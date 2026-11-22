@@ -126,7 +126,7 @@ function violationsIn(name, rawText) {
   const out = [];
   const { events, pushBranches, pushKeys } = triggersOf(text);
   const namesSecret = new RegExp(`\\b${SECRET}\\b`, "iu").test(raw);
-  const broad = /\bsecrets\s*:\s*inherit\b|toJSON\s*\(\s*secrets\s*\)|\bsecrets\s*\[/iu.test(raw);
+  const broad = /\bsecrets\s*:\s*inherit\b|toJSON\s*\(\s*secrets\s*\)|\bsecrets\s*\[|\$\{\{(?:(?!\}\})[\s\S])*?\bsecrets\b(?!\s*\.)|\$\{\{(?:(?!\}\})[\s\S])*?\\[xuU][0-9a-f]/iu.test(raw);
   const pushOnly = events.length === 1 && events[0] === "push";
 
   if (events.length === 0) out.push(`${name}: no readable \`on:\` block, so its triggers could not be established`);
@@ -263,6 +263,8 @@ test("isolation · the guard can see a violation, so its silence means something
     ["secrets: inherit in a push-only workflow", violationsIn(TRUSTED, inheritShape), /wholesale/u],
     ["secrets: inherit in a push-only workflow also lacks the environment", violationsIn(TRUSTED, inheritShape), /declares no environment/u],
     ["toJSON(secrets)", violationsIn("ci.yml", pr("      - run: echo '${{ toJSON(secrets) }}'\n")), /wholesale/u],
+    ["a bare secrets context in an expression", violationsIn("ci.yml", pr("      - run: echo ${{ format('{0}', secrets) }}\n")), /wholesale/u],
+    ["a YAML escape inside an expression", violationsIn("ci.yml", pr('      - run: echo "${{ secrets.ENFORCER_ORACLE_\\x54OKEN }}"\n')), /wholesale/u],
     ["dynamic secrets[...] access", violationsIn("ci.yml", pr("      - run: echo ${{ secrets['ENFORCER' + '_X'] }}\n")), /wholesale/u],
     ["a block-style branch list with another branch", violationsIn(TRUSTED, trusted().replace("    branches: [main]\n", "    branches:\n      - main\n      - release\n")), /exactly \[main\]/u],
   ];

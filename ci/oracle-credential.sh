@@ -24,8 +24,9 @@
 # test/oracle-secret-isolation.test.mjs). A pull-request run supplies only ENFORCER_FALLBACK_TOKEN,
 # and every run names the credential mode and whether the result is AUTHORITATIVE.
 #
-# The credential is passed to git through the environment as an http.extraheader, never in argv or
-# the URL, and the derived header is masked in the Actions log.
+# The credential is passed to git as an http.extraheader through GIT_CONFIG_* variables, never in the
+# URL or in git's own argv (the variables are set by env(1), so they are visible to the runner user
+# only; the token reaches this script solely in the trusted workflow), and the derived header is masked in the Actions log.
 set -Eeuo pipefail
 
 REMOTE="${ENFORCER_ORACLE_REMOTE:-}"
@@ -36,6 +37,10 @@ emit() { # emit <level> <message>   level: error|notice
 }
 
 if [ -z "$REMOTE" ] && [ -z "${ENFORCER_ORACLE_URL:-}" ]; then
+  if [ -n "${ENFORCER_REQUIRE_DEDICATED:-}" ] && [ -z "${ENFORCER_ORACLE_TOKEN:-}" ]; then
+    emit error "ORACLE-DEDICATED-CREDENTIAL-MISSING: this run must be authoritative but neither a remote nor the dedicated credential is configured."
+    exit 3
+  fi
   printf 'ORACLE-CREDENTIAL-NOT-EXERCISED  ENFORCER_ORACLE_REMOTE is unset; no oracle is obtained and the required-oracle guard will fail\n'
   exit 0
 fi

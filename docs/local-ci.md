@@ -129,7 +129,7 @@ environment; that is `test-suite`, plus three checks that did not exist before.
 | Context | Workflow | Credential | Result |
 | --- | --- | --- | --- |
 | Pull request, and push to `main` | `ci.yml` | `github.token` only, named on every run | **NON-AUTHORITATIVE** wherever that token cannot read the oracle; the credential probe then stops the job with `ORACLE-CREDENTIAL-UNAVAILABLE` |
-| Push to `main`, after merge | `oracle-authoritative.yml` | `ENFORCER_ORACLE_TOKEN` if set, else the same reported fallback | **AUTHORITATIVE** only in dedicated mode; the mode is printed |
+| Push to `main`, after merge | `oracle-authoritative.yml` | `ENFORCER_ORACLE_TOKEN`; a missing secret fails with `ORACLE-DEDICATED-CREDENTIAL-MISSING`, never a silent fallback | **AUTHORITATIVE** only in dedicated mode; the mode is printed |
 
 The dedicated secret is never available to a pull-request path: a pull request controls its own
 workflow files and every executable it runs, so it would hand the secret to its author.

@@ -160,6 +160,12 @@ test("credential · a run that demands the dedicated credential and lacks it fai
   assert.doesNotMatch(r.out, /ORACLE-CREDENTIAL-UNAVAILABLE|ORACLE-REMOTE-UNREACHABLE/u);
 });
 
+test("credential · demanding the dedicated credential with no remote configured still fails by name", async () => {
+  const r = await run({ rc: 0, token: "", remote: "", githubActions: true, event: "push", ref: "refs/heads/main", requireDedicated: true });
+  assert.equal(r.status, 3, r.out);
+  assert.match(r.out, /ORACLE-DEDICATED-CREDENTIAL-MISSING/u);
+});
+
 test("credential · demanding the dedicated credential passes when it is present on main", async () => {
   const r = await run({ rc: 0, token: SECRET, githubActions: true, event: "push", ref: "refs/heads/main", requireDedicated: true });
   assert.equal(r.status, 0, r.out);
