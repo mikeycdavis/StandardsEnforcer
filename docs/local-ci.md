@@ -124,6 +124,31 @@ statements and only one of them is true here:
 Nothing that the previous GitHub workflow ran has been dropped. It ran `npm test` with the oracle
 environment; that is `test-suite`, plus three checks that did not exist before.
 
+### Which credential the hosted oracle checkout uses
+
+| Context | Workflow | Credential | Result |
+| --- | --- | --- | --- |
+| Pull request, and push to `main` | `ci.yml` | `github.token` only, named on every run | **NON-AUTHORITATIVE** wherever that token cannot read the oracle; the credential probe then stops the job with `ORACLE-CREDENTIAL-UNAVAILABLE` |
+| Push to `main`, after merge | `oracle-authoritative.yml` | `ENFORCER_ORACLE_TOKEN`; a missing secret fails with `ORACLE-DEDICATED-CREDENTIAL-MISSING`, never a silent fallback | **AUTHORITATIVE** only in dedicated mode; the mode is printed |
+
+The dedicated secret is never available to a pull-request path: a pull request controls its own
+workflow files and every executable it runs, so it would hand the secret to its author.
+`test/oracle-secret-isolation.test.mjs` fails a run if any workflow other than the trusted one names it.
+That guard is itself pull-request-editable, so it is regression and accident protection, not the
+boundary; the boundary is the environment scoping below.
+Credential failures keep distinct names: `ORACLE-CREDENTIAL-UNAVAILABLE` (refused or hidden),
+`ORACLE-REMOTE-UNREACHABLE` (not a credential refusal), then the suite's own oracle-readiness stage for
+an absent oracle or an unresolved release.
+
+**Owner setting, not verifiable from the repository.** Create the `oracle-authoritative` environment,
+restrict its deployment branches to `main`, and only then store `ENFORCER_ORACLE_TOKEN` as a secret of
+that *environment*. Do not store it at repository or organisation level, and delete any such secret
+of the same name: a pull request can write a workflow without `environment:` that names a
+repository-level secret and would receive it. A job that names a missing environment creates it
+unprotected, so create and restrict it before the first run. Until the secret exists the post-merge
+run fails with `ORACLE-DEDICATED-CREDENTIAL-MISSING`; pull-request runs are unaffected and stay in
+fallback mode, reported as NON-AUTHORITATIVE.
+
 ### What cannot be reproduced locally
 
 | Not reproducible | Why |

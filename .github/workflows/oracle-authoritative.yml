@@ -1,0 +1,101 @@
+name: Oracle-authoritative check
+
+# THE ONLY WORKFLOW THAT MAY NAME `ENFORCER_ORACLE_TOKEN`.
+#
+# The dedicated oracle credential is a secret that can read a private standards repository. It must
+# never reach code a pull request controls. A pull request controls its own workflow files, every
+# executable in its checkout, and everything `npm test` runs, so any pull-request job that holds the
+# secret hands it to the author. `ci.yml` therefore runs on pull requests with `github.token` only,
+# labels its result NON-AUTHORITATIVE where that token cannot read the oracle, and never names this
+# secret. This workflow is the authoritative counterpart:
+#
+#   trigger      `push` to `main` and nothing else. It does not run for a pull request, for
+#                `workflow_dispatch` (which could be started from a branch's copy of this file), for
+#                `pull_request_target`, `workflow_run` or a schedule.
+#   code         the merged revision (`github.sha` on `main`). The workflow file and every
+#                executable it runs, `ci/oracle-credential.sh` and `ci/checks.sh` included, come from
+#                that revision, not from a pull-request head.
+#   environment  `oracle-authoritative`. Store the secret as an ENVIRONMENT secret there and restrict
+#                the environment's deployment branches to `main`, so that even a pull-request
+#                workflow that names the secret receives nothing. That setting lives in the repository
+#                settings, not in this file, and is the owner's to apply BEFORE the first run (a job
+#                that names a missing environment creates it unprotected); see docs/local-ci.md.
+#                No repository-level or organisation-level secret of the same name may exist.
+#
+# `test/oracle-secret-isolation.test.mjs` enforces the static half of this: no workflow reachable from
+# a pull request may reference the secret, and this one must keep the shape above.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  authoritative:
+    # Redundant with the trigger on purpose: if someone adds a second trigger later, the job still
+    # refuses to run anywhere but a push to main.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: oracle-authoritative
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Names the credential mode and fails with its own name (ORACLE-CREDENTIAL-UNAVAILABLE,
+      # ORACLE-REMOTE-UNREACHABLE) before any later step can blur it into an absent oracle or an
+      # unresolved release. ENFORCER_REQUIRE_DEDICATED makes a missing dedicated secret fail with
+      # ORACLE-DEDICATED-CREDENTIAL-MISSING: this workflow is the one place a fallback is a
+      # configuration defect, so it must not go green and be labelled authoritative.
+      # No `if:` on purpose: with the remote variable unset the script itself fails by name.
+      - name: Check the oracle credential
+        env:
+          ENFORCER_ORACLE_REMOTE: ${{ vars.ENFORCER_ORACLE_REMOTE }}
+          ENFORCER_ORACLE_TOKEN: ${{ secrets.ENFORCER_ORACLE_TOKEN }}
+          ENFORCER_FALLBACK_TOKEN: ${{ github.token }}
+          ENFORCER_REQUIRE_DEDICATED: '1'
+        run: bash ci/oracle-credential.sh
+
+      - name: Obtain the authoritative oracle
+        id: oracle
+        continue-on-error: true
+        if: vars.ENFORCER_ORACLE_REMOTE != ''
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.ENFORCER_ORACLE_REMOTE }}
+          path: .oracle
+          fetch-depth: 0
+          token: ${{ secrets.ENFORCER_ORACLE_TOKEN || github.token }}
+          persist-credentials: false
+
+      - name: Install pinned dependencies
+        run: npm ci
+
+      # No step after the checkout above receives the secret: it is not in this step's environment.
+      - name: Run the authoritative check list
+        env:
+          ENFORCER_REQUIRE_ORACLE: '1'
+          ENFORCER_ORACLE_REPO: ${{ github.workspace }}/.oracle
+          ENFORCER_REQUIRE_SYMLINKS: '1'
+          ENFORCER_REQUIRE_CREDENTIAL_HYGIENE: '1'
+          ENFORCER_REQUIRE_DEPENDENCIES: '1'
+          CI_OUT_DIR: ${{ runner.temp }}/local-ci
+          CI_COMMIT: ${{ github.sha }}
+          CI_BRANCH: ${{ github.ref_name }}
+          CI_REPOSITORY: ${{ github.repository }}
+          CI_SOURCE: commit
+        run: bash ci/checks.sh
+
+      - name: Upload the machine-readable result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-result-authoritative
+          path: ${{ runner.temp }}/local-ci/latest.json
+          if-no-files-found: warn

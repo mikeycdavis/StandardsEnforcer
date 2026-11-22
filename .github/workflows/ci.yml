@@ -31,9 +31,8 @@ on:
 # and then runs `npm test`, which is code the pull request under test wrote. `actions/checkout`
 # defaults to persisting its credential in the checked-out repository's git configuration, so the
 # default arrangement is: fetch a secret, leave it on disk, then execute untrusted code beside it.
-# Fork pull requests never receive secrets, but this repository's own workflow is same-repository
-# branch pull requests, which do — so the exposure is on the live path rather than the theoretical
-# one. Every checkout below sets `persist-credentials: false`, and `ci/checks.sh` establishes the
+# This workflow holds no secret (see oracle-authoritative.yml), but the default would still leave
+# the job's own github.token on disk beside the code under test. Every checkout below sets `persist-credentials: false`, and `ci/checks.sh` establishes the
 # result on the real checkout before the suite runs rather than trusting these two lines.
 permissions:
   contents: read
@@ -49,10 +48,30 @@ jobs:
         with:
           node-version: '20'
 
-      # `continue-on-error` on purpose. If the oracle cannot be obtained, the failure that should
-      # stop the build is the required-oracle guard saying so in the suite's own voice, not a
-      # checkout step failing with a message about credentials. The guard names the condition,
-      # names the release that did not resolve, and says what would satisfy it.
+      # ST-21. The credential is checked, and named, BEFORE the checkout below, so that a missing or
+      # insufficient credential is reported as exactly that (ORACLE-CREDENTIAL-UNAVAILABLE) rather
+      # than surfacing later as "no git repository at .oracle" or an unresolved release. This step
+      # is deliberately not `continue-on-error`: a refused credential is a stop, with its own name.
+      #
+      # THIS WORKFLOW NEVER RECEIVES THE DEDICATED ORACLE SECRET. It runs on pull requests, so the
+      # workflow file, `ci/oracle-credential.sh` and everything `npm test` executes are written by
+      # the pull request under test; handing them a secret hands it to the author. Only the
+      # `github.token` mode is available here, it is named on every run, and where it cannot read
+      # the oracle the result is reported NON-AUTHORITATIVE and the job stops. The authoritative
+      # run, with the dedicated secret, is `oracle-authoritative.yml`, which executes only after
+      # merge on `main`. `test/oracle-secret-isolation.test.mjs` fails if this file ever names it.
+      - name: Check the oracle credential
+        if: vars.ENFORCER_ORACLE_REMOTE != ''
+        env:
+          ENFORCER_ORACLE_REMOTE: ${{ vars.ENFORCER_ORACLE_REMOTE }}
+          ENFORCER_FALLBACK_TOKEN: ${{ github.token }}
+        run: bash ci/oracle-credential.sh
+
+      # `continue-on-error` on purpose. A refused credential is handled by the step above, by name.
+      # For every OTHER way the oracle cannot be obtained, the failure that should stop the build is
+      # the required-oracle guard saying so in the suite's own voice, not a checkout step failing
+      # with a generic message. The guard names the condition, names the release that did not
+      # resolve, and says what would satisfy it.
       #
       # `vars.ENFORCER_ORACLE_REMOTE` names the authoritative standards repository. If it is unset,
       # this step does nothing and the guard fails. That is the truthful outcome, not a
@@ -67,7 +86,7 @@ jobs:
           repository: ${{ vars.ENFORCER_ORACLE_REMOTE }}
           path: .oracle
           fetch-depth: 0          # the suite resolves release tags, so the history must come too
-          token: ${{ secrets.ENFORCER_ORACLE_TOKEN || github.token }}
+          token: ${{ github.token }}   # the only credential mode a pull-request workflow has
           # The load-bearing line. Without it the token above is written into `.oracle/.git/config`
           # as an `AUTHORIZATION: basic <base64>` extraheader and is still there when `npm test`
           # runs. The checkout still authenticates; it simply leaves nothing behind.
